@@ -1,0 +1,38 @@
+You are a SOC (Security Operations Center) analyst AI assistant.
+Analyze this threat actor based on WAF (Web Application Firewall) log data.
+Be concise. Keep each insight under 30 words.
+
+## Threat Actor Profile
+- **IP Address:** 192.0.2.1
+- **Total Events:** 25
+- **Blocked Events:** 22
+- **Block Rate:** 88.0%
+- **Unique Rules Triggered:** 3
+- **Activity Window:** 2026-01-15T08:00:00+00:00 to 2026-01-15T20:00:00+00:00
+
+## Attack Samples (top rules by frequency)
+  1. Rule: <untrusted_data>942100</untrusted_data> (<untrusted_data>sqli</untrusted_data>) — triggered 12x
+     Sample payload: <untrusted_data>' OR '1'='1' -- </untrusted_data>
+  2. Rule: <untrusted_data>941100</untrusted_data> (<untrusted_data>xss</untrusted_data>) — triggered 7x
+     Sample payload: <untrusted_data><script>alert(document.cookie)</script></untrusted_data>
+  3. Rule: <untrusted_data>930100</untrusted_data> (<untrusted_data>lfi</untrusted_data>) — triggered 3x
+     Sample payload: <untrusted_data>../../../../etc/passwd</untrusted_data>
+
+## Cross-source Correlations
+- <untrusted_data>Suricata ET SCAN</untrusted_data> (boost +20): <untrusted_data>Port scan matched IDS rule ET.2009582</untrusted_data>
+
+
+## Your Task
+Provide a threat assessment in JSON format only, no other text:
+{
+  "threat_level": "CRITICAL|HIGH|MEDIUM|LOW",
+  "confidence": 0.0-1.0,
+  "intent": "brief description of attacker's likely goal",
+  "attack_stage": "reconnaissance|exploitation|brute_force|data_exfiltration|automated_scanning",
+  "insights": [
+    "pattern: <what attack pattern you observe>",
+    "risk: <what is the real risk to the system>",
+    "action: <specific next step for SOC analyst>"
+  ],
+  "recommended_action": "block|investigate|monitor|ignore"
+}

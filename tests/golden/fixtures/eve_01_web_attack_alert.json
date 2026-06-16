@@ -1,0 +1,26 @@
+{
+  "timestamp": "2026-01-15T10:00:00.000000+0000",
+  "event_type": "alert",
+  "src_ip": "203.0.113.5",
+  "src_port": 44321,
+  "dest_ip": "10.0.0.1",
+  "dest_port": 80,
+  "proto": "TCP",
+  "flow_id": 123456789,
+  "alert": {
+    "action": "allowed",
+    "category": "Web Application Attack",
+    "signature": "ET WEB_SERVER SQL Injection Attempt",
+    "signature_id": 2012345,
+    "severity": 2,
+    "metadata": {
+      "mitre_technique_id": ["T1190"],
+      "mitre_technique_name": ["Exploit Public-Facing Application"],
+      "mitre_tactic_id": ["TA0001"]
+    }
+  },
+  "http": {
+    "url": "/admin?id=1 OR 1=1",
+    "hostname": "10.0.0.1"
+  }
+}

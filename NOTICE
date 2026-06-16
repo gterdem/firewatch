@@ -1,0 +1,43 @@
+FireWatch
+Copyright (C) 2026 FireWatch contributors
+
+This product is licensed under the GNU Affero General Public License,
+version 3.0 (AGPL-3.0-only). See the LICENSE file for the full terms.
+
+================================================================================
+Third-party data and asset attributions
+================================================================================
+
+The following third-party data sets and assets are used by FireWatch. They are
+NOT redistributed inside this source repository; the attributions below satisfy
+the upstream license terms wherever those assets are obtained, bundled into a
+build/image, or presented in the product UI.
+
+--------------------------------------------------------------------------------
+1. DB-IP IP-to-City Lite & IP-to-ASN Lite (geolocation databases)
+--------------------------------------------------------------------------------
+   FireWatch's offline geolocation default (ADR-0039) uses the DB-IP Lite
+   databases, which are distributed by DB-IP under the Creative Commons
+   Attribution 4.0 International License (CC BY 4.0). These databases are
+   downloaded on first run (not committed to this repository).
+
+   Required attribution, displayed wherever DB-IP-derived geo data is shown:
+
+       IP Geolocation by DB-IP (https://db-ip.com)
+
+   License: CC BY 4.0 — https://creativecommons.org/licenses/by/4.0/
+
+--------------------------------------------------------------------------------
+2. Natural Earth 1:110m Admin-0 Countries (vector basemap outline)
+--------------------------------------------------------------------------------
+   FireWatch's offline vector basemap (ADR-0052) ships a world-outline derived
+   from Natural Earth data. Natural Earth is released into the public domain and
+   carries no attribution requirement; it is credited here as a courtesy.
+
+       Made with Natural Earth (https://www.naturalearthdata.com)
+
+   License: Public Domain — https://www.naturalearthdata.com/about/terms-of-use/
+
+================================================================================
+If you add a bundled or redistributed third-party asset, add its required
+attribution here as part of the same change (see ADR-0056, NOTICE checklist).

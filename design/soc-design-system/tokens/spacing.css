@@ -1,0 +1,48 @@
+/* ============================================================
+   FireWatch — Spacing, radii, borders, shadows, motion
+   ============================================================ */
+
+:root {
+  /* --- Spacing scale (the console packs tight: 4 / 8 / 12 / 16 dominate) --- */
+  --fw-sp-1: 3px;
+  --fw-sp-2: 6px;
+  --fw-sp-3: 8px;
+  --fw-sp-4: 10px;
+  --fw-sp-5: 12px;
+  --fw-sp-6: 14px;
+  --fw-sp-7: 16px;
+  --fw-sp-8: 20px;
+  --fw-sp-9: 24px;
+
+  /* --- Radii --- */
+  --fw-r-pill:  16px;  /* live badge */
+  --fw-r-card:  10px;  /* cards + panels */
+  --fw-r-md:    8px;   /* sidebar cards, popups, badges */
+  --fw-r-sm:    6px;   /* inputs, buttons, m-stat wells */
+  --fw-r-xs:    4px;   /* inline chips, recs, small buttons */
+  --fw-r-bar:   3px;   /* progress / category bars */
+
+  /* --- Borders --- */
+  --fw-bw: 1px;        /* hairline — the console is built on 1px borders */
+  --fw-bw-accent: 2px; /* active tab underline */
+  --fw-bw-stripe: 3px; /* insight left-accent stripe */
+
+  /* --- Shadows (dark UI: soft, deep, low-spread) --- */
+  --fw-shadow-popup: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --fw-shadow-toast: 0 4px 12px rgba(0, 0, 0, 0.4);
+
+  /* --- Layout --- */
+  --fw-container: 1400px; /* @kind other */ /* max content width */
+  --fw-header-h:  52px; /* @kind spacing */
+
+  /* --- Motion — fast, functional, no bounce --- */
+  --fw-dur-fast: 0.15s; /* @kind other */
+  --fw-dur-spin: 0.7s; /* @kind other */
+  --fw-dur-pulse: 2s; /* @kind other */
+  --fw-ease: ease; /* @kind other */
+}
+
+[data-theme="light"] {
+  --fw-shadow-popup: 0 8px 24px rgba(0, 0, 0, 0.18);
+  --fw-shadow-toast: 0 4px 12px rgba(0, 0, 0, 0.12);
+}

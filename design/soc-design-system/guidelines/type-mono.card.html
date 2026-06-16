@@ -1,0 +1,23 @@
+<!-- @dsCard group="Type" viewport="700x200" name="Monospace data" subtitle="Numbers, IPs, rule IDs & payloads are always mono" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head><meta charset="UTF-8"><link rel="stylesheet" href="../styles.css">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--fw-bg);font-family:var(--fw-font-mono);color:var(--fw-t1);padding:20px}
+  .stat{font-size:30px;font-weight:700}
+  .grid{display:flex;gap:40px;align-items:flex-end;margin-bottom:16px}
+  .lbl{font-family:var(--fw-font-ui);font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--fw-t3);margin-top:2px}
+  .data{font-size:12px;color:var(--fw-t2);line-height:1.9}
+  .ip{color:var(--fw-blue)}.rule{color:var(--fw-cyan)}.muted{color:var(--fw-t3)}
+</style></head>
+<body>
+  <div class="grid">
+    <div><div class="stat" style="color:var(--fw-accent)">8,412</div><div class="lbl">Total events</div></div>
+    <div><div class="stat" style="color:var(--fw-red)">2,376</div><div class="lbl">Blocked</div></div>
+    <div><div class="stat" style="color:var(--fw-green)">28%</div><div class="lbl">Block rate</div></div>
+  </div>
+  <div class="data">
+    <span class="muted">14:22:07</span>&nbsp;&nbsp;<span class="ip">203.0.113.10</span>&nbsp;&nbsp;<span class="rule">942100</span>&nbsp;&nbsp;<span class="muted">/rest/products/search?q=test' OR '1'='1</span>
+  </div>
+</body></html>

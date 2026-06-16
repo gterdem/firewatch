@@ -1,0 +1,29 @@
+{
+  "resourceId": "/SUBSCRIPTIONS/00000000-0000-0000-0000-000000000000/RESOURCEGROUPS/rg-demo/PROVIDERS/MICROSOFT.NETWORK/APPLICATIONGATEWAYS/gw-demo",
+  "operationName": "ApplicationGatewayFirewall",
+  "time": "2024-05-10T09:15:33.0000000Z",
+  "category": "ApplicationGatewayFirewallLog",
+  "properties": {
+    "instanceId": "ApplicationGatewayRole_IN_0",
+    "clientIp": "198.51.100.42",
+    "requestUri": "/search?q=%3Cscript%3Ealert%281%29%3C%2Fscript%3E",
+    "ruleSetType": "OWASP",
+    "ruleSetVersion": "3.2",
+    "ruleId": "941100",
+    "ruleGroup": "941-APPLICATION-ATTACK-XSS",
+    "message": "XSS Attack Detected via libinjection",
+    "action": "Detected",
+    "site": "Global",
+    "details": {
+      "message": "Warning. detected XSS using libinjection.",
+      "data": "<script>alert(1)</script>",
+      "file": "rules/REQUEST-941-APPLICATION-ATTACK-XSS.conf",
+      "line": "37"
+    },
+    "hostname": "192.0.2.10",
+    "transactionId": "11111111111111111111",
+    "policyId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-demo/providers/Microsoft.Network/applicationGateways/gw-demo/firewallPolicies/global",
+    "policyScope": "Global",
+    "policyScopeName": "Global"
+  }
+}

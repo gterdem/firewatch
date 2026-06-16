@@ -1,0 +1,173 @@
+# FireWatch docker-compose — two profiles per ADR-0042.
+#
+# Profiles:
+#   default  — FireWatch + nginx + Ollama (recommended; best model UX).
+#   lean     — FireWatch + nginx + llama.cpp llama-server (minimal footprint;
+#              air-gapped; operator-supplied GGUF mounted as a volume).
+#
+# One-command start:
+#   docker compose --profile default up -d   # Ollama path
+#   docker compose --profile lean up -d      # llama.cpp path
+#
+# Network topology (ADR-0026 loopback constraint):
+#   The `firewatch` service binds the API to 127.0.0.1:8000 only.
+#   The `nginx` service runs with network_mode: "service:firewatch", sharing
+#   firewatch's network namespace.  nginx reaches the API at 127.0.0.1:8000
+#   over their shared loopback and listens on :80 of that same namespace.
+#   The host port (FW_HOST_PORT, default 8080) is published on the
+#   `firewatch` service entry (the shared-netns container cannot declare its
+#   own ports).  nginx is the ONLY host-exposed surface.
+#
+# Optional .env (copy deploy/.env.example → deploy/.env and adjust) — every var
+# below has a safe default, so .env is only needed to override or for the lean profile:
+#   FW_HOST_PORT            host port for the nginx surface (default 8080)
+#   FIREWATCH_AI_ENABLED    enable AI scoring (default true)
+#   FIREWATCH_OLLAMA_MODEL  model name
+#   FIREWATCH_OLLAMA_BASE_URL  inference endpoint (profile-specific)
+#   GGUF_HOST_PATH          (lean only) host path to the .gguf file
+#   MODEL_FILE              (lean only) GGUF filename inside the container
+#
+# Build context: the repo root (one level up from deploy/).
+
+x-firewatch-env: &firewatch-env
+  FIREWATCH_AI_ENABLED: ${FIREWATCH_AI_ENABLED:-true}
+  FIREWATCH_OLLAMA_MODEL: ${FIREWATCH_OLLAMA_MODEL:-qwen2.5:3b}
+  FIREWATCH_OLLAMA_BASE_URL: ${FIREWATCH_OLLAMA_BASE_URL:-http://ollama:11434}
+
+services:
+  # --------------------------------------------------------------------------
+  # FireWatch application (both profiles share this service).
+  # --------------------------------------------------------------------------
+  firewatch:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: firewatch:latest
+    profiles: ["default", "lean"]
+    restart: unless-stopped
+    environment:
+      <<: *firewatch-env
+    volumes:
+      # Named volume for the SQLite event store.
+      - fw_data:/app/data
+    networks:
+      - fwnet
+    # Publish the host port on this service because the nginx sidecar
+    # (network_mode: service:firewatch) shares our network namespace and
+    # cannot declare its own ports.
+    ports:
+      - "${FW_HOST_PORT:-8080}:80"
+    depends_on:
+      ollama:
+        condition: service_healthy
+        required: false    # only present in `default` profile
+      llama:
+        condition: service_healthy
+        required: false    # only present in `lean` profile
+    healthcheck:
+      # The API is loopback-only; curl inside the container reaches it directly.
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  # --------------------------------------------------------------------------
+  # nginx sidecar — SPA + reverse proxy.
+  # Shares the firewatch network namespace (loopback topology, ADR-0026).
+  # --------------------------------------------------------------------------
+  nginx:
+    build:
+      context: ..
+      dockerfile: deploy/nginx/Dockerfile
+    image: firewatch-nginx:latest
+    profiles: ["default", "lean"]
+    restart: unless-stopped
+    network_mode: "service:firewatch"
+    depends_on:
+      firewatch:
+        condition: service_healthy
+    # No ports: declared here because this container shares firewatch's netns.
+    # The host port is published via the firewatch service entry above.
+
+  # --------------------------------------------------------------------------
+  # Ollama inference runtime (default profile).
+  # --------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:0.30.8
+    profiles: ["default"]
+    restart: unless-stopped
+    volumes:
+      # Named volume so pulled models survive container restarts.
+      - ollama_models:/root/.ollama
+    networks:
+      - fwnet
+    # Ollama exposes its API on port 11434; reachable within fwnet as
+    # http://ollama:11434.  NOT host-published (no cloud egress, ADR-0022).
+    expose:
+      - "11434"
+    healthcheck:
+      # `ollama list` exits 0 when the daemon is ready and accepting requests.
+      # The official Ollama image does not include curl or wget, so we use
+      # the ollama binary itself as the probe.
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  # --------------------------------------------------------------------------
+  # llama.cpp llama-server (lean profile).
+  # Operator-supplied GGUF mounted at /models/${MODEL_FILE}.
+  # --------------------------------------------------------------------------
+  llama:
+    build:
+      context: ..
+      dockerfile: deploy/lean/Dockerfile.llamacpp
+    image: firewatch-lean:latest
+    profiles: ["lean"]
+    restart: unless-stopped
+    volumes:
+      # Bind-mount the operator's GGUF file into /models/.
+      # Set GGUF_HOST_PATH and MODEL_FILE in .env before starting lean.
+      - type: bind
+        source: ${GGUF_HOST_PATH:-/opt/models/model.gguf}
+        target: /models/${MODEL_FILE:-model.gguf}
+        read_only: true
+    environment:
+      MODEL_FILE: ${MODEL_FILE:-model.gguf}
+    networks:
+      - fwnet
+    # llama-server listens on :8080 within fwnet.  NOT host-published.
+    expose:
+      - "8080"
+    healthcheck:
+      # /health is the llama-server liveness endpoint.
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+# --------------------------------------------------------------------------
+# Networks
+# --------------------------------------------------------------------------
+networks:
+  fwnet:
+    driver: bridge
+    # No IPAM override — Docker assigns a 172.x /16 bridge automatically.
+    # The 172.16.0.0/12 range is RFC-1918 and passes ADR-0022's
+    # _is_local_address() validator, so compose DNS names (ollama, llama)
+    # resolve to accepted LAN addresses.
+
+# --------------------------------------------------------------------------
+# Volumes
+# --------------------------------------------------------------------------
+volumes:
+  fw_data:
+    # SQLite event store.  Persists across `docker compose down` restarts;
+    # removed by `docker compose down -v` (for a clean wipe).
+  ollama_models:
+    # Ollama model store (default profile).  Pulling models fills this volume;
+    # data persists so you don't re-download on every restart.
+    # Only created when the `default` profile is active.

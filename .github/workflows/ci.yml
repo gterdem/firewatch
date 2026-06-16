@@ -1,0 +1,22 @@
+name: ci
+on:
+  pull_request:
+    paths:
+      - 'packages/**'
+      - 'tests/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/ci.yml'
+jobs:
+  # Python quality gates — ruff + pyright + pytest.
+  # ADR-0028 D3: this job is path-filtered to packages/**; the frontend job lives
+  # in ci-frontend.yml and is path-filtered to frontend/**. The two jobs are peers.
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync --all-packages
+      - run: uv run ruff check .
+      - run: uv run pyright
+      - run: uv run pytest

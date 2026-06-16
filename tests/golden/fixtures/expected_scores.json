@@ -1,0 +1,63 @@
+{
+  "_provenance": "Originally derived from legacy/core/scoring.py on 2026-06-03. RE-BLESSED 2026-06-14 by ADR-0058 §D5a/D5b (issue #651): run_rules is now disposition-weighted and action-aware — SQLi/XSS scanned across ALL events (not blocked-only) x the loudest matching disposition (ALLOW 1.0 / ALERT,LOG 0.75 / BLOCK 0.5); the flat per-block +1 is replaced by a +10 persistence floor at >=3 blocked. This is the single authorized golden-oracle move sanctioned by ADR-0058 D5b.",
+
+  "scenario_A_single_alert": {
+    "_description": "Single Suricata ALERT carrying a SQLi payload (eve_01). SQLi now scanned on the ALERT event, weighted ALERT 0.75 -> 40x0.75=30. THE blessed move (was 0/LOW: the blocked-only blind spot).",
+    "source_ip": "203.0.113.5",
+    "threat_level": "MEDIUM",
+    "score": 30,
+    "total_events": 1,
+    "blocked_events": 0,
+    "attack_types": ["sql_injection"],
+    "source_types": ["suricata"],
+    "detection_rule_names": []
+  },
+
+  "scenario_B_single_block": {
+    "_description": "Single BLOCK event from eve_02, no payload. Flat +1-per-block removed; a one-off block is Tier-4 informational -> 0 (was 1).",
+    "source_ip": "198.51.100.7",
+    "threat_level": "LOW",
+    "score": 0,
+    "total_events": 1,
+    "blocked_events": 1,
+    "attack_types": [],
+    "source_types": ["suricata"],
+    "detection_rule_names": []
+  },
+
+  "scenario_C_three_blocks": {
+    "_description": "3 BLOCK events from same IP, no payload. 3 = persistence threshold -> +10 floor (was +3). Still LOW.",
+    "source_ip": "203.0.113.5",
+    "threat_level": "LOW",
+    "score": 10,
+    "total_events": 3,
+    "blocked_events": 3,
+    "attack_types": [],
+    "source_types": ["suricata"],
+    "detection_rule_names": []
+  },
+
+  "scenario_D_port_scan": {
+    "_description": "5 ALERT events across 5 distinct dest_ports, each built from eve_01's body so each carries the SQLi URL: port_scan(25) + SQLi-on-ALERT(40x0.75=30) = 55/HIGH. Now exercises BOTH factors (was 25).",
+    "source_ip": "203.0.113.5",
+    "threat_level": "HIGH",
+    "score": 55,
+    "total_events": 5,
+    "blocked_events": 0,
+    "attack_types": ["port_scan", "sql_injection"],
+    "source_types": ["suricata"],
+    "detection_rule_names": []
+  },
+
+  "scenario_E_single_source_no_multi_source": {
+    "_description": "3 Suricata-only ALERT events; eve_01 carries the SQLi URL -> 40x0.75=30 (was 0). multi_source_attack must NOT fire (single source_type). Pins Flag B: correlation keys on source_type diversity.",
+    "source_ip": "203.0.113.5",
+    "threat_level": "MEDIUM",
+    "score": 30,
+    "total_events": 3,
+    "blocked_events": 0,
+    "attack_types": ["sql_injection"],
+    "source_types": ["suricata"],
+    "detection_rule_names": []
+  }
+}

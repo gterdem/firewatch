@@ -1,0 +1,20 @@
+<!-- @dsCard group="Colors" viewport="700x150" name="Text ramp" subtitle="Three-step on-dark text hierarchy" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head><meta charset="UTF-8"><link rel="stylesheet" href="../styles.css">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--fw-bg-card);font-family:var(--fw-font-ui);padding:20px}
+  .row{display:flex;flex-direction:column;gap:10px}
+  .line{display:flex;align-items:baseline;gap:14px}
+  .swatch{width:14px;height:14px;border-radius:3px;flex-shrink:0;align-self:center}
+  .label{font-size:18px;font-weight:600}
+  .tok{font-size:11px;font-family:var(--fw-font-mono);color:var(--fw-t3);margin-left:auto}
+</style></head>
+<body>
+  <div class="row">
+    <div class="line"><span class="swatch" style="background:var(--fw-t1)"></span><span class="label" style="color:var(--fw-t1)">Primary — threat actor 203.0.113.10</span><span class="tok">--fw-t1 · #e2e8f0</span></div>
+    <div class="line"><span class="swatch" style="background:var(--fw-t2)"></span><span class="label" style="color:var(--fw-t2)">Secondary — labels &amp; body copy</span><span class="tok">--fw-t2 · #94a3b8</span></div>
+    <div class="line"><span class="swatch" style="background:var(--fw-t3)"></span><span class="label" style="color:var(--fw-t3)">Faint — metadata, timestamps, placeholders</span><span class="tok">--fw-t3 · #64748b</span></div>
+  </div>
+</body></html>

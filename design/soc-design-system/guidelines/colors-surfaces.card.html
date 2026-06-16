@@ -1,0 +1,22 @@
+<!-- @dsCard group="Colors" viewport="700x150" name="Surfaces & borders (dark)" subtitle="The dark operations theme stack" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head><meta charset="UTF-8"><link rel="stylesheet" href="../styles.css">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--fw-bg);font-family:var(--fw-font-ui);padding:18px}
+  .row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .sw{border-radius:8px;border:1px solid var(--fw-border-l);overflow:hidden}
+  .chip{height:54px}
+  .meta{padding:7px 9px;background:var(--fw-bg-card)}
+  .name{font-size:11px;color:var(--fw-t1);font-weight:600}
+  .hex{font-size:10px;color:var(--fw-t3);font-family:var(--fw-font-mono);margin-top:1px}
+</style></head>
+<body>
+  <div class="row">
+    <div class="sw"><div class="chip" style="background:var(--fw-bg)"></div><div class="meta"><div class="name">--fw-bg</div><div class="hex">#0a0e17</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--fw-bg-card)"></div><div class="meta"><div class="name">--fw-bg-card</div><div class="hex">#111827</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--fw-bg-hover)"></div><div class="meta"><div class="name">--fw-bg-hover</div><div class="hex">#1a2332</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--fw-bg-input)"></div><div class="meta"><div class="name">--fw-bg-input</div><div class="hex">#1e293b</div></div></div>
+  </div>
+</body></html>

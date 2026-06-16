@@ -1,0 +1,684 @@
+@import "tailwindcss";
+
+/*
+ * Scan @rjsf/shadcn source so Tailwind v4 generates the utility classes it uses
+ * (bg-primary, text-card-foreground, border-input, ring, etc.).
+ * Without this, components that live entirely inside node_modules are not scanned
+ * by Tailwind's default content detection.
+ */
+@source "../node_modules/@rjsf/shadcn";
+
+/* ============================================================
+   FireWatch SOC Design System — authoritative token set (F1, #107)
+   Source of truth: legacy/FireWatch SOC Design System/tokens/
+   Ported (not imported) per CLAUDE.md; legacy/ is REFERENCE-ONLY.
+
+   Architecture:
+   - --fw-* custom properties are the AUTHORITATIVE token layer.
+   - shadcn chrome tokens (--background, --card, etc.) are mapped
+     ONTO --fw-* so shadcn/rjsf components render correctly without
+     maintaining a separate palette.
+   - @theme inline registers both layers as Tailwind utilities so
+     fw-* and shadcn utility classes all work (bg-fw-bg, bg-card, etc.)
+   - Dark is the default ("operations") theme: <html data-theme="dark">.
+   - Light is the swappable alternate: <html data-theme="light">.
+   ============================================================ */
+
+/* ============================================================
+   DARK theme — default "operations" theme
+   Values sourced from tokens/colors.css :root block
+   ============================================================ */
+:root,
+[data-theme="dark"] {
+  /* --- Base surfaces --- */
+  --fw-bg:        #0a0e17; /* app background — deep navy-black */
+  --fw-bg-card:   #111827; /* panels, cards, header gradient top */
+  --fw-bg-hover:  #1a2332; /* table row / interactive hover */
+  --fw-bg-input:  #1e293b; /* inputs, inset wells, sidebar cards */
+
+  /* --- Borders --- */
+  --fw-border:    #1e293b; /* default hairline border */
+  --fw-border-l:  #2d3a4d; /* lighter border — popups, modals, focusable wells */
+
+  /* --- Text ramp --- */
+  --fw-t1:        #e2e8f0; /* primary text */
+  --fw-t2:        #94a3b8; /* secondary text / labels */
+  --fw-t3:        #64748b; /* muted text / metadata / placeholders */
+
+  /* --- Brand + functional hues --- */
+  --fw-accent:    #f59e0b; /* AMBER — FireWatch signature. Primary actions, active nav, logo. */
+  --fw-accent-hi: #fbbf24; /* amber hover (lighter) */
+  --fw-blue:      #3b82f6; /* allowed traffic, IP links, "medium", info */
+  --fw-red:       #ef4444; /* blocked traffic, "critical", danger */
+  --fw-green:     #22c55e; /* live / online / "low" / success */
+  --fw-orange:    #f97316; /* "high" severity, SQLi, IDS alert */
+  --fw-purple:    #a855f7; /* deep-analysis action, "review", anomaly */
+  --fw-cyan:      #06b6d4; /* rule links, geo-blocked category */
+  --fw-pink:      #ec4899; /* LFI category, accent */
+
+  /* --- Semantic surface aliases (prefer these in product code) --- */
+  --fw-surface:        var(--fw-bg);
+  --fw-surface-card:   var(--fw-bg-card);
+  --fw-surface-inset:  var(--fw-bg-input);
+  --fw-surface-hover:  var(--fw-bg-hover);
+
+  --fw-text:           var(--fw-t1);
+  --fw-text-muted:     var(--fw-t2);
+  --fw-text-faint:     var(--fw-t3);
+  --fw-on-accent:      #000000; /* text/icons on amber accent */
+  --fw-on-dark:        #ffffff; /* text/icons on dark-hue backgrounds (danger, deep) */
+
+  /* --- Severity ramp (LOW → CRITICAL) --- */
+  --fw-sev-low:        var(--fw-green);
+  --fw-sev-medium:     var(--fw-blue);
+  --fw-sev-high:       var(--fw-orange);
+  --fw-sev-critical:   var(--fw-red);
+
+  /* --- Traffic / verdicts --- */
+  /* v2 adds ALERT (IDS solid-orange) and DROP alongside BLOCK/ALLOW */
+  --fw-blocked:    var(--fw-red);
+  --fw-allowed:    var(--fw-blue);
+  --fw-alert:      var(--fw-orange); /* IDS alert — SOLID orange chip (not tinted) */
+  --fw-drop:       var(--fw-red);
+
+  /* --- Sources (v2 multi-source pipeline) ---
+     Each ingest source owns a hue: badges, health dots, event timeline */
+  --fw-src-waf:    var(--fw-blue);   /* Azure WAF  → "WAF" */
+  --fw-src-ids:    var(--fw-orange); /* Suricata IDS → "IDS" */
+  --fw-src-syslog: var(--fw-green);  /* Syslog → "SYS" */
+  --fw-src-file:   var(--fw-purple); /* File / log import → "FILE" */
+
+  /* --- Source-health dot states (by recency of last event) --- */
+  --fw-health-ok:   var(--fw-green);  /* < 5 min */
+  --fw-health-warn: var(--fw-accent); /* < 15 min */
+  --fw-health-down: var(--fw-red);    /* stale */
+  --fw-health-idle: var(--fw-t3);     /* no data */
+
+  /* --- Tint fills — badges/pills at ~9% fill, ~19% border --- */
+  /* Raw rgba so they work without color-mix support */
+  --fw-tint-red:       rgba(239, 68, 68, 0.094);
+  --fw-tint-red-bd:    rgba(239, 68, 68, 0.188);
+  --fw-tint-orange:    rgba(249, 115, 22, 0.094);
+  --fw-tint-orange-bd: rgba(249, 115, 22, 0.188);
+  --fw-tint-blue:      rgba(59, 130, 246, 0.094);
+  --fw-tint-blue-bd:   rgba(59, 130, 246, 0.188);
+  --fw-tint-green:      rgba(34, 197, 94, 0.094);
+  --fw-tint-green-bd:   rgba(34, 197, 94, 0.188);
+  --fw-tint-purple:     rgba(168, 85, 247, 0.094); /* file-import source badge */
+  --fw-tint-purple-bd:  rgba(168, 85, 247, 0.188);
+
+  /* ----------------------------------------------------------------
+   * Triage action-verb tokens (v2 kit, MF-1 — ADR-0033 action seam)
+   * Used by triage banner, recommendation cards, and actionable buttons.
+   * Verb semantics: block=danger-red, investigate=amber-warn, dismiss=muted.
+   * Page issues (MF-2+) consume these; defined here so the token layer is
+   * the single source of truth (ADR-0028 D6 / index.css authoritative).
+   * ---------------------------------------------------------------- */
+  --fw-verb-block:       var(--fw-red);     /* BLOCK → danger red */
+  --fw-verb-investigate: var(--fw-accent);  /* INVESTIGATE → amber (signature action) */
+  --fw-verb-dismiss:     var(--fw-t3);      /* DISMISS → muted (low-emphasis) */
+
+  /* Triage banner accent stripe (left-border) — red=needs action, green=all-clear */
+  --fw-triage-active: var(--fw-red);    /* border-left: 4px solid → action required */
+  --fw-triage-calm:   var(--fw-green);  /* border-left: 4px solid → all clear */
+
+  /* ----------------------------------------------------------------
+   * Typography tokens (from tokens/typography.css)
+   * ---------------------------------------------------------------- */
+  --fw-font-ui:   'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', sans-serif, 'Segoe UI Emoji', 'Noto Color Emoji', 'Apple Color Emoji';
+  --fw-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Sizes — data-dense console, runs small (10–30px) */
+  --fw-fs-display: 30px; /* stat-card value */
+  --fw-fs-modal:   22px; /* modal stat / section headline */
+  --fw-fs-lg:      18px; /* page-level h1 (Settings, Logs, AI, Analytics) — #576 */
+  --fw-fs-h1:      20px; /* header product title / app wordmark */
+  --fw-fs-h2:      16px; /* modal header */
+  --fw-fs-h3:      14px; /* panel title */
+  --fw-fs-base:    13px; /* base body / first-run panel / API-key panel — #576 */
+  --fw-fs-body:    13px; /* body / form input (alias for --fw-fs-base, back-compat) */
+  --fw-fs-sm:      12px; /* table cell / secondary */
+  --fw-fs-xs:      11px; /* labels / metadata */
+  --fw-fs-2xs:     10px; /* table head / badge / micro-label */
+  --fw-fs-3xs:     9px;  /* nav count pill */
+
+  /* Weights */
+  --fw-fw-regular:  400;
+  --fw-fw-medium:   500;
+  --fw-fw-semibold: 600;
+  --fw-fw-bold:     700;
+
+  /* Line heights */
+  --fw-lh-tight: 1.2;
+  --fw-lh-snug:  1.5;
+  --fw-lh-body:  1.6;
+
+  /* Tracking — uppercase micro-labels */
+  --fw-ls-label: 0.8px;
+  --fw-ls-table: 0.5px;
+  --fw-ls-tight: 0.3px;
+
+  /* ----------------------------------------------------------------
+   * Spacing, radii, borders, shadows, motion (from tokens/spacing.css)
+   * ---------------------------------------------------------------- */
+  /* Spacing scale — console packs tight: 4/8/12/16 dominate */
+  --fw-sp-1: 3px;
+  --fw-sp-2: 6px;
+  --fw-sp-3: 8px;
+  --fw-sp-4: 10px;
+  --fw-sp-5: 12px;
+  --fw-sp-6: 14px;
+  --fw-sp-7: 16px;
+  --fw-sp-8: 20px;
+  --fw-sp-9: 24px;
+
+  /* Radii */
+  --fw-r-pill: 16px; /* live badge */
+  --fw-r-card: 10px; /* cards + panels */
+  --fw-r-md:   8px;  /* sidebar cards, popups, badges */
+  --fw-r-sm:   6px;  /* inputs, buttons, m-stat wells */
+  --fw-r-xs:   4px;  /* inline chips, recs, small buttons */
+  --fw-r-bar:  3px;  /* progress / category bars */
+
+  /* Borders */
+  --fw-bw:        1px; /* hairline — console is built on 1px borders */
+  --fw-bw-accent: 2px; /* active tab underline */
+  --fw-bw-stripe: 3px; /* insight left-accent stripe */
+
+  /* Shadows (dark UI: soft, deep, low-spread) */
+  --fw-shadow-popup: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --fw-shadow-toast: 0 4px 12px rgba(0, 0, 0, 0.4);
+
+  /* Layout */
+  --fw-container: 1400px; /* max content width */
+  --fw-header-h:  52px;
+
+  /* Motion — fast, functional, no bounce */
+  --fw-dur-fast:  0.15s;
+  --fw-dur-spin:  0.7s;
+  --fw-dur-pulse: 2s;
+  --fw-ease:      ease;
+
+  /* ----------------------------------------------------------------
+   * shadcn chrome tokens — mapped onto --fw-* palette (DARK)
+   * So shadcn/rjsf components render correctly in dark mode.
+   * ---------------------------------------------------------------- */
+  --background:           var(--fw-bg);
+  --foreground:           var(--fw-t1);
+  --card:                 var(--fw-bg-card);
+  --card-foreground:      var(--fw-t1);
+  --popover:              var(--fw-bg-hover);
+  --popover-foreground:   var(--fw-t1);
+  --primary:              var(--fw-t1);
+  --primary-foreground:   var(--fw-bg-card);
+  --secondary:            var(--fw-bg-input);
+  --secondary-foreground: var(--fw-t1);
+  --muted:                var(--fw-bg-hover);
+  --muted-foreground:     var(--fw-t2);
+  --accent:               var(--fw-accent);
+  --accent-foreground:    var(--fw-bg);
+  --destructive:          var(--fw-red);
+  --destructive-foreground: #ffffff;
+  --border:               var(--fw-border);
+  --input:                var(--fw-border);
+  --ring:                 var(--fw-t3);
+  --radius:               0.625rem;
+  --font-sans:            var(--fw-font-ui);
+  --font-mono:            var(--fw-font-mono);
+
+  /* ----------------------------------------------------------------
+   * SOC semantic color tokens (badge/chip three-part: fg/bg/border)
+   * Kept for backward compat with #96 socTokens.ts call sites.
+   * Values now derived from --fw-* primitives.
+   * ---------------------------------------------------------------- */
+
+  /* critical — red */
+  --soc-critical-fg:     var(--fw-red);
+  --soc-critical-bg:     var(--fw-tint-red);
+  --soc-critical-border: var(--fw-tint-red-bd);
+
+  /* high — orange */
+  --soc-high-fg:     var(--fw-orange);
+  --soc-high-bg:     var(--fw-tint-orange);
+  --soc-high-border: var(--fw-tint-orange-bd);
+
+  /* medium — blue (intentional: blue = watch, legacy oracle) */
+  --soc-medium-fg:     var(--fw-blue);
+  --soc-medium-bg:     var(--fw-tint-blue);
+  --soc-medium-border: var(--fw-tint-blue-bd);
+
+  /* low — green */
+  --soc-low-fg:     var(--fw-green);
+  --soc-low-bg:     var(--fw-tint-green);
+  --soc-low-border: var(--fw-tint-green-bd);
+
+  /* ok — green (healthy / allowed / live) */
+  --soc-ok-fg:     var(--fw-green);
+  --soc-ok-bg:     var(--fw-tint-green);
+  --soc-ok-border: var(--fw-tint-green-bd);
+
+  /* enforced — red (BLOCK action token) */
+  --soc-enforced-fg:     var(--fw-red);
+  --soc-enforced-bg:     var(--fw-tint-red);
+  --soc-enforced-border: var(--fw-tint-red-bd);
+
+  /* watch — amber (ALERT action token) */
+  --soc-watch-fg:     var(--fw-accent);
+  --soc-watch-bg:     rgba(245, 158, 11, 0.094);
+  --soc-watch-border: rgba(245, 158, 11, 0.188);
+
+  /* source badge — WAF → blue */
+  --soc-src-waf-fg:     var(--fw-blue);
+  --soc-src-waf-bg:     var(--fw-tint-blue);
+  --soc-src-waf-border: var(--fw-tint-blue-bd);
+
+  /* source badge — IDS/Suricata → orange */
+  --soc-src-ids-fg:     var(--fw-orange);
+  --soc-src-ids-bg:     var(--fw-tint-orange);
+  --soc-src-ids-border: var(--fw-tint-orange-bd);
+}
+
+/* ============================================================
+   LIGHT theme — "presentation" mode (projectors / bright rooms)
+   Values sourced from tokens/colors.css [data-theme="light"] block
+   ============================================================ */
+[data-theme="light"] {
+  /* --- Base surfaces --- */
+  --fw-bg:        #f1f5f9;
+  --fw-bg-card:   #ffffff;
+  --fw-bg-hover:  #e2e8f0;
+  --fw-bg-input:  #f8fafc;
+
+  /* --- Borders --- */
+  /* Strengthened from #e2e8f0 → #b8c5d2 for WCAG 1.4.11 non-text contrast (≥3:1) on #f1f5f9 bg (#576) */
+  --fw-border:    #b8c5d2;
+  --fw-border-l:  #94a3b8;
+
+  /* --- Text ramp --- */
+  --fw-t1:        #1e293b;
+  --fw-t2:        #475569;
+  /* Darkened from #64748b → #596478 to push micro-text toward WCAG AA (≥4.5:1) on light surfaces (#576) */
+  --fw-t3:        #596478;
+
+  /* --- Brand + functional hues (light) --- */
+  --fw-accent:    #d97706;
+  --fw-accent-hi: #b45309;
+  --fw-blue:      #2563eb;
+  --fw-red:       #dc2626;
+  --fw-green:     #16a34a;
+  --fw-orange:    #ea580c;
+  --fw-purple:    #9333ea;
+  --fw-cyan:      #0891b2;
+  --fw-pink:      #db2777;
+
+  --fw-on-accent: #ffffff;
+  --fw-on-dark:   #ffffff; /* text/icons on dark-hue backgrounds — same in light theme */
+
+  /* --- Tint fills (light — slightly lower opacity for readability) --- */
+  --fw-tint-red:       rgba(220, 38, 38, 0.07);
+  --fw-tint-red-bd:    rgba(220, 38, 38, 0.188);
+  --fw-tint-orange:    rgba(234, 88, 12, 0.07);
+  --fw-tint-orange-bd: rgba(234, 88, 12, 0.188);
+  --fw-tint-blue:      rgba(37, 99, 235, 0.07);
+  --fw-tint-blue-bd:   rgba(37, 99, 235, 0.188);
+  --fw-tint-green:      rgba(22, 163, 74, 0.07);
+  --fw-tint-green-bd:   rgba(22, 163, 74, 0.188);
+  --fw-tint-purple:     rgba(147, 51, 234, 0.07); /* file-import source badge */
+  --fw-tint-purple-bd:  rgba(147, 51, 234, 0.188);
+
+  /* --- Shadows (light UI — softer) --- */
+  --fw-shadow-popup: 0 8px 24px rgba(0, 0, 0, 0.18);
+  --fw-shadow-toast: 0 4px 12px rgba(0, 0, 0, 0.12);
+
+  /* --- shadcn chrome tokens — mapped onto --fw-* (LIGHT) --- */
+  --background:           var(--fw-bg);
+  --foreground:           var(--fw-t1);
+  --card:                 var(--fw-bg-card);
+  --card-foreground:      var(--fw-t1);
+  --popover:              var(--fw-bg-card);
+  --popover-foreground:   var(--fw-t1);
+  --primary:              var(--fw-t1);
+  --primary-foreground:   var(--fw-bg-card);
+  --secondary:            var(--fw-bg-hover);
+  --secondary-foreground: var(--fw-t1);
+  --muted:                var(--fw-bg-hover);
+  --muted-foreground:     var(--fw-t3);
+  --accent:               var(--fw-accent);
+  --accent-foreground:    #ffffff;
+  --destructive:          var(--fw-red);
+  --destructive-foreground: #ffffff;
+  --border:               var(--fw-border);
+  --input:                var(--fw-border);
+  --ring:                 var(--fw-t2);
+
+  /* --- SOC semantic tokens — light values --- */
+  --soc-watch-bg:     rgba(217, 119, 6, 0.07);
+  --soc-watch-border: rgba(217, 119, 6, 0.188);
+}
+
+/* ============================================================
+   @theme inline: registers ALL custom properties as Tailwind v4
+   color utilities (bg-fw-bg, text-fw-accent, bg-background, etc.)
+   Without this block, utility classes produce no CSS output.
+   ============================================================ */
+@theme inline {
+  /* -- fw-* primitives -- */
+  --color-fw-bg:        var(--fw-bg);
+  --color-fw-bg-card:   var(--fw-bg-card);
+  --color-fw-bg-hover:  var(--fw-bg-hover);
+  --color-fw-bg-input:  var(--fw-bg-input);
+  --color-fw-border:    var(--fw-border);
+  --color-fw-border-l:  var(--fw-border-l);
+  --color-fw-t1:        var(--fw-t1);
+  --color-fw-t2:        var(--fw-t2);
+  --color-fw-t3:        var(--fw-t3);
+  --color-fw-accent:    var(--fw-accent);
+  --color-fw-accent-hi: var(--fw-accent-hi);
+  --color-fw-blue:      var(--fw-blue);
+  --color-fw-red:       var(--fw-red);
+  --color-fw-green:     var(--fw-green);
+  --color-fw-orange:    var(--fw-orange);
+  --color-fw-purple:    var(--fw-purple);
+  --color-fw-cyan:      var(--fw-cyan);
+  --color-fw-pink:      var(--fw-pink);
+
+  /* fw-* semantic surface aliases */
+  --color-fw-surface:       var(--fw-surface);
+  --color-fw-surface-card:  var(--fw-surface-card);
+  --color-fw-surface-inset: var(--fw-surface-inset);
+  --color-fw-surface-hover: var(--fw-surface-hover);
+  --color-fw-text:          var(--fw-text);
+  --color-fw-text-muted:    var(--fw-text-muted);
+  --color-fw-text-faint:    var(--fw-text-faint);
+
+  /* fw-* source hues */
+  --color-fw-src-waf:    var(--fw-src-waf);
+  --color-fw-src-ids:    var(--fw-src-ids);
+  --color-fw-src-syslog: var(--fw-src-syslog);
+  --color-fw-src-file:   var(--fw-src-file);
+
+  /* fw-* health dot states */
+  --color-fw-health-ok:   var(--fw-health-ok);
+  --color-fw-health-warn: var(--fw-health-warn);
+  --color-fw-health-down: var(--fw-health-down);
+  --color-fw-health-idle: var(--fw-health-idle);
+
+  /* fw-* triage action-verb tokens (v2 MF-1) */
+  --color-fw-verb-block:       var(--fw-verb-block);
+  --color-fw-verb-investigate: var(--fw-verb-investigate);
+  --color-fw-verb-dismiss:     var(--fw-verb-dismiss);
+  --color-fw-triage-active:    var(--fw-triage-active);
+  --color-fw-triage-calm:      var(--fw-triage-calm);
+
+  /* -- shadcn chrome tokens (backward compat for shadcn/rjsf) -- */
+  --color-background:           var(--background);
+  --color-foreground:           var(--foreground);
+  --color-card:                 var(--card);
+  --color-card-foreground:      var(--card-foreground);
+  --color-popover:              var(--popover);
+  --color-popover-foreground:   var(--popover-foreground);
+  --color-primary:              var(--primary);
+  --color-primary-foreground:   var(--primary-foreground);
+  --color-secondary:            var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted:                var(--muted);
+  --color-muted-foreground:     var(--muted-foreground);
+  --color-accent:               var(--accent);
+  --color-accent-foreground:    var(--accent-foreground);
+  --color-destructive:          var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border:               var(--border);
+  --color-input:                var(--input);
+  --color-ring:                 var(--ring);
+
+  /* -- SOC semantic badge tokens (issue #96; now derived from --fw-*) -- */
+  --color-soc-critical-fg:     var(--soc-critical-fg);
+  --color-soc-critical-bg:     var(--soc-critical-bg);
+  --color-soc-critical-border: var(--soc-critical-border);
+  --color-soc-high-fg:         var(--soc-high-fg);
+  --color-soc-high-bg:         var(--soc-high-bg);
+  --color-soc-high-border:     var(--soc-high-border);
+  --color-soc-medium-fg:       var(--soc-medium-fg);
+  --color-soc-medium-bg:       var(--soc-medium-bg);
+  --color-soc-medium-border:   var(--soc-medium-border);
+  --color-soc-low-fg:          var(--soc-low-fg);
+  --color-soc-low-bg:          var(--soc-low-bg);
+  --color-soc-low-border:      var(--soc-low-border);
+  --color-soc-ok-fg:           var(--soc-ok-fg);
+  --color-soc-ok-bg:           var(--soc-ok-bg);
+  --color-soc-ok-border:       var(--soc-ok-border);
+  --color-soc-enforced-fg:     var(--soc-enforced-fg);
+  --color-soc-enforced-bg:     var(--soc-enforced-bg);
+  --color-soc-enforced-border: var(--soc-enforced-border);
+  --color-soc-watch-fg:        var(--soc-watch-fg);
+  --color-soc-watch-bg:        var(--soc-watch-bg);
+  --color-soc-watch-border:    var(--soc-watch-border);
+  --color-soc-src-waf-fg:      var(--soc-src-waf-fg);
+  --color-soc-src-waf-bg:      var(--soc-src-waf-bg);
+  --color-soc-src-waf-border:  var(--soc-src-waf-border);
+  --color-soc-src-ids-fg:      var(--soc-src-ids-fg);
+  --color-soc-src-ids-bg:      var(--soc-src-ids-bg);
+  --color-soc-src-ids-border:  var(--soc-src-ids-border);
+
+  /* -- Fonts -- */
+  --font-sans:  var(--fw-font-ui);
+  --font-mono:  var(--fw-font-mono);
+
+  /* -- Radii -- */
+  --radius-sm: var(--fw-r-xs);
+  --radius-md: var(--fw-r-sm);
+  --radius-lg: var(--fw-r-card);
+  --radius-xl: var(--fw-r-pill);
+}
+
+/* ============================================================
+   Docked-panel bento reflow (issue #338)
+   ============================================================
+   When the entity slide-over is pinned (push mode at >=1280px), SlideOver sets
+   data-docked="true" on [data-testid="main-content"].  The 2×2 bento grid
+   ([data-testid="grid-2"]) must reflow to single-column stacking so the narrowed
+   content area is never crushed.
+
+   The outer dash-grid (1fr 300px) also collapses — the sidebar column can no
+   longer share space when the panel occupies ~360–560px of the right edge.
+
+   All breakpoints use DS tokens only (ADR-0028 D6).
+   !important is required here because DashboardRoute applies these column templates
+   as inline style attributes — CSS specificity alone cannot win.
+   ============================================================ */
+
+[data-testid="main-content"][data-docked="true"] [data-testid="dash-grid"] {
+  grid-template-columns: 1fr !important;
+}
+
+[data-testid="main-content"][data-docked="true"] [data-testid="grid-2"] {
+  grid-template-columns: 1fr !important;
+  grid-template-rows: auto !important;
+}
+
+/* Threat actors panel: in docked single-column layout, stop spanning rows */
+[data-testid="main-content"][data-docked="true"] [data-testid="threat-actors-panel"] {
+  grid-column: 1 !important;
+  grid-row: auto !important;
+}
+
+/* ============================================================
+   Keyframes (from tokens/animations.css)
+   ============================================================ */
+
+/* Live "● Live" status dot — slow opacity pulse */
+@keyframes fw-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+/* Spinner for loading states */
+@keyframes fw-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================================
+   @layer base — body / reset defaults
+   ============================================================ */
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    border-color: var(--fw-border);
+  }
+
+  body {
+    font-family: var(--fw-font-ui);
+    background: var(--fw-bg);
+    color: var(--fw-t1);
+    min-height: 100vh;
+  }
+}
+
+/* ============================================================
+   Dual-range slider — canonical pointer-events pattern
+   (TimelineBrush two-thumb overlay, issue #376 fix)
+
+   When two <input type="range"> elements are stacked (position:absolute,
+   same width), the topmost one (higher z-index) intercepts ALL pointer
+   events across its full track width — the start thumb (lower z-index)
+   is never reachable by mouse.
+
+   Fix (canonical dual-range pattern used by Grafana, Kibana, etc.):
+   1. Disable pointer events on BOTH input tracks (the full-width bar
+      that covers the sibling input).
+   2. Re-enable pointer events ONLY on the thumb pseudo-elements so each
+      thumb captures clicks at its own x-position without blocking the other.
+
+   React inline style cannot target pseudo-elements; this CSS class is the
+   only correct mechanism for the thumb pointer-events fix.
+
+   ADR-0028 D6: pointer-events and cursor are non-color properties; no raw hex.
+   ============================================================ */
+
+.fw-dual-range-thumb {
+  pointer-events: none;
+}
+
+.fw-dual-range-thumb::-webkit-slider-thumb {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.fw-dual-range-thumb::-moz-range-thumb {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* ============================================================
+   fw-focus-visible — keyboard focus ring utility (WCAG 2.4.7)
+
+   Applies an amber (--fw-accent) outline ONLY on keyboard focus
+   (:focus-visible), so mouse clicks never show the ring.
+   React inline styles cannot address :focus-visible — this class
+   is the only correct mechanism (same rationale as fw-dual-range-thumb).
+
+   Usage: className="fw-focus-visible" on any interactive element
+   that needs a keyboard-only focus indicator matching the DS accent.
+   Do NOT set outline in the element's inline style — the base rule
+   below owns the default (none) and the :focus-visible selector owns
+   the ring. Inline outline would win the cascade and suppress the ring.
+   ADR-0028 D6: colors via --fw-* tokens, no raw hex.
+   ============================================================ */
+
+/* ============================================================
+   Global keyboard focus ring — WCAG 2.4.7 / 2.4.11 (#567)
+
+   Applies the DS amber focus ring to ALL interactive elements
+   (button, a, input, select, textarea, [role="button"],
+   [role="link"], [role="menuitem"]) on keyboard focus only.
+   `:focus-visible` suppresses the ring on mouse click, matching
+   the convention used by the per-element `.fw-focus-visible` class.
+
+   This global rule is the systemic fix — ClickableIp, HealthDot,
+   AppNav links, and every future interactive element inherit it
+   automatically. The `.fw-focus-visible` class below remains for
+   custom interactive elements (spans with tabIndex, etc.) that do
+   not match the native-element selectors.
+
+   ADR-0028 D6: colours via --fw-* tokens, no raw hex.
+   ============================================================ */
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[role="link"]:focus-visible,
+[role="menuitem"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--fw-accent);
+  outline-offset: 2px;
+}
+
+.fw-focus-visible { outline: none; }  /* suppress browser default for mouse/idle */
+.fw-focus-visible:focus-visible {
+  outline: 2px solid var(--fw-accent);
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   fw-log-row — hover affordance for Network Logs table rows (#572)
+
+   React inline styles cannot target :hover pseudo-class; this
+   CSS class is the only correct mechanism (same rationale as
+   fw-dual-range-thumb and fw-focus-visible).
+
+   Uses --fw-bg-hover token so dark/light themes both respond.
+   cursor:pointer signals the row is interactive (IP click).
+   ADR-0028 D6: color via --fw-* token, no raw hex.
+   ============================================================ */
+
+.fw-log-row:hover {
+  background: var(--fw-bg-hover) !important;
+  cursor: pointer;
+}
+
+/* ============================================================
+   fw-toggle-seg-inactive — hover affordance for inactive
+   segments of segmented toggles (#572).
+
+   Applied to the non-active button in CountryAsnToggle (and
+   any future segmented controls). React inline style cannot
+   target :hover — this class is the mechanism.
+   ADR-0028 D6: color via --fw-* token, no raw hex.
+   ============================================================ */
+
+.fw-toggle-seg-inactive:hover {
+  background: var(--fw-bg-hover) !important;
+  color: var(--fw-t1) !important;
+}
+
+/* ============================================================
+   fw-verdict-card — hover affordance for AI Engine VerdictCards (#572).
+
+   VerdictCard is a keyboard-focusable <article> (not a <button>)
+   so React inline style cannot express :hover. This class gives
+   the card a subtle hover lift (border brightens, background shifts)
+   to indicate it responds to interaction (expand, feedback, re-run).
+   ADR-0028 D6: colors via --fw-* tokens, no raw hex.
+   ============================================================ */
+
+.fw-verdict-card:hover {
+  border-color: var(--fw-border-l) !important;
+  background: var(--fw-bg-hover) !important;
+}
+
+/* ============================================================
+   #573 — Advanced/Optional toggle chevron affordance.
+
+   The chevron SVG (.fw-chevron) inside <details>[data-fw-advanced-group]
+   rotates 180° when the <details> is open, giving a clear expand/collapse
+   visual cue.  Native <details> toggles the [open] attribute; no JS needed.
+   ============================================================ */
+
+details[data-fw-advanced-group][open] .fw-chevron {
+  transform: rotate(180deg);
+}

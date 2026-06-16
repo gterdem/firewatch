@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-01-15T10:20:00.000000+0000",
+  "event_type": "alert",
+  "src_ip": "198.51.100.99",
+  "src_port": 33000,
+  "dest_ip": "10.0.0.5",
+  "dest_port": 80,
+  "proto": "TCP",
+  "flow_id": 777888999,
+  "alert": {
+    "action": "allowed",
+    "category": "Attempted Information Leak",
+    "signature": "ET POLICY Sensitive Info in URI",
+    "signature_id": 2012008,
+    "severity": 3
+  },
+  "http": {
+    "url": "/etc/passwd",
+    "hostname": "10.0.0.5"
+  }
+}

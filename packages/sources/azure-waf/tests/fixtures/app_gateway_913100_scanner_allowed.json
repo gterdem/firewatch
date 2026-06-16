@@ -1,0 +1,29 @@
+{
+  "resourceId": "/SUBSCRIPTIONS/00000000-0000-0000-0000-000000000000/RESOURCEGROUPS/rg-prod/PROVIDERS/MICROSOFT.NETWORK/APPLICATIONGATEWAYS/gw-prod",
+  "operationName": "ApplicationGatewayFirewall",
+  "time": "2024-08-01T08:00:00.0000000Z",
+  "category": "ApplicationGatewayFirewallLog",
+  "properties": {
+    "instanceId": "ApplicationGatewayRole_IN_0",
+    "clientIp": "203.0.113.50",
+    "requestUri": "/wp-login.php",
+    "ruleSetType": "OWASP",
+    "ruleSetVersion": "3.2",
+    "ruleId": "913100",
+    "ruleGroup": "913-SCANNER-DETECTION",
+    "message": "Found User-Agent associated with security scanner",
+    "action": "Allowed",
+    "site": "Global",
+    "details": {
+      "message": "Warning. Found User-Agent associated with security scanner.",
+      "data": "Nikto/2.1.6",
+      "file": "rules/REQUEST-913-SCANNER-DETECTION.conf",
+      "line": "48"
+    },
+    "hostname": "192.0.2.1",
+    "transactionId": "33333333333333333333",
+    "policyId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-prod/providers/Microsoft.Network/applicationGateways/gw-prod/firewallPolicies/global",
+    "policyScope": "Global",
+    "policyScopeName": "Global"
+  }
+}

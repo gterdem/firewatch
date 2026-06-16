@@ -1,0 +1,35 @@
+{
+  "timestamp": "2026-01-15T10:25:00.000000+0000",
+  "event_type": "alert",
+  "src_ip": "203.0.113.42",
+  "src_port": 58432,
+  "dest_ip": "192.0.2.50",
+  "dest_port": 443,
+  "proto": "TCP",
+  "flow_id": 555666777,
+  "alert": {
+    "action": "allowed",
+    "category": "Potentially Bad Traffic",
+    "signature": "ET POLICY TLS Suspicious SNI - Command and Control",
+    "signature_id": 2025901,
+    "severity": 2
+  },
+  "flow": {
+    "pkts_toserver": 12,
+    "pkts_toclient": 8,
+    "bytes_toserver": 2048,
+    "bytes_toclient": 65536,
+    "start": "2026-01-15T10:24:58.000000+0000",
+    "end": "2026-01-15T10:25:00.000000+0000"
+  },
+  "dns": {
+    "rrname": "c2.malicious-domain.example",
+    "rcode": "NOERROR"
+  },
+  "tls": {
+    "sni": "c2.malicious-domain.example",
+    "version": "TLSv1.3",
+    "ja4": "t13d1516h2_8daaf6152771_e5627efa2ab1",
+    "ja4s": "t130200_1301_234ea6891581"
+  }
+}

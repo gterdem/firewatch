@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Warn — never block — when the current branch is behind origin/main, nudging a
+# sync before the PR (the heavy reconcile lives in the agent workflow; this is
+# just an early local heads-up). Wired via core.hooksPath=.githooks.
+set -euo pipefail
+
+git fetch -q origin main 2>/dev/null || exit 0
+behind="$(git rev-list --count HEAD..origin/main 2>/dev/null || echo 0)"
+if [ "${behind:-0}" -gt 0 ]; then
+  echo "⚠ This branch is ${behind} commit(s) behind origin/main." >&2
+  echo "  Sync before opening/updating the PR:  git merge origin/main" >&2
+  echo "  Then reconcile only if it changed docs your issue references, and re-run gates only if it changed code." >&2
+fi
+exit 0

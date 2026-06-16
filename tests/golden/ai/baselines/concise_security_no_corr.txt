@@ -1,0 +1,31 @@
+You are a SOC (Security Operations Center) analyst AI assistant.
+Analyze this threat actor based on security log data (WAF, IDS, and other sources).
+Be concise. Keep each insight under 30 words.
+
+## Threat Actor Profile
+- **IP Address:** 198.51.100.5
+- **Total Events:** 10
+- **Blocked Events:** 8
+- **Block Rate:** 80.0%
+- **Unique Rules Triggered:** 1
+- **Activity Window:** 2026-01-15T08:00:00+00:00 to 2026-01-15T20:00:00+00:00
+
+## Attack Samples (top rules by frequency)
+  1. Rule: <untrusted_data>920100</untrusted_data> (<untrusted_data>proto</untrusted_data>) — triggered 5x
+     Sample payload: <untrusted_data>GET /admin HTTP/1.0</untrusted_data>
+
+
+## Your Task
+Provide a threat assessment in JSON format only, no other text:
+{
+  "threat_level": "CRITICAL|HIGH|MEDIUM|LOW",
+  "confidence": 0.0-1.0,
+  "intent": "brief description of attacker's likely goal",
+  "attack_stage": "reconnaissance|exploitation|brute_force|data_exfiltration|automated_scanning",
+  "insights": [
+    "pattern: <what attack pattern you observe>",
+    "risk: <what is the real risk to the system>",
+    "action: <specific next step for SOC analyst>"
+  ],
+  "recommended_action": "block|investigate|monitor|ignore"
+}

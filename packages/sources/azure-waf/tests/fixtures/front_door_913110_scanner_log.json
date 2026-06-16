@@ -1,0 +1,25 @@
+{
+  "time": "2024-10-01T06:00:00.0000000Z",
+  "category": "FrontDoorWebApplicationFirewallLog",
+  "operationName": "Microsoft.Cdn/Profiles/Write",
+  "properties": {
+    "clientIP": "192.0.2.88",
+    "clientPort": "55123",
+    "socketIP": "192.0.2.88",
+    "requestUri": "https://app.example.azurefd.net/admin/.env",
+    "ruleName": "Microsoft_DefaultRuleSet-2.1-SCANNER-913110",
+    "policy": "WafPolicyProd",
+    "action": "Log",
+    "host": "app.example.azurefd.net",
+    "trackingReference": "08Q3gXgAAAAA_DEMO_REF_2222222222",
+    "policyMode": "detection",
+    "details": {
+      "matches": [
+        {
+          "matchVariableName": "RequestUri",
+          "matchVariableValue": "/admin/.env"
+        }
+      ]
+    }
+  }
+}

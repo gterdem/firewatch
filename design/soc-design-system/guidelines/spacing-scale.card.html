@@ -1,0 +1,21 @@
+<!-- @dsCard group="Spacing" viewport="700x170" name="Spacing scale" subtitle="3 / 6 / 8 / 10 / 12 / 16 / 20 / 24 — the console packs tight" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head><meta charset="UTF-8"><link rel="stylesheet" href="../styles.css">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--fw-bg);font-family:var(--fw-font-ui);padding:20px;display:flex;flex-direction:column;gap:8px}
+  .row{display:flex;align-items:center;gap:12px}
+  .bar{height:14px;background:var(--fw-accent);border-radius:2px}
+  .tok{font-size:11px;font-family:var(--fw-font-mono);color:var(--fw-t2);width:120px}
+  .val{font-size:10px;color:var(--fw-t3);font-family:var(--fw-font-mono)}
+</style></head>
+<body>
+  <div class="row"><span class="tok">sp-1</span><span class="bar" style="width:3px"></span><span class="val">3px</span></div>
+  <div class="row"><span class="tok">sp-2</span><span class="bar" style="width:6px"></span><span class="val">6px</span></div>
+  <div class="row"><span class="tok">sp-3</span><span class="bar" style="width:8px"></span><span class="val">8px</span></div>
+  <div class="row"><span class="tok">sp-4</span><span class="bar" style="width:10px"></span><span class="val">10px</span></div>
+  <div class="row"><span class="tok">sp-5</span><span class="bar" style="width:12px"></span><span class="val">12px · default gap</span></div>
+  <div class="row"><span class="tok">sp-7</span><span class="bar" style="width:16px"></span><span class="val">16px · panel padding</span></div>
+  <div class="row"><span class="tok">sp-9</span><span class="bar" style="width:24px"></span><span class="val">24px · page gutter</span></div>
+</body></html>

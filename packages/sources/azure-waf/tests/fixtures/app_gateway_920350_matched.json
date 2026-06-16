@@ -1,0 +1,29 @@
+{
+  "resourceId": "/SUBSCRIPTIONS/00000000-0000-0000-0000-000000000000/RESOURCEGROUPS/rg-demo/PROVIDERS/MICROSOFT.NETWORK/APPLICATIONGATEWAYS/gw-demo",
+  "operationName": "ApplicationGatewayFirewall",
+  "time": "2017-03-20T15:52:09.1494499Z",
+  "category": "ApplicationGatewayFirewallLog",
+  "properties": {
+    "instanceId": "ApplicationGatewayRole_IN_0",
+    "clientIp": "203.0.113.147",
+    "requestUri": "/",
+    "ruleSetType": "OWASP",
+    "ruleSetVersion": "3.0",
+    "ruleId": "920350",
+    "ruleGroup": "920-PROTOCOL-ENFORCEMENT",
+    "message": "Host header is a numeric IP address",
+    "action": "Matched",
+    "site": "Global",
+    "details": {
+      "message": "Warning. Pattern match \"^[\\d.:]+$\" at REQUEST_HEADERS:Host.",
+      "data": "203.0.113.147",
+      "file": "rules/REQUEST-920-PROTOCOL-ENFORCEMENT.conf",
+      "line": "791"
+    },
+    "hostname": "192.0.2.1",
+    "transactionId": "16861477007022634343",
+    "policyId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-demo/providers/Microsoft.Network/applicationGateways/gw-demo/firewallPolicies/perListener",
+    "policyScope": "Listener",
+    "policyScopeName": "httpListener1"
+  }
+}

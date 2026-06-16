@@ -1,0 +1,40 @@
+/* ============================================================
+   FireWatch — Typography tokens
+   The product ships with the system UI stack (no webfonts). Data,
+   numbers, IPs, rule IDs and payloads are ALWAYS monospace — this
+   is the core typographic signal of the SOC console.
+   ============================================================ */
+
+:root {
+  /* --- Families --- */
+  --fw-font-ui:   'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', sans-serif;
+  --fw-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* --- Sizes (px-based; the console is data-dense and runs small) --- */
+  --fw-fs-display: 30px; /* stat-card value */
+  --fw-fs-modal:   22px; /* modal stat value / section headline */
+  --fw-fs-h1:      20px; /* header product title */
+  --fw-fs-h2:      16px; /* modal header */
+  --fw-fs-h3:      14px; /* panel title */
+  --fw-fs-body:    13px; /* body / form input */
+  --fw-fs-sm:      12px; /* table cell / secondary */
+  --fw-fs-xs:      11px; /* labels / metadata */
+  --fw-fs-2xs:     10px; /* table head / badge / micro-label */
+  --fw-fs-3xs:     9px;  /* nav count pill */
+
+  /* --- Weights --- */
+  --fw-fw-regular:  400; /* @kind other */
+  --fw-fw-medium:   500; /* @kind other */
+  --fw-fw-semibold: 600; /* @kind other */
+  --fw-fw-bold:     700; /* @kind other */
+
+  /* --- Line heights --- */
+  --fw-lh-tight: 1.2; /* @kind other */
+  --fw-lh-snug:  1.5; /* @kind other */
+  --fw-lh-body:  1.6; /* @kind other */
+
+  /* --- Tracking — uppercase micro-labels are letter-spaced --- */
+  --fw-ls-label: 0.8px; /* stat-card labels */
+  --fw-ls-table: 0.5px; /* table heads, badges */
+  --fw-ls-tight: 0.3px; /* tight uppercase */
+}

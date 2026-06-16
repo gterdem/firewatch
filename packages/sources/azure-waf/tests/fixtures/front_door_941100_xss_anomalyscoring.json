@@ -1,0 +1,25 @@
+{
+  "time": "2024-06-15T10:20:00.0000000Z",
+  "category": "FrontdoorWebApplicationFirewallLog",
+  "operationName": "Microsoft.Cdn/Profiles/Write",
+  "properties": {
+    "clientIP": "198.51.100.77",
+    "clientPort": "44321",
+    "socketIP": "198.51.100.77",
+    "requestUri": "https://app.example.azurefd.net/comment?text=%3Cscript%3Ealert%281%29%3C%2Fscript%3E",
+    "ruleName": "Microsoft_DefaultRuleSet-2.1-XSS-941100",
+    "policy": "WafPolicyProd",
+    "action": "AnomalyScoring",
+    "host": "app.example.azurefd.net",
+    "trackingReference": "08Q3gXgAAAAA_DEMO_REF_1111111111",
+    "policyMode": "detection",
+    "details": {
+      "matches": [
+        {
+          "matchVariableName": "QueryParamValue:text",
+          "matchVariableValue": "<script>alert(1)</script>"
+        }
+      ]
+    }
+  }
+}

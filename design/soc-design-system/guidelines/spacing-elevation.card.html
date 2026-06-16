@@ -1,0 +1,19 @@
+<!-- @dsCard group="Spacing" viewport="700x170" name="Borders & shadows" subtitle="1px hairlines build the grid; shadows only float overlays" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head><meta charset="UTF-8"><link rel="stylesheet" href="../styles.css">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--fw-bg);font-family:var(--fw-font-ui);padding:20px;display:flex;gap:18px;align-items:center}
+  .demo{width:200px;padding:14px;border-radius:10px;background:var(--fw-bg-card)}
+  .name{font-size:11px;color:var(--fw-t1);font-weight:600;margin-bottom:3px}
+  .val{font-size:10px;color:var(--fw-t3);font-family:var(--fw-font-mono)}
+  .b1{border:1px solid var(--fw-border)}
+  .b2{border:1px solid var(--fw-border-l)}
+  .pop{box-shadow:var(--fw-shadow-popup)}
+</style></head>
+<body>
+  <div class="demo b1"><div class="name">Hairline border</div><div class="val">1px · --fw-border</div></div>
+  <div class="demo b2"><div class="name">Lighter border</div><div class="val">1px · --fw-border-l</div></div>
+  <div class="demo b2 pop"><div class="name">Floating overlay</div><div class="val">shadow-popup</div></div>
+</body></html>

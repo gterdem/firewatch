@@ -1,0 +1,118 @@
+/* ============================================================
+   FireWatch — Color tokens
+   Source of truth: dashboard.html :root (dark) + [data-theme="light"]
+   Dark is the default ("operations") theme. Light is for projectors.
+   ============================================================ */
+
+:root {
+  /* --- Base surfaces (dark / default) --- */
+  --fw-bg:        #0a0e17; /* app background — deep navy-black */
+  --fw-bg-card:   #111827; /* panels, cards, header gradient top */
+  --fw-bg-hover:  #1a2332; /* table row / interactive hover */
+  --fw-bg-input:  #1e293b; /* inputs, inset wells, sidebar cards */
+
+  /* --- Borders --- */
+  --fw-border:    #1e293b; /* default hairline border */
+  --fw-border-l:  #2d3a4d; /* lighter border — popups, modals, focusable wells */
+
+  /* --- Text ramp --- */
+  --fw-t1:        #e2e8f0; /* primary text */
+  --fw-t2:        #94a3b8; /* secondary text / labels */
+  --fw-t3:        #64748b; /* muted text / metadata / placeholders */
+
+  /* --- Brand + functional hues --- */
+  --fw-accent:    #f59e0b; /* AMBER — the FireWatch signature. Primary actions, active nav, logo word. */
+  --fw-accent-hi: #fbbf24; /* amber hover (lighter) */
+  --fw-blue:      #3b82f6; /* allowed traffic, IP links, "medium", info */
+  --fw-red:       #ef4444; /* blocked traffic, "critical", danger */
+  --fw-green:     #22c55e; /* live / online / "low" / success */
+  --fw-orange:    #f97316; /* "high" severity, SQLi category */
+  --fw-purple:    #a855f7; /* deep-analysis action, "review", anomaly */
+  --fw-cyan:      #06b6d4; /* rule links, geo-blocked category */
+  --fw-pink:      #ec4899; /* LFI category, accent */
+
+  /* --- Semantic aliases (prefer these in product code) --- */
+  --fw-surface:        var(--fw-bg);
+  --fw-surface-card:   var(--fw-bg-card);
+  --fw-surface-inset:  var(--fw-bg-input);
+  --fw-surface-hover:  var(--fw-bg-hover);
+
+  --fw-text:           var(--fw-t1);
+  --fw-text-muted:     var(--fw-t2);
+  --fw-text-faint:     var(--fw-t3);
+  --fw-on-accent:      #000000; /* text/icons sitting on the amber accent */
+
+  /* Severity ramp (LOW → CRITICAL) */
+  --fw-sev-low:        var(--fw-green);
+  --fw-sev-medium:     var(--fw-blue);
+  --fw-sev-high:       var(--fw-orange);
+  --fw-sev-critical:   var(--fw-red);
+
+  /* Traffic / verdicts — v2 adds ALERT (IDS) and DROP alongside BLOCK/ALLOW */
+  --fw-blocked:        var(--fw-red);
+  --fw-allowed:        var(--fw-blue);
+  --fw-alert:          var(--fw-orange); /* IDS alert — rendered as a SOLID orange chip */
+  --fw-drop:           var(--fw-red);
+
+  /* --- Sources (v2: multi-source pipeline) ---
+     Each ingest source owns a hue; used for source badges, header health
+     dots, and the correlated event-timeline dots. */
+  --fw-src-waf:    var(--fw-blue);   /* Azure WAF  → "WAF" */
+  --fw-src-ids:    var(--fw-orange); /* Suricata IDS → "IDS" */
+  --fw-src-syslog: var(--fw-green);  /* Syslog → "SYS" */
+  --fw-src-file:   var(--fw-purple); /* File / log import */
+
+  /* Source-health dot states (by recency of last event) */
+  --fw-health-ok:    var(--fw-green);  /* < 5 min */
+  --fw-health-warn:  var(--fw-accent); /* < 15 min */
+  --fw-health-down:  var(--fw-red);    /* stale */
+  --fw-health-idle:  var(--fw-t3);     /* no data */
+
+
+  /* Tint fills — badges/pills use hue at ~9% (18 hex) over surface
+     with a ~19% (30 hex) border of the same hue. Kept as raw rgba so
+     they can be used directly without color-mix support. */
+  --fw-tint-red:    rgba(239, 68, 68, 0.094);
+  --fw-tint-red-bd: rgba(239, 68, 68, 0.188);
+  --fw-tint-orange:    rgba(249, 115, 22, 0.094);
+  --fw-tint-orange-bd: rgba(249, 115, 22, 0.188);
+  --fw-tint-blue:    rgba(59, 130, 246, 0.094);
+  --fw-tint-blue-bd: rgba(59, 130, 246, 0.188);
+  --fw-tint-green:    rgba(34, 197, 94, 0.094);
+  --fw-tint-green-bd: rgba(34, 197, 94, 0.188);
+}
+
+/* ============================================================
+   Light theme — "presentation" mode (projectors / bright rooms)
+   ============================================================ */
+[data-theme="light"] {
+  --fw-bg:        #f1f5f9;
+  --fw-bg-card:   #ffffff;
+  --fw-bg-hover:  #e2e8f0;
+  --fw-bg-input:  #f8fafc;
+  --fw-border:    #e2e8f0;
+  --fw-border-l:  #cbd5e1;
+  --fw-t1:        #1e293b;
+  --fw-t2:        #475569;
+  --fw-t3:        #64748b;
+  --fw-accent:    #d97706;
+  --fw-accent-hi: #b45309;
+  --fw-blue:      #2563eb;
+  --fw-red:       #dc2626;
+  --fw-green:     #16a34a;
+  --fw-orange:    #ea580c;
+  --fw-purple:    #9333ea;
+  --fw-cyan:      #0891b2;
+  --fw-pink:      #db2777;
+
+  --fw-on-accent: #ffffff;
+
+  --fw-tint-red:    rgba(220, 38, 38, 0.07);
+  --fw-tint-red-bd: rgba(220, 38, 38, 0.188);
+  --fw-tint-orange:    rgba(234, 88, 12, 0.07);
+  --fw-tint-orange-bd: rgba(234, 88, 12, 0.188);
+  --fw-tint-blue:    rgba(37, 99, 235, 0.07);
+  --fw-tint-blue-bd: rgba(37, 99, 235, 0.188);
+  --fw-tint-green:    rgba(22, 163, 74, 0.07);
+  --fw-tint-green-bd: rgba(22, 163, 74, 0.188);
+}

@@ -1,0 +1,27 @@
+<!-- @dsCard group="Colors" viewport="700x180" name="Attack category palette" subtitle="Fixed hue per WAF category — used in bars & charts" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head><meta charset="UTF-8"><link rel="stylesheet" href="../styles.css">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--fw-bg);font-family:var(--fw-font-ui);padding:18px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px}
+  .cat{display:flex;align-items:center;gap:10px}
+  .bar{height:14px;border-radius:3px;flex:1}
+  .name{font-size:11px;color:var(--fw-t1);width:150px;flex-shrink:0}
+  .hex{font-size:10px;color:var(--fw-t3);font-family:var(--fw-font-mono);width:54px;flex-shrink:0}
+</style></head>
+<body>
+  <div class="grid">
+    <div class="cat"><span class="name">SQL Injection</span><span class="bar" style="background:#f97316"></span><span class="hex">f97316</span></div>
+    <div class="cat"><span class="name">Rate Limited</span><span class="bar" style="background:#ef4444"></span><span class="hex">ef4444</span></div>
+    <div class="cat"><span class="name">XSS</span><span class="bar" style="background:#f59e0b"></span><span class="hex">f59e0b</span></div>
+    <div class="cat"><span class="name">Bot Activity</span><span class="bar" style="background:#3b82f6"></span><span class="hex">3b82f6</span></div>
+    <div class="cat"><span class="name">Anomaly Score</span><span class="bar" style="background:#a855f7"></span><span class="hex">a855f7</span></div>
+    <div class="cat"><span class="name">Geo-Blocked</span><span class="bar" style="background:#06b6d4"></span><span class="hex">06b6d4</span></div>
+    <div class="cat"><span class="name">Command Injection</span><span class="bar" style="background:#8b5cf6"></span><span class="hex">8b5cf6</span></div>
+    <div class="cat"><span class="name">Local File Inclusion</span><span class="bar" style="background:#ec4899"></span><span class="hex">ec4899</span></div>
+    <div class="cat"><span class="name">Protocol Violation</span><span class="bar" style="background:#64748b"></span><span class="hex">64748b</span></div>
+    <div class="cat"><span class="name">Other</span><span class="bar" style="background:#475569"></span><span class="hex">475569</span></div>
+  </div>
+</body></html>

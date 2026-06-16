@@ -1,0 +1,40 @@
+<!-- @dsCard group="Colors" viewport="700x190" name="Severity, verdict & source badges" subtitle="Severity ramp · BLOCK/ALLOW/ALERT · WAF/IDS/SYS" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head><meta charset="UTF-8"><link rel="stylesheet" href="../styles.css">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--fw-bg);font-family:var(--fw-font-ui);padding:22px;display:flex;flex-direction:column;gap:16px}
+  .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .cap{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--fw-t3);width:70px}
+  .badge{display:inline-block;padding:2px 10px;border-radius:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;border:1px solid}
+  .b-critical{background:var(--fw-tint-red);color:var(--fw-red);border-color:var(--fw-tint-red-bd)}
+  .b-high{background:var(--fw-tint-orange);color:var(--fw-orange);border-color:var(--fw-tint-orange-bd)}
+  .b-medium{background:var(--fw-tint-blue);color:var(--fw-blue);border-color:var(--fw-tint-blue-bd)}
+  .b-low{background:var(--fw-tint-green);color:var(--fw-green);border-color:var(--fw-tint-green-bd)}
+  .b-alert{background:var(--fw-orange);color:#000;border-color:var(--fw-orange)}
+  .b-waf{background:var(--fw-tint-blue);color:var(--fw-blue);border-color:var(--fw-tint-blue-bd)}
+  .b-ids{background:var(--fw-tint-orange);color:var(--fw-orange);border-color:var(--fw-tint-orange-bd)}
+  .b-sys{background:var(--fw-tint-green);color:var(--fw-green);border-color:var(--fw-tint-green-bd)}
+  .b-file{background:rgba(168,85,247,.094);color:var(--fw-purple);border-color:rgba(168,85,247,.188)}
+</style></head>
+<body>
+  <div class="row"><span class="cap">Severity</span>
+    <span class="badge b-critical">Critical</span>
+    <span class="badge b-high">High</span>
+    <span class="badge b-medium">Medium</span>
+    <span class="badge b-low">Low</span>
+  </div>
+  <div class="row"><span class="cap">Verdict</span>
+    <span class="badge b-critical">Block</span>
+    <span class="badge b-low">Allow</span>
+    <span class="badge b-alert">Alert</span>
+    <span class="badge b-critical">Drop</span>
+  </div>
+  <div class="row"><span class="cap">Source</span>
+    <span class="badge b-waf">WAF</span>
+    <span class="badge b-ids">IDS</span>
+    <span class="badge b-sys">SYS</span>
+    <span class="badge b-file">FILE</span>
+  </div>
+</body></html>

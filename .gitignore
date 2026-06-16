@@ -1,0 +1,97 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# SQLite databases (incl. WAL/SHM sidecars and timestamped backups)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.db.bak
+*.db.bak-*
+
+# Environment variables
+.env
+.env.*
+# …but DO ship the deploy config template (no secrets — documented defaults).
+!deploy/.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+.claude/settings.local.json
+
+# Runtime config (contains webhook URLs) + timestamped local backups
+firewatch_config.json
+firewatch_config.json.bak*
+
+# Local/personal Claude memory — internal + personal working notes that augment
+# the committed CLAUDE.md (the human's name, the legacy/ transitional rules, the
+# PROGRESS.md ledger pointer). Loaded after CLAUDE.md; propagated into worktrees
+# via .worktreeinclude; never committed.
+CLAUDE.local.md
+
+# Local run / live-test scratch (see RUN_GUIDE.md) — not part of the repo.
+# (firewatch_events.db is covered by *.db above; .env.local by .env.* above.)
+RUN_GUIDE.md
+sample-eve.json
+
+# Local planning dir (CLAUDE.md global workflow: tasks/todo.md, tasks/lessons.md).
+# Never part of the repo. The internal working/strategy docs untracked at the
+# pre-launch freeze (PROGRESS.md, docs/lessons.md, docs/research/, …) are listed
+# in docs/pre-release-checklist.md §2 and removed there, coupled with #610.
+tasks/
+
+# Internal continuation/migration notes — never public (carried by hand to the new repo).
+docs/internal/
+
+# Internal docs untracked at the public-launch freeze — protect the new public repo
+# (the rule carries over via `git archive`; these stay tracked in the private archive).
+PROGRESS.md
+docs/lessons.md
+docs/research/*
+!docs/research/azure-waf-log-standard.md
+feature-assessment.md
+
+# Test fixtures (synthetic Suricata samples, etc.)
+tests/fixtures/
+legacy/tests/baseline/
+*.jsonl
+
+# Graphify output (contains synthetic Suricata samples, etc.)
+graphify-out/
+
+# Worktree metadata
+.worktreeinclude
+
+# Agent isolation worktrees (created by subagents running in worktree mode)
+.claude/worktrees/
+
+# App-insulation worktree — live app serves from here, detached @ origin/main
+# (see memory app-runs-from-preview-app-worktree); local-only, never committed.
+.claude/preview-app/
+
+# Stray root-level Vite cache (when Vite is run from the repo root by mistake)
+/node_modules/
+
+# gitleaks scratch report (the hook/CI scan by exit code, not a committed file)
+gitleaks-report.json
+
+# Runtime-downloaded DB-IP Lite MMDB geo databases (ADR-0039) — not source
+geo_data/

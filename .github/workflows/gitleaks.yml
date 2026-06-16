@@ -1,0 +1,24 @@
+name: gitleaks
+# Backstop for the local pre-commit hook: catches any secret that bypassed it.
+# Deliberately NOT path-filtered (a secret can be in any file) and runs over
+# full history (fetch-depth: 0).
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks (pinned)
+        run: |
+          VERSION=8.27.2
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+      - name: Scan full history
+        run: gitleaks git -c .gitleaks.toml --no-banner --redact

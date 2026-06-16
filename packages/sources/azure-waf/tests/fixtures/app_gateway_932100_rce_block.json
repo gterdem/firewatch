@@ -1,0 +1,29 @@
+{
+  "resourceId": "/SUBSCRIPTIONS/00000000-0000-0000-0000-000000000000/RESOURCEGROUPS/rg-prod/PROVIDERS/MICROSOFT.NETWORK/APPLICATIONGATEWAYS/gw-prod",
+  "operationName": "ApplicationGatewayFirewall",
+  "time": "2024-07-22T14:30:00.0000000Z",
+  "category": "ApplicationGatewayFirewallLog",
+  "properties": {
+    "instanceId": "ApplicationGatewayRole_IN_1",
+    "clientIp": "192.0.2.200",
+    "requestUri": "/api/exec?cmd=ls+-la",
+    "ruleSetType": "OWASP",
+    "ruleSetVersion": "3.2",
+    "ruleId": "932100",
+    "ruleGroup": "932-APPLICATION-ATTACK-RCE",
+    "message": "Remote Command Execution: Unix Command Injection",
+    "action": "Block",
+    "site": "Global",
+    "details": {
+      "message": "Warning. Matched Data: ls -la found within ARGS:cmd.",
+      "data": "ls -la",
+      "file": "rules/REQUEST-932-APPLICATION-ATTACK-RCE.conf",
+      "line": "57"
+    },
+    "hostname": "192.0.2.1",
+    "transactionId": "22222222222222222222",
+    "policyId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-prod/providers/Microsoft.Network/applicationGateways/gw-prod/firewallPolicies/global",
+    "policyScope": "Global",
+    "policyScopeName": "Global"
+  }
+}

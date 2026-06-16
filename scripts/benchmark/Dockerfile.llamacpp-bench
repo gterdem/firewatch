@@ -1,0 +1,72 @@
+# Benchmark-only lean runtime image — llama.cpp b5171 with shared libraries.
+#
+# The production lean image (deploy/lean/Dockerfile.llamacpp, ~20.5 MB Alpine)
+# ships only the llama-server ELF binary, not the shared libraries it links
+# against (libggml*.so, libllama.so).  The binary is dynamically linked to
+# glibc (ELF interpreter /lib64/ld-linux-x86-64.so.2) and cannot run on Alpine
+# musl libc.  See docs/benchmarks/footprint-<date>.md for the full analysis.
+#
+# This Dockerfile is used ONLY by scripts/benchmark/footprint.sh to produce
+# runtime measurements for the lean profile.  It does NOT replace the
+# production Dockerfile.  The production Dockerfile is the source of truth for
+# the published 20.5 MB image-size claim; this image is Ubuntu-based and is
+# ~92.7 MB (still much smaller than Ollama's ~4.86 GB).
+#
+# Architecture: amd64 CPU-only (matches the canonical lean-profile target).
+
+# --------------------------------------------------------------------------
+# Stage 1: download + verify the static llama-server release
+# --------------------------------------------------------------------------
+FROM alpine:3.20 AS downloader
+
+ARG LLAMA_CPP_VERSION=b5171
+ARG LLAMA_CPP_ASSET=llama-${LLAMA_CPP_VERSION}-bin-ubuntu-x64.zip
+# SHA256 verified against the GitHub release for b5171.
+ARG LLAMA_CPP_SHA256=78946bc8fab7df5975db73f23a6757d7866d5b90be9a2024d5abc8b65fea69cd
+
+RUN apk add --no-cache curl unzip ca-certificates
+
+RUN curl -fsSL \
+    "https://github.com/ggerganov/llama.cpp/releases/download/${LLAMA_CPP_VERSION}/${LLAMA_CPP_ASSET}" \
+    -o /tmp/llama.zip && \
+    echo "${LLAMA_CPP_SHA256}  /tmp/llama.zip" | sha256sum -c - && \
+    unzip /tmp/llama.zip -d /tmp/llama && \
+    install -m 755 /tmp/llama/build/bin/llama-server /usr/local/bin/llama-server && \
+    cp /tmp/llama/build/bin/libggml*.so /usr/local/lib/ && \
+    cp /tmp/llama/build/bin/libllama.so /usr/local/lib/ && \
+    rm -rf /tmp/llama /tmp/llama.zip
+
+# --------------------------------------------------------------------------
+# Stage 2: Ubuntu 22.04 runtime (glibc compatible; includes .so files)
+# --------------------------------------------------------------------------
+FROM ubuntu:22.04 AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libstdc++6 libgomp1 ca-certificates curl && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN useradd -m -u 1001 llama
+
+# Copy the llama-server binary and required shared libraries from the downloader.
+COPY --from=downloader /usr/local/bin/llama-server /usr/local/bin/llama-server
+COPY --from=downloader /usr/local/lib/libggml*.so /usr/lib/
+COPY --from=downloader /usr/local/lib/libllama.so /usr/lib/
+RUN ldconfig
+
+USER llama
+
+# The GGUF model is mounted by the benchmark script at /models/.
+VOLUME ["/models"]
+
+# OpenAI-compatible /v1 endpoint on port 8080 (same as production lean image).
+EXPOSE 8080
+
+# Start llama-server with the operator-mounted GGUF (same ENTRYPOINT as production).
+ENTRYPOINT ["sh", "-c", \
+    "exec llama-server \
+        --model /models/${MODEL_FILE} \
+        --host 0.0.0.0 \
+        --port 8080 \
+        --ctx-size 4096 \
+        --threads $(nproc) \
+        \"$@\"", "--"]

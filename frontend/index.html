@@ -1,0 +1,36 @@
+<!doctype html>
+<!-- data-theme is set synchronously by the inline script below (fix #570: FOUC prevention).
+     The script resolves: localStorage "fw-theme" → prefers-color-scheme → "dark" (DS default). -->
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FireWatch</title>
+    <!--
+      FOUC-prevention script (fix #570).
+      Runs synchronously before any stylesheet or React bundle so the correct
+      theme token set is active from the very first paint.
+      Resolution order: localStorage "fw-theme" → prefers-color-scheme → "dark".
+      Must stay a plain (non-module) script — module scripts are deferred by the
+      browser and would not execute early enough to prevent the flash.
+    -->
+    <script>
+      (function () {
+        var stored;
+        try { stored = localStorage.getItem('fw-theme'); } catch (_) {}
+        var theme =
+          stored === 'dark' || stored === 'light'
+            ? stored
+            : window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
+            ? 'light'
+            : 'dark';
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

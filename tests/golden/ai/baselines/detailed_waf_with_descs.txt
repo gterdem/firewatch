@@ -1,0 +1,56 @@
+You are a senior SOC (Security Operations Center) analyst.
+Provide a thorough, detailed threat assessment based on WAF log data.
+
+## Threat Actor Profile
+- **IP Address:** 192.0.2.1
+- **Total Events:** 25
+- **Blocked Events:** 22
+- **Block Rate:** 88.0%
+- **Unique Rules Triggered:** 3
+- **Activity Window:** 2026-01-15T08:00:00+00:00 to 2026-01-15T20:00:00+00:00
+
+## All Triggered Rules (with timestamps and descriptions)
+  1. Rule: <untrusted_data>942100</untrusted_data> (<untrusted_data>SQL Injection</untrusted_data>) — triggered 12x
+     Description: <untrusted_data>Detects SQL injection attempts using OR with quoted string comparison</untrusted_data>
+     Timeline: 2026-01-15T08:00:00+00:00 to 2026-01-15T16:00:00+00:00
+     Sample payload: <untrusted_data>' OR '1'='1' -- </untrusted_data>
+  2. Rule: <untrusted_data>941100</untrusted_data> (<untrusted_data>XSS</untrusted_data>) — triggered 7x
+     Description: <untrusted_data>Detects reflected cross-site scripting via script tags</untrusted_data>
+     Timeline: 2026-01-15T08:00:00+00:00 to 2026-01-15T16:00:00+00:00
+     Sample payload: <untrusted_data><script>alert(document.cookie)</script></untrusted_data>
+  3. Rule: <untrusted_data>930100</untrusted_data> (<untrusted_data>LFI</untrusted_data>) — triggered 3x
+     Description: <untrusted_data>Detects local file inclusion via directory traversal sequences</untrusted_data>
+     Timeline: 2026-01-15T08:00:00+00:00 to 2026-01-15T16:00:00+00:00
+     Sample payload: <untrusted_data>../../../../etc/passwd</untrusted_data>
+
+
+## Your Task
+Provide a comprehensive threat assessment in JSON format only, no other text:
+{
+  "threat_level": "CRITICAL|HIGH|MEDIUM|LOW",
+  "confidence": 0.0-1.0,
+  "executive_summary": "2-3 sentence overview of the threat actor and their activity",
+  "intent": "description of attacker's likely goal and motivation",
+  "attack_stage": "reconnaissance|exploitation|brute_force|data_exfiltration|automated_scanning",
+  "attack_progression": [
+    "Step 1: description of initial activity",
+    "Step 2: description of escalation",
+    "Step 3: description of final activity"
+  ],
+  "insights": {
+    "patterns": [
+      "detailed observation about attack patterns"
+    ],
+    "risks": [
+      "specific risk to the system or data"
+    ],
+    "mitigations": [
+      "specific remediation step or WAF rule recommendation"
+    ]
+  },
+  "ioc_indicators": [
+    "indicator of compromise observed in the data"
+  ],
+  "recommended_action": "block|investigate|monitor|ignore",
+  "false_positive_likelihood": 0.0-1.0
+}

@@ -1,0 +1,129 @@
+# Lean inference runtime image — llama.cpp llama-server.
+#
+# Target: ~80–120 MB runtime image for air-gapped / minimal deployments
+# (ADR-0042).  The model (GGUF file) is NEVER baked into this image; it is
+# operator-supplied via a named volume mounted at /models/.  This keeps the
+# image redistributable and the model swappable.
+#
+# Architecture: amd64 CPU-only (the canonical lean-profile target).
+# For GPU or arm64 builds, adjust the LLAMA_CPP_VERSION and download URL.
+#
+# Security notes:
+# - No model data baked in — volume mount only.
+# - Runs as non-root (UID 1001).
+# - Exposes port 8080 (OpenAI-compatible /v1 endpoint), reachable by the
+#   firewatch service via the fwnet bridge (docker-compose.yml).
+#
+# Runtime base: debian:bookworm-slim (glibc-based, ~30 MB compressed).
+# The llama-server binary is dynamically linked to glibc — Alpine (musl)
+# CANNOT run it.  The release ZIP also ships shared libraries that must be
+# copied alongside the binary (see Stage 1 note below).
+#
+# Lean image size (recorded for MI-2):
+#   Run `docker images firewatch-lean` after `docker build` and update
+#   deploy/README.md + docs/benchmarks/footprint-*.md with the real number.
+#
+# --------------------------------------------------------------------------
+# Stage 1: download and unpack the llama-server binary + required .so files
+# --------------------------------------------------------------------------
+FROM alpine:3.20 AS downloader
+
+# llama.cpp release tag and asset name for the CPU-only Linux x64 binary.
+# Bump these two ARGs to upgrade llama.cpp.
+# IMPORTANT: when LLAMA_CPP_VERSION is bumped, LLAMA_CPP_SHA256 MUST be updated
+# in the same commit.  Compute the new digest with:
+#   curl -fsSL -L <release-url> | sha256sum
+ARG LLAMA_CPP_VERSION=b5171
+ARG LLAMA_CPP_ASSET=llama-${LLAMA_CPP_VERSION}-bin-ubuntu-x64.zip
+# SHA256 of the asset above.  Verified against the GitHub release for b5171.
+ARG LLAMA_CPP_SHA256=78946bc8fab7df5975db73f23a6757d7866d5b90be9a2024d5abc8b65fea69cd
+
+RUN apk add --no-cache curl unzip ca-certificates
+
+# Download the prebuilt CPU binary from the llama.cpp GitHub release.
+# The release ZIP ships llama-server and all required shared libraries.
+# The SHA256 checksum is verified before extraction to catch tampering or
+# accidental download errors.
+#
+# Libraries extracted alongside the binary (confirmed via readelf -d + transitive deps):
+#   libllama.so      — high-level llama C++ API
+#   libggml.so       — GGML compute graph dispatcher (links libggml-cpu + libggml-rpc)
+#   libggml-base.so  — GGML core tensor ops
+#   libggml-cpu.so   — GGML CPU backend (SIMD kernels; loaded by libggml.so)
+#   libggml-rpc.so   — GGML RPC transport (loaded by libggml.so)
+#
+# System libraries (libstdc++.so.6, libm.so.6, libcurl.so.4, libc.so.6) are
+# provided by the runtime base image (debian:bookworm-slim).
+RUN curl -fsSL \
+    "https://github.com/ggerganov/llama.cpp/releases/download/${LLAMA_CPP_VERSION}/${LLAMA_CPP_ASSET}" \
+    -o /tmp/llama.zip && \
+    echo "${LLAMA_CPP_SHA256}  /tmp/llama.zip" | sha256sum -c - && \
+    unzip /tmp/llama.zip -d /tmp/llama && \
+    install -m 755 /tmp/llama/build/bin/llama-server /usr/local/bin/llama-server && \
+    cp /tmp/llama/build/bin/libllama.so /usr/local/lib/ && \
+    cp /tmp/llama/build/bin/libggml.so /usr/local/lib/ && \
+    cp /tmp/llama/build/bin/libggml-base.so /usr/local/lib/ && \
+    cp /tmp/llama/build/bin/libggml-cpu.so /usr/local/lib/ && \
+    cp /tmp/llama/build/bin/libggml-rpc.so /usr/local/lib/ && \
+    rm -rf /tmp/llama /tmp/llama.zip
+
+# --------------------------------------------------------------------------
+# Stage 2: glibc-based slim runtime
+# --------------------------------------------------------------------------
+# debian:bookworm-slim provides glibc (ELF interpreter /lib64/ld-linux-x86-64.so.2)
+# and is smaller than ubuntu:22.04 while still fully glibc-compatible.
+# DO NOT change this back to Alpine (musl) — the binary will fail with
+# "no such file or directory" even with the .so files present.
+FROM debian:bookworm-slim AS runtime
+
+# Runtime dependencies:
+#   libstdc++6      — C++ standard library (libstdc++.so.6)
+#   libgomp1        — OpenMP runtime for multi-threaded inference
+#   libcurl4        — HTTP client used by llama-server internals
+#   ca-certificates — TLS roots (needed by libcurl)
+#   curl            — used by the Docker HEALTHCHECK probe
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libstdc++6 libgomp1 libcurl4 ca-certificates curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# Non-root user.
+RUN useradd -m -u 1001 llama
+
+# Copy the llama-server binary and its five required shared libraries.
+COPY --from=downloader /usr/local/bin/llama-server /usr/local/bin/llama-server
+COPY --from=downloader /usr/local/lib/libllama.so /usr/local/lib/libllama.so
+COPY --from=downloader /usr/local/lib/libggml.so /usr/local/lib/libggml.so
+COPY --from=downloader /usr/local/lib/libggml-base.so /usr/local/lib/libggml-base.so
+COPY --from=downloader /usr/local/lib/libggml-cpu.so /usr/local/lib/libggml-cpu.so
+COPY --from=downloader /usr/local/lib/libggml-rpc.so /usr/local/lib/libggml-rpc.so
+
+# Refresh the dynamic linker cache so /usr/local/lib is searched.
+RUN ldconfig
+
+USER llama
+
+# The GGUF model is mounted by the operator at /models/.
+# Documented volume path: /models/<your-model>.gguf
+# The MODEL_FILE env var (set in docker-compose.yml or .env) names the file.
+# Example: MODEL_FILE=mistral-7b-instruct-v0.2.Q4_K_M.gguf
+VOLUME ["/models"]
+
+# OpenAI-compatible /v1 endpoint on port 8080.
+# The `firewatch` service in docker-compose.yml sets:
+#   FIREWATCH_OLLAMA_BASE_URL=http://llama:8080
+# and the firewatch-core adapter (ADR-0022) resolves `llama` via compose DNS
+# to a 172.x bridge IP, which _is_local_address() accepts (RFC-1918).
+EXPOSE 8080
+
+# Start llama-server with the operator-mounted GGUF.
+# MODEL_FILE env var is injected by docker-compose.yml (set in .env).
+# --host 0.0.0.0 is safe here: the `llama` service has NO published host
+# ports and is reachable only within the fwnet bridge (compose DNS).
+ENTRYPOINT ["sh", "-c", \
+    "exec llama-server \
+        --model /models/${MODEL_FILE} \
+        --host 0.0.0.0 \
+        --port 8080 \
+        --ctx-size 4096 \
+        --threads $(nproc) \
+        \"$@\"", "--"]

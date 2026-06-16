@@ -1,0 +1,99 @@
+# Frequently Asked Questions
+
+Short answers to the questions new users ask most. For depth, follow the links into the
+[README](README.md) and the per-page [guides](docs/guide/). New to the terms? Start with the
+[Glossary](docs/guide/glossary.md).
+
+## What does FireWatch do and why should I use it?
+
+FireWatch is a modular, local-first threat-monitoring console. It pulls security telemetry from
+several sources into one canonical event shape, scores and triages attacker IP addresses with a
+deterministic rule engine, and adds local-AI explanation on top. Everything runs on hardware you
+control — no telemetry leaves your machine. See the [README](README.md) and the
+[getting-started guide](docs/guide/getting-started.md).
+
+## What sources can I use in FireWatch?
+
+Sources are **plugins** against a single contract — adding one needs zero edits to the core, so
+anyone can write a new one (see [PLUGIN_CONTRACT.md](PLUGIN_CONTRACT.md) and the
+[module-author guide](docs/module-author-guide.md)). Shipped today:
+
+| Source | What it is | Ingest |
+|--------|-----------|--------|
+| Azure WAF | Azure Web Application Firewall logs | Pull |
+| Suricata IDS/IPS | Intrusion Detection / Prevention System | Pull |
+| AWS Network Firewall | AWS managed network firewall | Pull |
+| Syslog (UDP/TCP) | Generic syslog listener | Push |
+| Syslog/CEF | Vendor-agnostic Common Event Format receiver | Push |
+
+## How are logs ingested?
+
+Two flavors, both normalized into one canonical `SecurityEvent` before scoring:
+
+```
+Pull sources  ──poll on a watermark (only events newer than last time)──┐
+                                                                        ├──► normalize ──► SecurityEvent
+Push sources  ──listen on a socket (sources send to FireWatch)──────────┘
+```
+
+- **Pull** (Azure WAF, Suricata, AWS NFW): FireWatch polls and tracks a watermark per source so it
+  never re-reads old events.
+- **Push** (Syslog, Syslog/CEF): FireWatch runs a listener; the source sends events to it.
+
+## What is the `T2 — Block status unknown` I see on the dashboard?
+
+It is the **escalation tier** for an actor whose traffic only triggered detection-mode events
+(an IDS alert or a log entry) — a detection fired, but FireWatch cannot assert whether the traffic
+was blocked or allowed, so it needs an operator decision. FireWatch labels what got *through*, not
+just what was blocked. The full action-aware model ([ADR-0058](docs/adr/0058-action-aware-deterministic-escalation-axis.md)):
+
+| Tier | What happened | Block status |
+|------|---------------|--------------|
+| **T1** | Allowed through despite a high-fidelity detection | allowed |
+| **T2** | Alert / log only — detection fired, disposition not asserted | **unknown** |
+| **T3** | Blocked/dropped, and the adversary kept trying (persistent) | blocked |
+| **T4** | Blocked/dropped, one-off | blocked |
+
+## What is score and how is it calculated?
+
+Score is a deterministic, rule-based risk number from 0–100 (`scoring.py`). Each matching signal
+adds points; the total is capped at 100. The AI does **not** drive it — see Q6.
+
+| Signal | Points |
+|--------|--------|
+| Brute force (≥10 blocked events) | +30 |
+| Port scan (≥5 distinct destination ports) | +25 |
+| SQL-injection payload | +40 × disposition weight |
+| Cross-site-scripting (XSS) payload | +35 × disposition weight |
+| Persistence (≥3 blocked events) | +10 |
+| Correlation detection boost | up to +30 |
+
+The *disposition weight* (allowed-through ×1.0 / alert ×0.75 / blocked ×0.5) means an exploit that
+got through scores higher than one the firewall stopped. Bands: 0–25 LOW · 26–50 MEDIUM ·
+51–75 HIGH · 76–100 CRITICAL.
+
+## What is the AI Engine and what is it mainly used for?
+
+A **local** large language model (default: [Ollama](https://ollama.com)) that explains
+already-decided escalations in plain language — what an actor was doing and why it matters. It is
+**not** a per-log detector and **not** the score driver. It can only *add* a bounded boost on top
+of the rule score (+20 for a confident CRITICAL verdict, +10 for HIGH, nothing otherwise) and can
+never lower or replace it. If it is offline, FireWatch runs rules-only and says so on screen. See
+the [AI Engine guide](docs/guide/ai-engine.md) and
+[docs/ai-claims-checklist.md](docs/ai-claims-checklist.md).
+
+## What is the use case of Model Trust?
+
+Model Trust is the drift-check panel on the [AI Engine page](docs/guide/ai-engine.md). You save a
+**baseline** of how your local model judges a fixed set of synthetic scenarios
+(`firewatch ai-baseline --save`), then re-run it later (`--compare`). It reports a Model Consistency
+Score — the percent of scenarios where the model still gives the same verdict — so after a model
+swap, quantization change, or runtime upgrade you can answer: *"did my model's judgment change?"*
+It tests consistency, not correctness.
+
+## What is the Entity Relationship Graph and what is it used for?
+
+An interactive force-directed graph on the [Network Logs page](docs/guide/network-logs.md). It maps
+IP addresses, network blocks (ASNs), and attack categories as nodes connected by weighted edges —
+so you can see at a glance how one actor connects across the data (which networks it belongs to,
+what it targeted, who it talked to). Clicking a node cross-filters the whole page to it.

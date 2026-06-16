@@ -1,0 +1,25 @@
+{
+  "time": "2020-06-09T22:32:17.8376810Z",
+  "category": "FrontdoorWebApplicationFirewallLog",
+  "operationName": "Microsoft.Cdn/Profiles/Write",
+  "properties": {
+    "clientIP": "203.0.113.10",
+    "clientPort": "52097",
+    "socketIP": "203.0.113.10",
+    "requestUri": "https://app.example.azurefd.net:443/?q=%27%20or%201%3D1",
+    "ruleName": "Microsoft_DefaultRuleSet-1.1-SQLI-942100",
+    "policy": "WafDemoCustomPolicy",
+    "action": "Block",
+    "host": "app.example.azurefd.net",
+    "trackingReference": "08Q3gXgAAAAA_DEMO_REF_0000000000",
+    "policyMode": "prevention",
+    "details": {
+      "matches": [
+        {
+          "matchVariableName": "QueryParamValue:q",
+          "matchVariableValue": "' or 1=1"
+        }
+      ]
+    }
+  }
+}

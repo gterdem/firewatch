@@ -1,0 +1,72 @@
+[project]
+name = "firewatch"
+version = "0.1.0"
+description = "FireWatch Network Monitoring"
+requires-python = ">=3.12"
+dependencies = []
+[tool.uv.workspace]
+members = ["packages/firewatch-sdk", "packages/firewatch-core", "packages/firewatch-api", "packages/firewatch-cli", "packages/sources/*"]
+
+# Install local workspace members from source (not PyPI). Each new package adds itself
+# here and to the dev group so the plain `uv run …` gates exercise it.
+[tool.uv.sources]
+firewatch-sdk = { workspace = true }
+firewatch-core = { workspace = true }
+firewatch-api = { workspace = true }
+firewatch-suricata = { workspace = true }
+firewatch-syslog = { workspace = true }
+firewatch-cli = { workspace = true }
+firewatch-azure-waf = { workspace = true }
+firewatch-syslog-cef = { workspace = true }
+
+[tool.ruff]
+target-version = "py312"
+extend-exclude = ["legacy"]
+force-exclude = true          # honor excludes even if paths are passed explicitly
+
+[tool.pyright]
+typeCheckingMode = "standard"
+include = ["packages"]        # positively scope to your code, not whole-tree-minus-legacy
+exclude = ["legacy", "**/.venv", "**/node_modules", "**/__pycache__", "**/.*"]
+
+[tool.pytest.ini_options]
+testpaths = ["packages", "tests"]
+norecursedirs = ["legacy", ".venv"]
+asyncio_mode = "auto"
+# Per-test timeout (pytest-timeout): a hung test fails after `timeout`s with a traceback
+# naming it, instead of stalling forever. "thread" method is asyncio-safe. @slow tests
+# (157-298s) are auto-exempted to 600s in packages/firewatch-core/tests/conftest.py.
+timeout = 45
+timeout_method = "thread"
+# importlib mode: each package keeps its own tests/ with a rootless layout (sibling
+# helpers like _fakes.py imported directly via a per-dir conftest sys.path shim), and
+# duplicate basenames across packages (e.g. test_isolation.py) don't collide.
+addopts = ["--import-mode=importlib"]
+# Markers (registered so --strict-markers / "-m" selection is clean). We deliberately
+# DO NOT put "-n auto" in addopts: targeted iteration runs are faster serial (no worker
+# spawn), and many agents run in parallel worktrees — global -n auto would oversubscribe
+# the host. Parallelize explicitly only for the single final full run: `uv run pytest -n auto`.
+markers = [
+    "slow: slow test (network/AI-baseline/mocked-SSH/integration). Deselect during iteration with -m 'not slow'; always runs in the final full pass + CI.",
+    "xdist_group: pin a set of shared-state (non-parallel-safe) tests to one xdist worker — use with `-n auto --dist loadgroup`.",
+]
+
+[dependency-groups]
+dev = [
+    "firewatch-sdk",
+    "firewatch-core",
+    "firewatch-api",
+    "firewatch-suricata",
+    "firewatch-syslog",
+    "firewatch-cli",
+    "firewatch-azure-waf",
+    "firewatch-syslog-cef",
+    "httpx>=0.27",
+    "jsonschema>=4.0",
+    "pyright>=1.1.410",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.4.0",
+    "pytest-xdist>=3.6",
+    "ruff>=0.15.15",
+    "pytest-timeout>=2.4.0",
+]

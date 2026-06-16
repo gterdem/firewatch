@@ -1,0 +1,29 @@
+{
+  "resourceId": "/SUBSCRIPTIONS/00000000-0000-0000-0000-000000000000/RESOURCEGROUPS/rg-dev/PROVIDERS/MICROSOFT.NETWORK/APPLICATIONGATEWAYS/gw-dev",
+  "operationName": "ApplicationGatewayFirewall",
+  "time": "2024-09-15T12:00:00.0000000Z",
+  "category": "ApplicationGatewayFirewallLog",
+  "properties": {
+    "instanceId": "ApplicationGatewayRole_IN_0",
+    "clientIp": "198.51.100.99",
+    "requestUri": "/api/users?id=1%20OR%201%3D1",
+    "ruleSetType": "OWASP",
+    "ruleSetVersion": "3.2",
+    "ruleId": "942100",
+    "ruleGroup": "942-APPLICATION-ATTACK-SQLI",
+    "message": "SQL Injection Attack Detected via libinjection",
+    "action": "Log",
+    "site": "Global",
+    "details": {
+      "message": "Warning. Detected SQL injection via libinjection.",
+      "data": "1 OR 1=1",
+      "file": "rules/REQUEST-942-APPLICATION-ATTACK-SQLI.conf",
+      "line": "45"
+    },
+    "hostname": "192.0.2.2",
+    "transactionId": "44444444444444444444",
+    "policyId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-dev/providers/Microsoft.Network/applicationGateways/gw-dev/firewallPolicies/global",
+    "policyScope": "Global",
+    "policyScopeName": "Global"
+  }
+}

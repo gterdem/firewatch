@@ -1,0 +1,49 @@
+You are a senior SOC (Security Operations Center) analyst.
+Provide a thorough, detailed threat assessment based on security log data (WAF, IDS, and other sources).
+
+## Threat Actor Profile
+- **IP Address:** 203.0.113.10
+- **Total Events:** 6
+- **Blocked Events:** 4
+- **Block Rate:** 66.7%
+- **Unique Rules Triggered:** 1
+- **Activity Window:** 2026-01-15T08:00:00+00:00 to 2026-01-15T20:00:00+00:00
+
+## All Triggered Rules (with timestamps and descriptions)
+  1. Rule: <untrusted_data>949110</untrusted_data> (<untrusted_data>anomaly</untrusted_data>) — triggered 4x
+     Sample payload: <untrusted_data>POST /login username=admin&password=<script>x</script></untrusted_data>
+
+## Cross-source Correlations
+- <untrusted_data>Suricata ET SCAN</untrusted_data> (boost +20): <untrusted_data>Port scan matched IDS rule ET.2009582</untrusted_data>
+
+
+## Your Task
+Provide a comprehensive threat assessment in JSON format only, no other text:
+{
+  "threat_level": "CRITICAL|HIGH|MEDIUM|LOW",
+  "confidence": 0.0-1.0,
+  "executive_summary": "2-3 sentence overview of the threat actor and their activity",
+  "intent": "description of attacker's likely goal and motivation",
+  "attack_stage": "reconnaissance|exploitation|brute_force|data_exfiltration|automated_scanning",
+  "attack_progression": [
+    "Step 1: description of initial activity",
+    "Step 2: description of escalation",
+    "Step 3: description of final activity"
+  ],
+  "insights": {
+    "patterns": [
+      "detailed observation about attack patterns"
+    ],
+    "risks": [
+      "specific risk to the system or data"
+    ],
+    "mitigations": [
+      "specific remediation step or WAF rule recommendation"
+    ]
+  },
+  "ioc_indicators": [
+    "indicator of compromise observed in the data"
+  ],
+  "recommended_action": "block|investigate|monitor|ignore",
+  "false_positive_likelihood": 0.0-1.0
+}

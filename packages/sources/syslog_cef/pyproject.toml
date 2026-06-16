@@ -1,0 +1,20 @@
+[project]
+name = "firewatch-syslog-cef"
+version = "0.1.0"
+description = "FireWatch Generic Syslog/CEF receiver — vendor-agnostic CEF->OCSF PushSource plugin."
+requires-python = ">=3.12"
+dependencies = [
+    "firewatch-sdk",
+    "firewatch-syslog",
+    "pydantic>=2.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/firewatch_syslog_cef"]
+
+[project.entry-points."firewatch.sources"]
+syslog_cef = "firewatch_syslog_cef.plugin:SyslogCefSource"

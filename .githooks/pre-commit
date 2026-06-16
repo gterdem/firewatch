@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# FireWatch secret-scanning gate — runs on every commit in every checkout AND
+# worktree (wired via a relative core.hooksPath = .githooks; see scripts/setup-hooks.sh).
+# Fail-closed: if gitleaks is missing, the commit is BLOCKED rather than passed unscanned.
+set -euo pipefail
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "✖ gitleaks not found — commit BLOCKED (fail-closed)." >&2
+  echo "  Install gitleaks, then retry: https://github.com/gitleaks/gitleaks#installing" >&2
+  exit 1
+fi
+
+# Branch-safety WARN (non-blocking) — see docs/lessons.md "verify the current git branch".
+# An isolated-worktree dispatch can silently leave the MAIN checkout on a feature branch, so a
+# main-loop commit could land on the wrong branch. Warn (don't block) only in the MAIN checkout;
+# dev-agent WORKTREES are exempt (they legitimately commit on feature branches). A worktree's
+# --git-dir (…/.git/worktrees/<name>) differs from --git-common-dir (the shared …/.git); in the
+# main checkout they are equal.
+_gd="$(git rev-parse --git-dir 2>/dev/null || true)"
+_cd="$(git rev-parse --git-common-dir 2>/dev/null || true)"
+_br="$(git symbolic-ref --short -q HEAD || echo DETACHED)"
+if [ -n "$_gd" ] && [ "$_gd" = "$_cd" ] && [ "$_br" != "main" ]; then
+  echo "⚠ branch-safety: committing on '$_br' in the MAIN checkout (expected 'main')." >&2
+  echo "  A dispatched worktree may have switched it; this commit could be on the wrong branch." >&2
+  echo "  (Warning only — proceeding. Worktrees are exempt.)" >&2
+fi
+
+# Scan only what's staged, using this worktree's committed .gitleaks.toml.
+# gitleaks exits non-zero when it finds a secret, which aborts the commit.
+exec gitleaks git --staged --no-banner --redact -c .gitleaks.toml

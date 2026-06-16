@@ -13,11 +13,7 @@ engine plus a local language model**, and gives you a triage dashboard. Everythi
 on hardware you control: no telemetry ever leaves your machine, and the AI never gets the
 final word.
 
-> **SOC** = Security Operations Center · **SIEM** = Security Information and Event
-> Management (collecting and analyzing security events) · **SOAR** = Security Orchestration,
-> Automation and Response (acting on them). FireWatch is a SIEM with AI investigation
-> today; tunable response (SOAR) is a deliberate next step, behind a seam already in the
-> code.
+<img width="800" height="450" alt="FireWatch-Intro" src="https://github.com/user-attachments/assets/331a3ca1-e0f4-4e04-b6f6-00af78d48df7" />
 
 ---
 
@@ -39,12 +35,6 @@ final word.
   event's action actually *was* — it surfaces what got **through**, not just what was
   blocked — and routes findings into a triage queue. Active response (auto-block) is the
   next milestone, gated behind an explicit, evidence-bound seam. ([ADR-0058](docs/adr/0058-action-aware-deterministic-escalation-axis.md), [ADR-0033](docs/adr/0033-ui-action-seam-siem-now-soar-later.md))
-
----
-
-## Screenshot
-
-<!-- TODO: Replace with intro gif upload. -->
 
 
 ---

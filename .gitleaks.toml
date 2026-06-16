@@ -36,7 +36,19 @@ tags = ["pii", "ip"]
 # so gitleaks will flag any real IPs still living there until they're removed.
 [allowlist]
 description = "Non-routable / documentation IPs and example GUIDs"
+# regexTarget = "line": test these allowlist patterns against the whole source line,
+# not just the captured secret. Required so the GitHub user-attachments URL rule below
+# can see the URL context around the GUID — the captured secret is the bare GUID alone,
+# which is indistinguishable from an Azure workspace ID without its surrounding URL.
+# Verified to preserve every existing IP/GUID allowlist + rule behavior.
+regexTarget = "line"
 regexes = [
+  # GitHub user-attachments asset URLs embed a random GUID as a PUBLIC CDN media ID —
+  # README demo screenshots / screen recordings (e.g. the FireWatch app GIF). This is
+  # GitHub's opaque attachment identifier in public markdown, NOT an Azure Log Analytics
+  # workspace ID or any secret. The azure-workspace-id rule still flags every OTHER bare
+  # GUID, so real workspace IDs committed anywhere else are still caught.
+  '''github(?:usercontent)?\.com/user-attachments/assets/[0-9a-fA-F-]{36}''',
   '''\b10\.(?:[0-9]{1,3}\.){2}[0-9]{1,3}\b''',
   '''\b172\.(?:1[6-9]|2[0-9]|3[01])\.[0-9]{1,3}\.[0-9]{1,3}\b''',
   '''\b192\.168\.[0-9]{1,3}\.[0-9]{1,3}\b''',

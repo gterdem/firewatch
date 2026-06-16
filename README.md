@@ -88,110 +88,16 @@ multi-user hardening is on the roadmap — run FireWatch on your own machine for
 
 ---
 
-## Available today
-
-Shipped and tested capabilities:
-
-- **Source plugins:** Azure WAF · Suricata IDS/IPS · AWS Network Firewall · Syslog
-  (UDP/TCP) · Syslog/CEF (vendor-agnostic). Each is a package under `packages/sources/`,
-  added with zero core edits.
-- **Standards-grounded normalization.** Events map to one canonical schema aligned with
-  [OCSF](https://schema.ocsf.io/) (the Open Cybersecurity Schema Framework — a common event
-  shape) and [MITRE ATT&CK](https://attack.mitre.org/) technique context, populated at
-  normalize time. ([ADR-0020](docs/adr/0020-event-schema-lightweight-ocsf-alignment.md), [ADR-0014](docs/adr/0014-mitre-att-ck-capec-native-categorization.md))
-- **Dual-engine scoring.** Deterministic rules (brute force, port scan, SQL-injection /
-  cross-site-scripting payload patterns, blocked-event volume) plus an optional, bounded
-  local-AI boost.
-- **Action-aware escalation & triage.** Distinguishes blocked from allowed/dropped events
-  and routes findings into a triage queue.
-- **Cross-source correlation** keyed on telemetry type — a new plugin joins correlation
-  for free, just by declaring its source type. (Intrusion Detection System + Syslog, etc.)
-- **On-device inference** with zero external egress, including a verified
-  [air-gapped mode](docs/air-gapped-mode.md).
-- **Schema-driven settings UI.** Each plugin's configuration card is generated from its
-  Pydantic config schema — no per-source frontend code. ([ADR-0010](docs/adr/0010-unified-source-cards.md), [ADR-0019](docs/adr/0019-frontend-stack-react-rjsf.md))
-- **Provenance-tagged, evidence-linked scores** (see the AI section below).
-
----
-
-<!-- Summary→checklist trace (rule 1 of docs/ai-claims-checklist.md):
-     local-only/cloud-refused → rows 1, 2 · deterministic floor / bounded boost → rows 3, 5
-     rules-only degradation, labeled → row 12 · provenance + factor/evidence linkage → rows 6, 9
-     (row 9 evidence-chain shipped — #NNN merged; endpoint + evidence.py on main) · prompt pinning → rows 7, 8
-     ai-baseline operator-recorded → rows 10, 11. "Pluggable sources" is an architecture claim
-     (PLUGIN_CONTRACT.md), not an AI claim — no row needed. -->
-
 ## How FireWatch's AI works (and how you can audit it)
 
-Most AI security tools ask you to trust a verdict you cannot inspect. FireWatch is built
-the other way around: the AI is **structurally contained**, and every claim below is backed
-by a test or an accepted design decision you can read in this repository. The full
-claim-by-claim mapping lives in [docs/ai-claims-checklist.md](docs/ai-claims-checklist.md) —
-the copy on this page is not allowed to outrun it.
+All AI inference runs on a local endpoint you control — the adapter refuses to connect to
+any non-local host, so "local-only" is enforced in code, not promised in a policy. The AI
+is additive-only on top of a deterministic scoring floor: a rule engine runs first; the
+model may add a bounded boost; if the model is wrong, offline, or hallucinating, the rule
+score stands. Every score is provenance-tagged (`RULE` vs `AI+RULE`) and carries an
+evidence chain you can inspect.
 
-**1. Inference is local-only. No cloud LLM — enforced, not promised.**
-All inference targets a local OpenAI-compatible endpoint (Ollama by default; vLLM,
-llama.cpp, LM Studio, and SGLang also work). The adapter refuses to construct against a
-non-loopback / non-private host, so "local" can never quietly become a hosted API. Your
-WAF/IDS logs stay on hardware you control.
-([ADR-0022](docs/adr/0022-local-inference-openai-compatible-endpoint.md); enforced in
-`packages/firewatch-core/src/firewatch_core/adapters/ai_openai.py`.) For fully offline
-operation, see [Air-gapped mode](docs/air-gapped-mode.md) — a verified zero-egress
-configuration, not an adjective.
-
-**2. The AI can only *add* to a deterministic score — never replace it, never lower it.**
-A rule engine produces the base score first: brute force, port scan, SQLi/XSS payload
-patterns, blocked-event volume — plain, readable Python in
-`packages/firewatch-core/src/firewatch_core/scoring.py`. The model may then add a *bounded*
-boost (+20 for a high-confidence CRITICAL verdict, +10 for HIGH, nothing otherwise);
-correlation detections add at most +30; the total is capped at 100. If the model is wrong,
-offline, or hallucinating, the deterministic floor stands. This is simultaneously the
-scoring design and a prompt-injection mitigation: an attacker who somehow swayed the model
-still cannot suppress their own score.
-
-**3. The model's output schema is closed. It cannot invent score fields.**
-LLM responses are validated against a fixed schema (threat-level enum, confidence in 0..1,
-a fixed key set). Unknown keys are dropped; an invalid value rejects the entire response and
-FireWatch falls back to the rules-only score. Every number in a FireWatch score comes from
-your event data or a fixed constant in `scoring.py` — never from model free text.
-
-**4. The prompt path is regression-pinned in CI.**
-The exact prompt text the model sees is byte-pinned by committed baselines
-(`tests/golden/ai/`). Any change to the prompts fails CI unless it is an explicit, reviewed
-rebaseline. Attacker-controlled payloads enter the prompt only inside `<untrusted_data>`
-sentinels — and a dedicated test fails if that wrapping is ever dropped. The
-prompt-injection posture is something you can diff, not a black box.
-
-**5. Every score explains itself — provenance-tagged and evidence-linked.**
-Each score carries a derivation tag (`RULE` vs `AI+RULE` — was the AI boost actually
-applied, or is this pure rule output?) and an additive factor breakdown that sums exactly to
-the number on screen. An **evidence chain** maps each factor to the specific stored events
-that produced it, recomputed from your data at read time so the explanation can never
-silently drift from the score it explains.
-([ADR-0035](docs/adr/0035-analytic-provenance-tagging.md) provenance tagging,
-[ADR-0041](docs/adr/0041-evidence-chain-recompute-at-read-time.md) evidence chain — both shipped;
-the chain is served by `GET /threats/{ip}/evidence`, recomputed at read time in `evidence.py`.)
-
-**6. You can regression-test your own model's verdicts.**
-```
-firewatch ai-baseline --save      # record what YOUR model concludes on a canonical scenario set
-firewatch ai-baseline --compare   # re-run later; exits non-zero if any verdict drifted
-```
-Run it after a model swap, a quantization change, or a runtime upgrade. Verdicts are
-model-dependent — so the baseline is **operator-recorded on your hardware**, not a vendor
-promise. FireWatch pins the prompt path centrally and hands you the tool to pin verdicts on
-your own setup.
-
-### What we deliberately do NOT claim
-
-- We do **not** claim the AI "never hallucinates" or is "always correct." We claim
-  hallucination is *contained*: it cannot lower a score, invent score fields, or inject
-  numbers — and any contribution it does make is tagged and bounded.
-- We do **not** ship "tested verdicts." Verdicts depend on the model and runtime *you* run.
-  What is vendor-tested is the structure around the model (prompt text, schema, merge math);
-  what tests verdicts is `ai-baseline`, run by you.
-- If the AI engine is unreachable, FireWatch keeps working in rules-only mode and labels it
-  on screen — it does not fake AI output.
+Full trust model and claim-by-claim auditing: [AI: Trust & Auditability](docs/ai-trust-and-auditability.md).
 
 ---
 
@@ -226,15 +132,10 @@ Read more: [ARCHITECTURE.md](ARCHITECTURE.md) (the design) ·
 
 ## Add a source
 
-A new telemetry source is a **new package implementing one contract** — a backend
-`normalize()` plus a config schema and a Pull or Push collector. You get a Settings UI card,
-source-scoped storage, dashboard views, correlation, and golden-test scaffolding *for free*:
-zero frontend code, zero database schema changes, zero core edits. Scaffold one with
-`firewatch new-source <name>`.
-
-Start with [PLUGIN_CONTRACT.md](PLUGIN_CONTRACT.md) (normative) and the
-[module-author guide](docs/module-author-guide.md). The canonical reference implementation
-is `packages/sources/suricata/`.
+A new telemetry source is a **new package implementing one contract** — zero core edits,
+ever. Start with [PLUGIN_CONTRACT.md](PLUGIN_CONTRACT.md) (the normative interface) and the
+[module-author guide](docs/module-author-guide.md) (what to write, what you get for free,
+and the reference implementation in `packages/sources/suricata/`).
 
 ---
 
@@ -282,4 +183,5 @@ modified source to its users. See [LICENSE](LICENSE) and the rationale in
 - [docs/module-author-guide.md](docs/module-author-guide.md) — writing a source plugin
 - [docs/air-gapped-mode.md](docs/air-gapped-mode.md) — verified zero-egress operation
 - [docs/adr/](docs/adr/) — accepted design decisions
+- [docs/ai-trust-and-auditability.md](docs/ai-trust-and-auditability.md) — full AI trust model: six auditable claims, what FireWatch does not claim, and the prompt-injection posture
 - [docs/ai-claims-checklist.md](docs/ai-claims-checklist.md) — every public AI claim, mapped to the code/test/ADR that enforces it

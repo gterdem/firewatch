@@ -25,15 +25,27 @@ The guiding bets:
 ## Available today
 
 - **Sources:** Azure WAF · Suricata · AWS Network Firewall · Syslog/CEF (vendor-agnostic).
-- **Normalization** grounded in open standards — [OCSF](https://schema.ocsf.io/)
-  for event shape and [MITRE ATT&CK](https://attack.mitre.org/) for technique context.
-- **Dual-engine scoring** — deterministic rules plus local language-model triage.
+  Each is a package under `packages/sources/`, added with zero core edits.
+- **Standards-grounded normalization.** Events map to one canonical schema aligned with
+  [OCSF](https://schema.ocsf.io/) (Open Cybersecurity Schema Framework) for event shape and
+  [MITRE ATT&CK](https://attack.mitre.org/) technique context, populated at normalize time.
+  ([ADR-0020](adr/0020-event-schema-lightweight-ocsf-alignment.md),
+  [ADR-0014](adr/0014-mitre-att-ck-capec-native-categorization.md))
+- **Dual-engine scoring** — deterministic rules (brute force, port scan, SQLi/XSS payload
+  patterns, blocked-event volume) plus a bounded local-AI boost.
 - **Action-aware escalation** — surfaces what actually got *through*, not just what was blocked.
+- **Cross-source correlation** keyed on telemetry type — a new plugin joins correlation for free,
+  just by declaring its source type.
+- **Provenance-tagged, evidence-linked scores.** Each score carries a derivation tag (`RULE` vs
+  `AI+RULE`) and an additive factor breakdown. An evidence chain maps each factor to the specific
+  stored events that produced it, recomputed from data at read time.
+- **On-device inference** with zero external egress, including a verified
+  [air-gapped mode](air-gapped-mode.md).
 - **Live, auto-updating console** — every view refreshes as new telemetry lands; aggregate pages update in place, busy tables and the relationship graph offer a "new data — load now" control so your scroll, filters, and focus are never yanked out from under you.
 - **Triage you can manage** — acknowledge or dismiss noisy actors and have it *stick* across reloads, with acknowledged actors automatically re-surfacing when they do something new.
 - **AI-drafted case files** — turn an AI verdict into a persisted case with timeline, notes, disposition, and an AI-drafted summary.
-- **On-device inference** — narrative triage with zero external egress.
 - **Schema-driven settings** — the configuration UI is generated per installed plugin, with honest source state (a source is "active" only when it's really collecting).
+  ([ADR-0010](adr/0010-unified-source-cards.md), [ADR-0019](adr/0019-frontend-stack-react-rjsf.md))
 
 > **Deployment posture today:** a single operator on a local (loopback) host.
 > Network-exposed, multi-user hardening is on the roadmap below — run it on your

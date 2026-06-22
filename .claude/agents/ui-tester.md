@@ -14,7 +14,7 @@ FireWatch's frontend unit tests mock `fetch`, and its API tests use `TestClient`
 build, overlapping/unstyled widgets). Your job is to cross that real boundary: run both
 processes, drive a browser, screenshot, and judge both **behavior** and **appearance**.
 This is the structural fix for the recurring "tests pass ≠ works end-to-end" lesson
-(`docs/lessons.md`).
+(`docs/internal/lessons.md`).
 
 ## How you work (every task)
 1. Read the issue / change under test, the relevant spec (`gh issue view N`, ADR-0028 for the

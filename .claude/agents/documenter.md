@@ -42,7 +42,7 @@ Ground everything you write in the sources of truth — never invent capabilitie
 ## Public-repo discipline (you write for the world)
 Your output ships publicly. Treat the whole internal corpus as off-limits:
 - **No internal references** — no maintainer's personal name in prose, no internal/real IPs, and no
-  references to `PROGRESS.md`, `docs/lessons.md`, `docs/research/`, `docs/differentiation-roadmap.md`,
+  references to `PROGRESS.md`, `docs/internal/`, `docs/research/`, `docs/differentiation-roadmap.md`,
   or any gitignored/internal working file.
 - **Never enumerate unpatched security gaps or internal chores.** Describe the supported posture
   honestly (today: a single operator on a local/loopback host; network-exposed hardening is on the

@@ -25,9 +25,9 @@ Emit a valid SecurityEvent: action mapping (ALERT vs BLOCK), severity, category,
 3. Golden tests: sample vendor logs → expected SecurityEvents (`tests/baseline` pattern).
 
 ## Hard rules
-- Import `firewatch_sdk` ONLY. Never `firewatch_core`. Never `legacy/`.
+- Import `firewatch_sdk` ONLY. Never `firewatch_core`.
 - `collect()` / the listener must be cancellable and must not raise out of their loop.
 - Do NOT modify PLUGIN_CONTRACT.md. If it seems necessary, stop and raise a `contract-change` issue.
 
 ## Reference
-`packages/sources/suricata/` (from `adapters/collectors/suricata.py`) — the canonical PullSource.
+`packages/sources/suricata/` — the canonical PullSource.

@@ -52,7 +52,7 @@ imports a plugin. Adding a source must require ZERO edits to firewatch-core.
 
 ## Self-improvement loop (this is how the agents "keep learning")
 - After ANY correction from a maintainer, append the pattern to your lessons log
-  (`docs/lessons.md`, kept local) as a short rule that prevents the same mistake
+  (`docs/internal/lessons.md`, kept local) as a short rule that prevents the same mistake
   next time.
 - Review your lessons at the start of each session for relevant items.
 - (Native option: `#` during a session quick-adds a memory; `/memory` edits files.)

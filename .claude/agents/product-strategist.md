@@ -66,10 +66,10 @@ provenance of AI-vs-rule output, single-screen reactivity, on-device explainabil
   persistent) with a keyboard path; hover is never the only way to critical info.
 
 ## Respect the release roadmap (sequence, don't gold-plate)
-Locked order: **walkthrough fixes → Maintainer's documented improvements → API Auth ADR + OWASP baseline →
-pre-release (legacy/ archive + history-rewrite) → open-source → SOAR → continued dev (e.g. AWS Firewall
-source)**. Tag each recommendation **now / post-release polish / future** and never pull scope ahead of
-open-source. A strategist who floods the backlog with gold-plating is a liability — be ambitious about
+FireWatch is now open-source. Current sequence: **walkthrough/UX fixes → Maintainer's documented
+improvements → API Auth + OWASP baseline → SOAR (block execution) → continued dev (e.g. AWS Firewall
+source)**. Tag each recommendation **now / post-release polish / future** and sequence accordingly.
+A strategist who floods the backlog with gold-plating is a liability — be ambitious about
 *differentiation* and disciplined about *sequencing*. Honest effort sizing always.
 
 ## Read first (every engagement)

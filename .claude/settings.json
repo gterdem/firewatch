@@ -1,8 +1,6 @@
 {
   "permissions": {
     "deny": [
-      "Edit(legacy/**)",
-      "Write(legacy/**)",
       "Bash(git push --force*)",
       "Bash(git push -f*)",
       "Bash(git reset --hard*)",

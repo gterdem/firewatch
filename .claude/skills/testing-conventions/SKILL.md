@@ -21,7 +21,7 @@ worktree); run it once per clone.
 
 ## Normalization golden tests
 Per source: sample vendor logs → expected SecurityEvents (fields incl. action, severity,
-category, MITRE/CAPEC). These are the regression oracle vs. legacy behavior.
+category, MITRE/CAPEC). These are the regression oracle: the same input logs always produce the same SecurityEvents.
 
 ## AI prompt-baseline oracle (no Ollama, ~20ms)
 The AI path is protected by prompt-baseline tests:

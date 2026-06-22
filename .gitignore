@@ -64,7 +64,6 @@ docs/internal/
 # Internal docs untracked at the public-launch freeze — protect the new public repo
 # (the rule carries over via `git archive`; these stay tracked in the private archive).
 PROGRESS.md
-docs/lessons.md
 docs/research/*
 !docs/research/azure-waf-log-standard.md
 feature-assessment.md
@@ -73,9 +72,6 @@ feature-assessment.md
 tests/fixtures/
 legacy/tests/baseline/
 *.jsonl
-
-# Graphify output (contains synthetic Suricata samples, etc.)
-graphify-out/
 
 # Worktree metadata
 .worktreeinclude

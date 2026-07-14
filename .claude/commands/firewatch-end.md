@@ -46,9 +46,16 @@ linked worktree (a dev session). If they're the SAME, this is the main checkout 
      can't confirm, LIST them for me and leave them.
    - Report what was removed (and anything left pending). The goal: end every planning session with
      `git worktree list` showing only the main checkout and `git branch` showing only `main`.
-3. Update PROGRESS.md: what got done, what's next, open decisions / new ADRs needed.
+3. Update PROGRESS.md: what got done, what's next, open decisions / new ADRs needed. Also reflect
+   **board state**: which issues were closed / milestones advanced this session. If a milestone
+   closed (its DoD sentence demonstrated), run the verification matrix
+   (`docs/internal/use-case-matrix.md`) on the real fleet BEFORE calling it closed — findings file
+   per the walkthrough triage rule.
 4. Run gates if code changed.
-5. Commit to `main` (the pre-commit hook runs gitleaks). PROGRESS.md commits directly; for any other
-   doc/ADR edit, show me the diff and wait for my go-ahead first (verify-in-changeset rule). Report
-   what you committed.
-6. Do NOT push automatically — print the exact `git push` command for me to run.
+5. Commit to `main` (the pre-commit hook runs gitleaks). **PROGRESS.md is gitignored / local-only —
+   update the file, never commit it.** For any tracked doc/ADR edit, show me the diff and wait for
+   my go-ahead first (verify-in-changeset rule). Report what you committed.
+6. Do NOT push automatically — print the exact `git push` command for me to run. (Deliberate
+   safety gate at session end — with parallel sessions in flight, the maintainer controls when
+   `main` advances on origin. Mid-session pushes explicitly approved by the maintainer are fine;
+   this gate is for the end-of-session commit.)

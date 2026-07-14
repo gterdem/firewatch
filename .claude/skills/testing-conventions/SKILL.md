@@ -14,8 +14,10 @@ Fixtures MUST use non-routable / documentation IPs — never a real, routable IP
 PII and the CI `scan` job (`gitleaks git`, full history) fails on it. Allowed ranges (already
 whitelisted): RFC 5737 docs `192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`; plus
 private/loopback `10/8`, `172.16/12`, `192.168/16`, `127/8`. Prefer `192.0.2.1` as the default
-example IP. Because the gate scans *history*, a fix-on-top is not enough — amend the offending
-commit so the IP never appears, then force-push. The pre-commit hook catches this locally first
+example IP. Because the gate scans *history*, a fix-on-top is not enough — and force-push is
+deny-blocked in this repo. Remediate by: fixing the file, cutting a FRESH branch off main with the
+clean content, then deleting the tainted branch/ref (`git branch -D` + prune) so no ref reaches the
+offending commit. The pre-commit hook catches this locally first
 (`scripts/setup-hooks.sh` wires the relative `core.hooksPath=.githooks`, which covers every
 worktree); run it once per clone.
 

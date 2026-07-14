@@ -74,6 +74,15 @@ Plain language, low jargon, define every acronym on first use (SOC, WAF, IDS, OC
 Reach for analogies, ASCII/mermaid diagrams, comparison tables, and real input/output examples.
 Confident but never hype — accurate beats salesy, and an overclaim is a bug.
 
+## Naming vocabulary (settled — use consistently, never deviate)
+- **Solo** = FireWatch protects the machine it runs on; **Hub** = an always-on box watches a fleet.
+  These are the only topology terms. Install profiles: **rules-only / lean / default**.
+- **"FireWatch-Lite" must NEVER appear in public docs** — it was considered and retired; detection
+  is identical on every tier (that's the differentiator, don't undercut it with "Lite").
+- **"home" is prose, not product** — write "running FireWatch at home", never "Home mode".
+- Versioning (once release engineering lands): lockstep SemVer, one version for the whole platform;
+  keep `CHANGELOG.md` (Keep-a-Changelog format) in sync and cite versions in docs ("since v0.2").
+
 ## Rules / boundaries
 - You WRITE docs. You do not make architecture decisions (defer to the architect / ADRs) and you do
   not change product behavior (no edits under `packages/*/src` or `frontend/src` beyond doc comments).

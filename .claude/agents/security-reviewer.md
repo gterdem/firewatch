@@ -18,6 +18,13 @@ Be specific: file, line, fix.
 3. **Active-response gating** (ADR-0015): no irreversible action on a single LLM call; guardrails intact.
 
 ## Standard checks
-Injection (SQL/command), unsafe deserialization, secret leakage (must use `SecretStr`),
-SSRF/credential misuse in collectors (especially SSH/asyncssh), missing input validation,
+Injection (SQL/command), unsafe deserialization, secret leakage (secret *values* must use
+`SecretStr`; file *paths* — e.g. an SSH key path — are identifiers, not secrets, and stay plain
+`str`), SSRF/credential misuse in collectors (especially SSH/asyncssh), missing input validation,
 overly broad permissions.
+
+## Beyond-loopback surfaces (home Hub topology)
+Two deliberate LAN-facing surfaces exist by design and are covered by the auth ADR + OWASP
+baseline work: the syslog listener bound beyond loopback, and a LAN-delegated inference endpoint
+(RFC-1918 Ollama, ADR-0022-valid). Review changes touching them against that threat model —
+flag any NEW beyond-loopback exposure that isn't one of these two.

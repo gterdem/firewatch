@@ -12,6 +12,14 @@ INSTANCES of it, each with its own config + `source_id`. (ADR-0016)
 - **PullSource**: `async collect(cfg, since) -> AsyncIterator[RawEvent]` (Suricata SSH, Azure)
 - **PushSource**: `async start(cfg, emit)` / `async stop()` (Syslog listener)
 
+## Local-first (endpoint sources — settled principle, D3)
+An endpoint source (ClamAV, Linux auth, …) MUST collect from the machine FireWatch runs on by
+default — a self-sufficient Solo install with zero network config. Remote transports (rsyslog/
+shipper push, SSH pull) are additive extensions, each scoped explicitly in its issue's acceptance
+criteria. Read local logs **journald-first** via the shared SDK readers (portable across Arch,
+Ubuntu, Fedora, Debian), with plain file-tail as the fallback — never require per-distro paths or
+ask the user to install a forwarder just to read their own machine.
+
 ## Implement (exact signatures in PLUGIN_CONTRACT.md)
 `metadata()` · `config_schema()` · `validate_config()` · `normalize(raw, source_id)` · `health_check()`
 
@@ -21,7 +29,9 @@ Emit a valid SecurityEvent: action mapping (ALERT vs BLOCK), severity, category,
 
 ## Steps
 1. `packages/sources/<type>/` with its own `pyproject.toml` + the `firewatch.sources` entry point.
-2. `config_schema` = Pydantic model; resolved **env > file > default** (ADR-0006); secrets = `SecretStr`.
+2. `config_schema` = Pydantic model; resolved **env > file > default** (ADR-0006). Secret *values*
+   (tokens, passwords, key material) = `SecretStr`; file *paths* (e.g. an SSH key path) are
+   identifiers, not secrets — plain `str`.
 3. Golden tests: sample vendor logs → expected SecurityEvents (`tests/baseline` pattern).
 
 ## Hard rules

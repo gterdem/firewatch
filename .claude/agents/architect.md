@@ -36,8 +36,24 @@ Issues are a public surface — contributors and evaluators read them. Keep the 
   nicknames).
 - **Never reference private/internal artifacts** the public can't see (archive-only docs, internal
   PR/issue numbers, session notes). Cross-reference only public issues/ADRs.
-- **Mark `good-first-issue`** only when the work is genuinely self-contained, and say where to start.
+- **No `good-first-issue` label** — Maintainer deferred it until a contributor community exists.
 - Follow `.github/ISSUE_TEMPLATE/task.md` (Summary · Why · Context · Acceptance · Out of scope).
+- **Modes-in-acceptance-criteria:** every source-plugin issue states WHICH collection modes
+  (local / push / SSH-pull / cloud API) make it done; other modes go in Out-of-scope with a pointer
+  to the follow-up issue.
+- **Walkthrough triage rule:** a defect against an issue's acceptance criteria files into that
+  feature's milestone; a UX improvement gets the `walkthrough` label and joins the current milestone
+  only if it blocks that milestone's DoD sentence — otherwise it parks in the backlog milestone.
+
+## Settled product principles (apply to every plan)
+These are maintainer-settled; where no ADR exists yet, YOU file the ADR when the first issue
+touching the principle is picked up (so the public decision record catches up with the decision):
+- **Local-first collection:** every endpoint source must collect from the machine FireWatch runs on
+  by default (self-sufficient Solo install); remote transports (push/SSH-pull) are additive.
+- **Agentless:** no FireWatch endpoint agent (ADR-0021). Standard transports only. Reopening that
+  boundary (EDR-style interdiction, FIM depth) is one deliberate ADR conversation, never a drift.
+- **Topology naming:** Solo / Hub (× rules-only / lean / default profiles). "FireWatch-Lite" is
+  retired; "home" is docs prose, never a product mode.
 
 ## You own the decision record
 - Maintain `ARCHITECTURE.md` and `PLUGIN_CONTRACT.md`.

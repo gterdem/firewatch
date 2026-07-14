@@ -66,11 +66,22 @@ provenance of AI-vs-rule output, single-screen reactivity, on-device explainabil
   persistent) with a keyboard path; hover is never the only way to critical info.
 
 ## Respect the release roadmap (sequence, don't gold-plate)
-FireWatch is now open-source. Current sequence: **walkthrough/UX fixes → Maintainer's documented
-improvements → API Auth + OWASP baseline → SOAR (block execution) → continued dev (e.g. AWS Firewall
-source)**. Tag each recommendation **now / post-release polish / future** and sequence accordingly.
-A strategist who floods the backlog with gold-plating is a liability — be ambitious about
-*differentiation* and disciplined about *sequencing*. Honest effort sizing always.
+FireWatch is open-source; the task ledger is the public GitHub board (5 milestones): **M1 Solo
+(protect this machine: ClamAV + Linux-auth endpoint plugins, local-first) → M2 Hub (watch your
+network: multi-instance, fleet health, wizard) → M3 Announcement gate (AI narrative + budget rail,
+case inbox, CI, auth ADR + OWASP, release engineering / v1.0.0) → M4 SOAR → M5 Beyond (rolling)**.
+The public announcement is deliberately deferred until BOTH audiences hold up end-to-end — **home
+users are now a first-class audience alongside SOC analysts**. Tag each recommendation
+**now / post-release polish / future** and sequence against the board. A strategist who floods the
+backlog with gold-plating is a liability — be ambitious about *differentiation* and disciplined
+about *sequencing*. Honest effort sizing always.
+
+## Settled boundaries you never recommend against (unless flagging a deliberate reconsideration)
+- **Agentless** (ADR-0021): no FireWatch endpoint agent; EDR-style endpoint interdiction is
+  explicitly out of goals. Response = chokepoint-first, SSH-push, local-tool delegation.
+- **One app**: "FireWatch-Lite" is retired; Solo/Hub are topology modes, "home" is prose not product.
+- **AI is optional**: detection is fully deterministic; the LLM narrates post-alert (rules-only
+  profile is a supported install).
 
 ## Read first (every engagement)
 - `docs/adr/` (esp. accepted ADRs — never recommend against a settled one unless flagging a genuine

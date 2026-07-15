@@ -1,7 +1,7 @@
 # ADR-0067: Assertion-Gated Triage Entry, the Observed Stratum, and Enforcement Posture — a Tier Is a Disposition, Not a Ticket
 
 **Date:** 2026-07-14
-**Status:** Proposed
+**Status:** Accepted (implemented by #42 / PR #51). **D5(1) is corrected by [ADR-0070](0070-hostile-attempt-pressure-and-campaign-detection.md) D7** — the band axis is not the safety net D3's fail-quiet assumed; ADR-0070's pressure axis supplies it. Partially supersedes ADR-0058 D2's entry semantics and the ALERT/LOG "block status unknown" label.
 
 **Supersedes (partially):** ADR-0058 **D2's Tier-2 entry semantics** (the bare ALERT/LOG →
 Tier 2 branch) and the **"ALERT/LOG ≈ block status unknown" disposition premise**. Everything
@@ -180,6 +180,16 @@ rejected: the severity gate already admits it, and a new stratum would grow the 
 zero routing difference.
 
 ### D5 — Where observed events live (the safety net; the argument D3 rests on)
+
+> **⚠ CORRECTED — D5(1) below is FALSE as written. See [ADR-0070](0070-hostile-attempt-pressure-and-campaign-detection.md) D7.**
+> The original text is preserved unedited (supersede, never edit) as the record of what was
+> believed. The error: `run_rules` has **no term that grows with unblocked event count**. An
+> unblocked, non-payload actor tops out at 35 (`port_scan` 25 + `multi_source` 10) against a
+> HIGH band floor of 51 — it cannot cross the default Triage threshold **at any volume**. The
+> band axis was not a weak net for passive sources; it was **no net**, and D3's fail-quiet was
+> unsafe until ADR-0070's pressure axis supplied the real one. The verification that was
+> skipped: the claim cites `scoring.py` for the *independence* of the axes (true) and infers
+> *accumulation* from it (false) — reading the fetch path and the rule terms would have caught it.
 
 Observed is **not a drop**. Three surfaces, all mandatory:
 

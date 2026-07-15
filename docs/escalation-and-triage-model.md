@@ -36,8 +36,9 @@ auto-block) is a deliberate later phase, gated behind operator consent.
 4. [The Triage banner — what you see and what to do](#4-the-triage-banner)
 5. [SIEM now, SOAR later](#5-siem-now-soar-later)
 6. [The three named thresholds](#6-the-three-named-thresholds)
-7. [Why you don't need to tune this](#7-why-you-dont-need-to-tune-this)
-8. [Further reading](#8-further-reading)
+7. [Trailing analysis windows — state vs. campaign](#7-trailing-analysis-windows-state-vs-campaign)
+8. [Why you don't need to tune this](#8-why-you-dont-need-to-tune-this)
+9. [Further reading](#9-further-reading)
 
 ---
 
@@ -341,7 +342,51 @@ Lives in: the **Escalation Policy** settings card.
 
 ---
 
-## 7. Why you don't need to tune this
+## 7. Trailing analysis windows — state vs. campaign
+
+Rule scoring, the escalation verdict, and correlation detection are not computed over an actor's
+entire history — they are computed over **trailing windows measured from now**. Without a time
+denominator, an IP blocked ten times over six months would be permanently `brute_force`-scored and
+permanently Tier 3 ("adversary persisting"), even though nothing has happened for months. Threat
+state describes *now*, not forever.
+
+Two named windows, both core constants ([ADR-0070](adr/0070-hostile-attempt-pressure-and-campaign-detection.md) §D4):
+
+| Window | Value | Feeds | Question it answers |
+|---|---|---|---|
+| **State window** (`W_STATE`) | 24 hours | Rule scoring (`brute_force`, `port_scan`, `sql_injection`, `xss`, persistence), the score breakdown, and the escalation verdict (Tier 1-4 / observed) | "What is this actor's **current** threat state?" |
+| **Campaign horizon** (`W_CAMPAIGN`) | 7 days | Cross-source correlation detection (`sustained_attack`, `multi_source_attack`, etc.) | "Is this actor **waging a campaign**?" — recidivism needs a longer memory than state |
+
+Both are provisional engineering estimates, not settled/calibrated values — see ADR-0070 §D5 for the
+calibration procedure and falsifiers; the volume-oracle manifest (issue #50) is the ledger of record
+for the numbers, not this document. They are **code-declared, not operator-tunable** (ADR-0070 §D6):
+unlike the three named thresholds in [§6](#6-the-three-named-thresholds), there is no settings-card
+knob for either window. This preserves the same "cannot be misconfigured into missing a breach"
+property the three named thresholds already have — the analysis windows are a detection-floor
+decision, not a visibility preference.
+
+**What stays lifetime.** The windows apply only to the *counting rules*. The facts the dashboard
+shows about an actor's history — first seen, last seen, total events, blocked events — always
+reflect the actor's full lifetime, unaffected by either window. Windowing narrows what counts
+*toward a score or a tier*; it never hides or truncates what the analyst can see about an actor's
+history.
+
+**Where the window is applied.** The pipeline fetches an actor's full event history once, then
+slices it in-process into two views before handing them to the (otherwise pure, time-agnostic)
+rule-scoring, detection, and decider functions — it is a property of the analysis *pipeline*, not of
+the rules themselves.
+
+**A stale escalation auto-expires.** Correlation detections (`sustained_attack`,
+`multi_source_attack`, etc.) and the escalation verdict are re-derived from scratch on every
+analysis — nothing is persisted. Once an actor's activity ages past its window with no recurrence,
+the detections and the tier it drove stop reappearing on their own; no manual "un-escalate" action
+is needed. (A dedicated recidivism/campaign correlation rule that consumes this same campaign
+horizon is a follow-up, not part of this window mechanism itself — see
+[ADR-0070](adr/0070-hostile-attempt-pressure-and-campaign-detection.md) §D2/§D3.)
+
+---
+
+## 8. Why you don't need to tune this
 
 The three named thresholds above ([§6](#6-the-three-named-thresholds)) all gate the **severity-band**
 half of the banner predicate — they decide which score-based actors reach chat, the banner, or a
@@ -376,13 +421,14 @@ or accidentally silence.
 
 ---
 
-## 8. Further reading
+## 9. Further reading
 
 | Document | What it covers |
 |---|---|
 | [ADR-0058](adr/0058-action-aware-deterministic-escalation-axis.md) | The full decision record for the 4-tier action model, including the original scoring blind spots it fixes and alternatives rejected |
 | [ADR-0067](adr/0067-assertion-gated-triage-entry-observed-stratum.md) | The assertion gate (§2.1), the observed stratum, and why it is `tier=null` rather than a fifth tier — partially supersedes ADR-0058's original Tier-2 entry semantics |
 | [ADR-0059](adr/0059-three-named-thresholds-and-unified-alert-worthiness-predicate.md) | The three named thresholds and the shared `is_alert_worthy` predicate |
+| [ADR-0070](adr/0070-hostile-attempt-pressure-and-campaign-detection.md) | The trailing analysis windows (§7) — `W_STATE`/`W_CAMPAIGN`, why they are code-declared not operator-tunable, and the follow-on attempt-pressure/campaign correlation work |
 | [ADR-0003](adr/0003-ai-approach-sampling-not-per-log.md) | Why the AI is per-actor sampling, not per-log |
 | [ADR-0033](adr/0033-ui-action-seam-siem-now-soar-later.md) | The SIEM-now / SOAR-later action seam |
 | [ADR-0015](adr/0015-tiered-autonomy-for-active-response.md) | Tiered autonomy and the auto-block ceiling |

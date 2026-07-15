@@ -11,7 +11,7 @@ number. One decision per file. Keep them small.
 **Phase sequencing** (which ADRs land in which release phase) lives in
 [`../ROADMAP.md`](../ROADMAP.md). The ADRs here are the *decisions*; the ROADMAP is the *order*.
 
-**Next ADR number:** 0065
+**Next ADR number:** 0066
 
 | ADR | Title | Status | File |
 |-----|-------|--------|------|
@@ -79,3 +79,4 @@ number. One decision per file. Keep them small.
 | 0062 | Settings Source Cards — "Active" On-Switch, Collapse-by-Default Layout, Honest Inactive State | Accepted | [0062-settings-active-toggle-collapse-and-honest-state.md](0062-settings-active-toggle-collapse-and-honest-state.md) |
 | 0063 | Network Logs Table — Curated "Spine" Columns + Per-Row Detail Panel (SIEM log-explorer pattern) | Accepted | [0063-network-logs-detail-panel-curated-spine.md](0063-network-logs-detail-panel-curated-spine.md) |
 | 0064 | App-Wide Live Refresh — One Shared Heartbeat, `dataVersion` Signal, Auto-Refresh-vs-Deferred-Pill by Page Type | Proposed | [0064-app-wide-live-refresh-shared-heartbeat.md](0064-app-wide-live-refresh-shared-heartbeat.md) |
+| 0065 | Local-First Endpoint Collection & Solo/Hub Topology — journald-First SDK Readers, Cursor-Based Resume | Accepted (complements ADR-0021) | [0065-local-first-endpoint-collection-solo-hub-topology.md](0065-local-first-endpoint-collection-solo-hub-topology.md) |

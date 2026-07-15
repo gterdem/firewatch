@@ -1,15 +1,17 @@
 # FireWatch — Deploy
 
-One-command Docker install for FireWatch. Two compose profiles are available
-(ADR-0042):
+One-command Docker install for FireWatch. Three compose profiles are available
+(ADR-0042, issue #4):
 
 | Profile | Inference runtime | Best for |
 |---|---|---|
 | `default` | [Ollama](https://ollama.com) | First install; best model UX; GPU auto-detect |
 | `lean` | [llama.cpp `llama-server`](https://github.com/ggerganov/llama.cpp) | Minimal footprint; air-gapped; operator-supplied GGUF |
+| `rules-only` | **None** — no inference container at all | Zero AI footprint; a ~1 GB-class box (an old laptop, a Pi); detection/scoring/escalation only |
 
-Both profiles wire the engine purely via `base_url` config — the FireWatch
-source code is identical in both cases (ADR-0022 / ADR-0042).
+All three profiles wire the engine purely via `base_url` config (or, for
+`rules-only`, disable it) — the FireWatch source code is identical across all
+of them (ADR-0022 / ADR-0042).
 
 ---
 
@@ -179,6 +181,147 @@ docker compose -f deploy/docker-compose.yml --profile lean down
 
 ---
 
+## rules-only profile — FireWatch + nginx, zero AI footprint (issue #4)
+
+Full detection, scoring, escalation, and dashboard — no AI narrative, and **no
+inference container at all**. This is the floor of the hardware story: a
+~1 GB-class box (an old laptop, a Raspberry Pi) with a one-line install.
+
+The engine work for this profile shipped earlier: `_DisabledAIEngine`
+(`packages/firewatch-cli/src/firewatch_cli/commands/_pipeline_factory.py`)
+reports `ai_status="disabled"` and never contacts an inference endpoint when
+`FIREWATCH_AI_ENABLED=false`. This profile is the deploy-time way to make that
+optionality visible and installable — compose brings up only `firewatch` +
+`nginx`; `ollama` and `llama` are never started.
+
+### Start
+
+`rules-only` requires **two** env vars on the invocation (or in `.env`):
+`FIREWATCH_AI_ENABLED=false` (turns AI scoring off) and
+`FIREWATCH_OLLAMA_BASE_URL=http://127.0.0.1:11434` (a loopback placeholder —
+see the note below on *why* this second var is required).
+
+```bash
+# From the repo root:
+FIREWATCH_AI_ENABLED=false \
+FIREWATCH_OLLAMA_BASE_URL=http://127.0.0.1:11434 \
+docker compose -f deploy/docker-compose.yml --profile rules-only up -d
+```
+
+> **Why `FIREWATCH_OLLAMA_BASE_URL` must be overridden too:** the shared
+> default (`http://ollama:11434`) names the `ollama` service's DNS entry on
+> the `fwnet` bridge network. Under `rules-only` that service never starts, so
+> the hostname `ollama` does not resolve at all, and FireWatch's local-first
+> validator (ADR-0022, fail-closed on DNS failure) refuses to start with an
+> unresolvable `ollama_base_url` — regardless of `FIREWATCH_AI_ENABLED`. Any
+> loopback or RFC 1918 literal works as the placeholder (e.g.
+> `http://127.0.0.1:11434`); it is never dialed because `FIREWATCH_AI_ENABLED=false`
+> means the pipeline uses `_DisabledAIEngine` and skips the AI path entirely.
+
+### Check the stack
+
+```bash
+# Dashboard (through nginx):
+curl -fsS http://localhost:8080/
+
+# API health (through nginx):
+curl -fsS http://localhost:8080/health
+
+# Only firewatch + nginx should be listed — no ollama, no llama:
+docker compose -f deploy/docker-compose.yml --profile rules-only ps
+```
+
+### Tear down
+
+```bash
+docker compose -f deploy/docker-compose.yml --profile rules-only down
+# Add -v to also remove the fw_data volume.
+```
+
+### Measured idle footprint
+
+Measured 2026-07-14 with `docker stats --no-stream` approximately 5 s after
+both containers reported healthy, no inference container present at all (the
+same methodology as `docs/benchmarks/footprint-2026-06-12.md`, MI-2 — a real
+measurement, not an estimate). Reference host: AMD Ryzen 7 9800X3D (16 logical
+cores), 31 GiB RAM, WSL2 / Linux 6.18.33.1-microsoft-standard-WSL2, Docker
+29.1.3, Compose v2.27.0. Stack brought up via
+`docker compose -p fwrulesonly -f deploy/docker-compose.yml --profile rules-only up -d`
+on a non-conflicting host port (19997); production stacks use 8080.
+
+| Container | Idle RSS (`docker stats`) | Notes |
+|---|---|---|
+| `firewatch` | 80.9 MiB | FastAPI app at rest, no inference container to talk to |
+| `nginx` | 4.4 MiB | SPA + reverse-proxy sidecar |
+| **Total (rules-only, idle)** | **~85 MiB** | No `ollama`/`llama` container exists under this profile |
+
+For comparison, the `default` profile's idle RSS with no model loaded is
+**~185 MiB** (`docs/benchmarks/footprint-2026-06-12.md`) — `rules-only` is
+lower still because there is no inference container process at all, not even
+an unloaded one.
+
+Image footprint (also measured, `docker image inspect --format '{{.Size}}'`):
+
+| Image | Bytes | Human-readable |
+|---|---|---|
+| `firewatch:latest` | 229,405,718 | 229 MB |
+| `firewatch-nginx:latest` | 50,180,461 | 50.2 MB |
+| **Total (rules-only stack)** | **279,586,179** | **~280 MB** |
+
+Compare to the `default` profile's total image footprint of **5.11 GB**
+(`firewatch` + `nginx` + `ollama/ollama:0.30.8`) — `rules-only` ships **~95%
+less** on disk because the inference runtime is simply absent.
+
+Disk note: the first geo-enrichment call downloads the DB-IP Lite offline MMDB
+files (ADR-0039) into the `fw_data` volume — **~135 MB** on this run
+(`/app/data/geo_data`). This is unrelated to AI and identical across all three
+profiles; it is not part of the "AI footprint" claim above.
+
+### AI status honesty — what was actually verified
+
+The rules-only profile was brought up live and exercised end-to-end (ingest →
+score → query) to check what the AI surface reports, not just asserted:
+
+- `GET /threats` and `GET /threats/{ip}` (the list/concise views the
+  dashboard's AI-engine indicator reads) correctly report
+  **`"ai_status": "disabled"`** — verified live against a running
+  `rules-only` stack.
+- `GET /threats/{ip}/detailed?ai=true` (the deep-analysis / narration path)
+  currently reports **`"ai_status": "unavailable"`**, not `"disabled"`, when
+  AI is switched off this way. This is a **pre-existing gap in
+  `firewatch_core/pipeline.py`'s `analyze_ip_detailed`** — it does not
+  distinguish "AI engine deliberately disabled" from "AI engine enabled but
+  unreachable" (both make `self.ai_engine.is_available()` return `False`, and
+  both get stamped `"unavailable"`). It is **not** introduced by this profile
+  and is out of scope for a compose/docs-only change — see the note in the
+  issue-#4 PR for the follow-up.
+
+### Upgrade path: point at a LAN inference endpoint later (ADR-0022)
+
+A rules-only box is not a dead end. Because the engine only ever talks to a
+configurable `base_url` (ADR-0022), an operator can later add AI narration
+**without rebuilding any image** — just change two env vars and restart:
+
+```bash
+# In deploy/.env (or on the invocation):
+FIREWATCH_AI_ENABLED=true
+FIREWATCH_OLLAMA_BASE_URL=http://<lan-host>:11434   # another machine on the LAN
+                                                     # running Ollama/vLLM/llama.cpp
+FIREWATCH_OLLAMA_MODEL=qwen2.5:3b                   # or whichever model that endpoint serves
+
+# Restart with the new config (no image rebuild — same firewatch:latest image):
+docker compose -f deploy/docker-compose.yml --profile rules-only up -d
+```
+
+`FIREWATCH_OLLAMA_BASE_URL` must still resolve to a loopback / RFC 1918 / LAN
+address (ADR-0022's local-first validator; no cloud endpoints). Once the box
+restarts, `_build_pipeline` selects the real `OpenAIEngine` instead of
+`_DisabledAIEngine` (`FIREWATCH_AI_ENABLED=true`), and narration starts as
+soon as the LAN endpoint answers `/v1` requests — the `firewatch`/`nginx`
+images and the FireWatch source code are unchanged either way (ADR-0042).
+
+---
+
 ## Bare-metal (pipx) path
 
 If you want to run FireWatch on bare metal without Docker, install it with
@@ -242,3 +385,4 @@ adapter, prompts, and scoring logic are identical in both profiles.
 | llama-server OOM-killed | GGUF too large for available RAM | Use a smaller quantization (Q4 vs Q8) or a 3B model |
 | Config not applied | Env var typo or stale container | `docker compose ... down && up -d` after editing `.env` |
 | `Refusing to bind non-loopback` | `--host 0.0.0.0` passed without API key | Do not override `--host`; keep the loopback default |
+| `rules-only` container fails to start (`ValidationError` on `ollama_base_url`) | `FIREWATCH_OLLAMA_BASE_URL` still defaults to `http://ollama:11434`, which cannot resolve DNS when the `ollama` service never starts | Also set `FIREWATCH_OLLAMA_BASE_URL=http://127.0.0.1:11434` (or any loopback/RFC-1918 literal) alongside `FIREWATCH_AI_ENABLED=false` |

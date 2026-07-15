@@ -9,6 +9,17 @@ from _fakes import FakeAIEngine, FakeStore, make_event
 T0 = datetime(2026, 6, 3, 12, 0, 0, tzinfo=timezone.utc)
 IP = "203.0.113.5"
 
+# Issue #52 (ADR-0070 D4): analyze_ip now windows run_rules/detect/decide to a
+# trailing W_STATE/W_CAMPAIGN slice measured from "now". These tests assert
+# scoring behavior against fixed T0-relative event timestamps, so they inject a
+# synthetic clock fixed shortly after T0 — well inside both windows — rather
+# than relying on the real wall clock (no wall-clock flakiness).
+_NOW = T0 + timedelta(hours=1)
+
+
+def _pipeline(store: EventStore, ai: AIEngine) -> Pipeline:
+    return Pipeline(store, ai, clock=lambda: _NOW)
+
 
 def _sqli_events(n: int) -> list:
     return [
@@ -20,7 +31,7 @@ def _sqli_events(n: int) -> list:
 async def test_analyze_ip_empty_is_low():
     store: EventStore = FakeStore([])
     ai: AIEngine = FakeAIEngine()
-    score = await Pipeline(store, ai).analyze_ip(IP)
+    score = await _pipeline(store, ai).analyze_ip(IP)
     assert score.threat_level == "LOW"
     assert score.score == 0
     assert score.total_events == 0
@@ -30,7 +41,7 @@ async def test_analyze_ip_exactly_one_ai_call():
     fake_ai = FakeAIEngine()
     store: EventStore = FakeStore(_sqli_events(3))
     ai: AIEngine = fake_ai
-    await Pipeline(store, ai).analyze_ip(IP)
+    await _pipeline(store, ai).analyze_ip(IP)
     assert fake_ai.concise_calls == 1
 
 
@@ -40,7 +51,7 @@ async def test_analyze_ip_score_parity():
     # New (#651): sqli on BLOCK = round(40×0.5)=20; persistence floor +10 (10≥3).
     store: EventStore = FakeStore(_sqli_events(10))
     ai: AIEngine = FakeAIEngine()  # LOW / 0.0 → no AI boost
-    score = await Pipeline(store, ai).analyze_ip(IP)
+    score = await _pipeline(store, ai).analyze_ip(IP)
     assert score.score == 60  # brute_force(30)+sqli_BLOCK(20)+persistence(10)=60 (#651)
     assert score.threat_level == "HIGH"  # 60 >= 51 → HIGH (#651; was CRITICAL at 80)
     assert "brute_force" in score.attack_types
@@ -52,7 +63,7 @@ async def test_analyze_ip_score_parity():
 async def test_analyze_ip_ai_failure_is_rules_only():
     store: EventStore = FakeStore(_sqli_events(3))
     ai: AIEngine = FakeAIEngine(fail=True)
-    score = await Pipeline(store, ai).analyze_ip(IP)
+    score = await _pipeline(store, ai).analyze_ip(IP)
     assert score.ai_status == "unavailable"
     # rules-only: 3 blocked SQLi → sqli_BLOCK(20) + persistence(10) = 30 (#651)
     # Old math (removed): +40 sqli + 3 per-blocked = 43
@@ -62,7 +73,7 @@ async def test_analyze_ip_ai_failure_is_rules_only():
 async def test_analyze_ip_ai_boost_applied():
     store: EventStore = FakeStore(_sqli_events(3))  # rules-only 30 (#651)
     ai: AIEngine = FakeAIEngine({"threat_level": "CRITICAL", "confidence": 0.9})
-    score = await Pipeline(store, ai).analyze_ip(IP)
+    score = await _pipeline(store, ai).analyze_ip(IP)
     assert score.score == 50  # 30 (rules) + 20 (CRITICAL boost) = 50 (#651)
     assert score.ai_confidence == 0.9
 
@@ -76,7 +87,7 @@ async def test_analyze_ip_detection_boost_flows():
     ]
     store: EventStore = FakeStore(events)
     ai: AIEngine = FakeAIEngine()
-    score = await Pipeline(store, ai).analyze_ip(IP)
+    score = await _pipeline(store, ai).analyze_ip(IP)
     assert any(d.rule_name == "sustained_attack" for d in score.detections)
     assert score.score == 55  # 40 + 15
 
@@ -85,7 +96,7 @@ async def test_use_ai_false_skips_ai():
     fake_ai = FakeAIEngine()
     store: EventStore = FakeStore(_sqli_events(3))
     ai: AIEngine = fake_ai
-    score = await Pipeline(store, ai).analyze_ip(IP, use_ai=False)
+    score = await _pipeline(store, ai).analyze_ip(IP, use_ai=False)
     assert fake_ai.concise_calls == 0
     assert score.ai_status == "disabled"
 

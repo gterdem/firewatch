@@ -25,7 +25,7 @@ from firewatch_sdk.localhost import JournaldUnavailableError
 from firewatch_sdk.localhost.errors import LocalReaderError
 from firewatch_sdk.localhost.journald import JournaldReader
 
-from _fakes import FakeProcess, make_spawn
+from _journalctl_fakes import FakeProcess, make_spawn
 
 
 def _record(cursor: str, **fields: Any) -> dict[str, Any]:

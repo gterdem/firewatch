@@ -1,4 +1,4 @@
-"""Make sibling test helpers (``_fakes``) importable under importlib mode."""
+"""Make sibling test helpers (``_journalctl_fakes``) importable under importlib mode."""
 import sys
 from pathlib import Path
 

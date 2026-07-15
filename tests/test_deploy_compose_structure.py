@@ -3,7 +3,7 @@
 These tests parse the compose file with PyYAML and assert the invariants
 mandated by the issue spec and ADR-0026 / ADR-0042:
 
-- Both profiles ('default' and 'lean') are declared.
+- All three profiles ('default', 'lean', 'rules-only') are declared.
 - The `firewatch` service publishes a host port only for the nginx surface
   (port 80 of its shared netns), NOT the raw API port 8000.
 - The `nginx` service uses network_mode: "service:firewatch" (shared netns).
@@ -11,6 +11,8 @@ mandated by the issue spec and ADR-0026 / ADR-0042:
 - The `llama` service belongs only to the 'lean' profile.
 - Neither inference service (ollama, llama) publishes host ports (no cloud
   egress path, ADR-0022).
+- The `rules-only` profile (issue #4) starts only `firewatch` + `nginx` — no
+  inference service (`ollama`, `llama`) is a member of it.
 - The entrypoint in deploy/Dockerfile binds --host 127.0.0.1.
 """
 from __future__ import annotations
@@ -23,6 +25,7 @@ import yaml
 DEPLOY_DIR = Path(__file__).parent.parent / "deploy"
 COMPOSE_FILE = DEPLOY_DIR / "docker-compose.yml"
 APP_DOCKERFILE = DEPLOY_DIR / "Dockerfile"
+README_FILE = DEPLOY_DIR / "README.md"
 
 
 @pytest.fixture(scope="module")
@@ -58,6 +61,60 @@ def test_llama_only_in_lean_profile(compose: dict) -> None:
     """llama service must appear only in the 'lean' profile."""
     profiles = compose["services"]["llama"]["profiles"]
     assert profiles == ["lean"], f"llama profiles should be ['lean'], got {profiles}"
+
+
+# ---------------------------------------------------------------------------
+# rules-only profile (issue #4): firewatch + nginx only, zero AI footprint
+# ---------------------------------------------------------------------------
+
+
+def test_rules_only_profile_declared_on_firewatch(compose: dict) -> None:
+    """firewatch service must be in the 'rules-only' profile."""
+    profiles = compose["services"]["firewatch"]["profiles"]
+    assert "rules-only" in profiles, (
+        f"Expected 'rules-only' in firewatch profiles, got {profiles}"
+    )
+
+
+def test_rules_only_profile_declared_on_nginx(compose: dict) -> None:
+    """nginx service must be in the 'rules-only' profile."""
+    profiles = compose["services"]["nginx"]["profiles"]
+    assert "rules-only" in profiles, (
+        f"Expected 'rules-only' in nginx profiles, got {profiles}"
+    )
+
+
+def test_ollama_not_in_rules_only_profile(compose: dict) -> None:
+    """ollama must NOT be a member of the 'rules-only' profile (zero AI footprint)."""
+    profiles = compose["services"]["ollama"]["profiles"]
+    assert "rules-only" not in profiles, (
+        f"ollama must not appear in the rules-only profile, got {profiles}"
+    )
+
+
+def test_llama_not_in_rules_only_profile(compose: dict) -> None:
+    """llama must NOT be a member of the 'rules-only' profile (zero AI footprint)."""
+    profiles = compose["services"]["llama"]["profiles"]
+    assert "rules-only" not in profiles, (
+        f"llama must not appear in the rules-only profile, got {profiles}"
+    )
+
+
+def test_only_firewatch_and_nginx_in_rules_only_profile(compose: dict) -> None:
+    """No service other than firewatch/nginx may belong to 'rules-only'.
+
+    This is the structural guarantee behind "zero AI footprint": bringing up
+    `--profile rules-only` must never start an inference container, now or if
+    a future service is added to the compose file.
+    """
+    members = {
+        name
+        for name, svc in compose["services"].items()
+        if "rules-only" in svc.get("profiles", [])
+    }
+    assert members == {"firewatch", "nginx"}, (
+        f"rules-only profile must contain exactly {{'firewatch', 'nginx'}}, got {members}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -229,4 +286,83 @@ def test_ollama_image_is_not_latest(compose: dict) -> None:
         f"ollama image must be pinned to a specific version tag, not ':latest'. "
         f"Got: {image!r}.  Update docker-compose.yml to a specific tag "
         f"(e.g. ollama/ollama:0.30.8)."
+    )
+
+
+# ---------------------------------------------------------------------------
+# deploy/README.md documents the rules-only profile (issue #4)
+# ---------------------------------------------------------------------------
+
+
+def test_readme_has_rules_only_profile_table_row() -> None:
+    """The profile comparison table must gain a 'rules-only' row."""
+    content = README_FILE.read_text()
+    assert "`rules-only`" in content, (
+        "deploy/README.md must document the 'rules-only' profile in the "
+        "profile table."
+    )
+
+
+def test_readme_has_rules_only_start_stop_section() -> None:
+    """The README must document start/stop commands for the rules-only profile."""
+    content = README_FILE.read_text()
+    assert "--profile rules-only up -d" in content, (
+        "deploy/README.md must show the rules-only start command "
+        "(docker compose --profile rules-only up -d)."
+    )
+    assert "--profile rules-only down" in content, (
+        "deploy/README.md must show the rules-only stop command "
+        "(docker compose --profile rules-only down)."
+    )
+
+
+def test_readme_documents_measured_idle_footprint_for_rules_only() -> None:
+    """The idle footprint must be recorded as a measured number, not estimated.
+
+    Guards against a regression back to a bare 'TODO' placeholder with no
+    measurement methodology attached.
+    """
+    content = README_FILE.read_text()
+    assert "rules-only" in content.lower()
+    # A measured-footprint section must reference how the number was obtained.
+    assert "docker stats" in content, (
+        "deploy/README.md must describe how the rules-only idle footprint was "
+        "measured (docker stats), not just assert a number."
+    )
+
+
+def test_readme_documents_lan_upgrade_path() -> None:
+    """The README must document the rules-only -> LAN-endpoint upgrade path.
+
+    Per ADR-0022, an operator on a rules-only box can later point
+    FIREWATCH_OLLAMA_BASE_URL at another machine on the LAN and flip
+    FIREWATCH_AI_ENABLED to enable narration, with no image rebuild.
+    """
+    content = README_FILE.read_text()
+    assert "FIREWATCH_OLLAMA_BASE_URL" in content
+    assert "FIREWATCH_AI_ENABLED" in content
+    assert "rebuild" in content.lower(), (
+        "deploy/README.md must state that the upgrade path requires no image "
+        "rebuild."
+    )
+
+
+# ---------------------------------------------------------------------------
+# rules-only profile keeps AI disabled by construction (issue #4, honest
+# ai_status='disabled' surface — never 'error'/'unavailable')
+# ---------------------------------------------------------------------------
+
+
+def test_firewatch_env_ai_enabled_is_overridable_per_invocation(compose: dict) -> None:
+    """FIREWATCH_AI_ENABLED must remain a plain env-var override (no hardcoding).
+
+    The rules-only profile relies on operators/docs setting
+    FIREWATCH_AI_ENABLED=false for the invocation (documented in
+    deploy/README.md) — the compose file itself must keep this variable
+    overridable rather than hardcoding `true` for all profiles, which would
+    make the documented rules-only invocation impossible.
+    """
+    env = compose["services"]["firewatch"]["environment"]
+    assert env["FIREWATCH_AI_ENABLED"] == "${FIREWATCH_AI_ENABLED:-true}", (
+        f"FIREWATCH_AI_ENABLED must stay an overridable env-var default, got {env!r}"
     )

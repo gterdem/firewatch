@@ -28,27 +28,28 @@
  * brute-force rule built from failed, *attested* logins — ADR-0067 RC3, the
  * "a failed-login LOG line ... the login failed" example).
  *
- * CORRECTION: an earlier version of this label used "block status unknown"
- * as the replacement — that is WRONG. ADR-0067 does not sanction that phrase;
- * it is the ADR's central falsified premise (line 4: "...the ALERT/LOG
- * 'block status unknown' label"; RC3's own title: "the OCSF premise behind
- * 'block status unknown' is factually false" — verified live against OCSF
- * 1.8.0 `disposition_id=19 Alert`: "...resulted in a notification but request
- * was **not blocked**," which asserts NOT-blocked, not unknown). There is no
- * "D6" in ADR-0067 (it has no lettered decision sections past D... verify
- * with `grep -nE "^### D[0-9]" docs/adr/0067-*.md` before ever citing one) —
- * the posture-aware replacement vocabulary belongs to issues #44/#45 (M3, not
- * started), not this ADR.
+ * CORRECTION (superseded): a subsequent pass on this PR claimed ADR-0067 had
+ * no "D6" and that citing it was a fabrication. That claim was itself wrong —
+ * the grep pattern used (`^\*\*?D[0-9]`) did not match the actual `### D6`
+ * markdown heading. ADR-0067 D6 ("Enforcement posture: plugin-declared
+ * default, core-owned per-instance override") exists (docs/adr/0067-*.md,
+ * "### D6") and directly governs `block_status_unknown` today: D6 states
+ * "`enforce` or undeclared → `block_status_unknown`, which becomes rare and
+ * genuinely meaningful" — every instance today is posture-undeclared (the
+ * posture axis, #44, is M3/not-started), so this key is D6's correct
+ * end-state label over an empty posture map, not drift. What RC3 falsified
+ * was the popover SENTENCE built on top of the key (prose implying an OCSF
+ * non-terminating mapping), never the disposition key itself. See the
+ * architect's ruling on PR #38 (this PR) for the settled account.
  *
- * ADR-0067 does NOT hand over replacement UI copy for Tier 2 — the only thing
- * it settles is the *mechanism* (D1: "Tier 2 requires a qualifying assertion
- * ... An actor's ALERT/LOG population reaches Tier 2 only when a qualifying
- * signal is present"). The label below is this implementer's PROPOSAL, built
- * from that one settled fact and nothing else: it names what IS known (a
- * qualifying detection/assertion exists) and makes NO claim about whether the
- * traffic was blocked. Flagged here as an OPEN QUESTION for the
- * architect/maintainer to redline, same as Tier 1/3/4 originally were in
- * PR #38 — this wording is not architect- or maintainer-sourced.
+ * TIER 2 LABEL — RATIFIED (architect ruling, PR #38): "Flagged — needs
+ * review" below is the settled interim Tier-2 label, not an open proposal.
+ * It names what IS known (a qualifying detection/assertion exists per D1) and
+ * makes no claim about whether the traffic was blocked. "Interim" because
+ * ADR-0067 D6's posture-aware vocabulary (#44/#45, M3) later splits it into
+ * posture-specific labels (`not_blocked_passive` / `detected_no_action` /
+ * the narrowed `block_status_unknown`) — the same interim status the
+ * disposition key itself carries.
  *
  * OBSERVED STRATUM (ADR-0067 D2): an additive, deliberately NOT-a-fifth-tier
  * row — `tier: null`, `disposition: "observed"`. An observed actor carries no

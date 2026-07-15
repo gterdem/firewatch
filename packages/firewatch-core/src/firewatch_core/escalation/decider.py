@@ -11,7 +11,7 @@ Tier model (ADR-0058 §D2/§4a, gated per ADR-0067 D1):
 | Tier | Action(s)                        | Disposition              | block_status |
 |------|-----------------------------------|--------------------------|--------------|
 |  1   | ALLOW (with any detection)       | allowed_through          | allowed      |
-|  2   | ALERT / LOG **+ qualifying signal**| block_status_unknown   | unknown      |
+|  2   | ALERT / LOG **+ qualifying signal**| block_status_unknown *(interim — posture labels, #44)* | unknown |
 |  3   | BLOCK/DROP — persistent           | blocked_persistent       | blocked      |
 |  4   | BLOCK/DROP — one-off              | blocked_one_off          | blocked      |
 | None | unqualified ALERT/LOG, or ALLOW-only with no detection | observed | unknown / allowed |
@@ -40,9 +40,16 @@ Amendment 1 (ADR-0058 A3-A5) — full-tally rewrite, unchanged by ADR-0067:
   justification even when mixed, silently dropping the alert/allow counts.
 
 Standard alignment:
-- OCSF disposition_id: ALLOW ≈ Allowed (id=1), BLOCK/DROP ≈ Blocked (id=2),
-  ALERT/LOG ≈ non-terminating ("block status unknown" when qualified) or
-  ``action_id=3 Observed`` when unqualified (ADR-0067 D2). Ref: schema.ocsf.io (1.8.0).
+- OCSF disposition_id: ALLOW ≈ Allowed (id=1), BLOCK/DROP ≈ Blocked (id=2).
+  ALERT has an explicit OCSF disposition — id=19 Alert: "detected as a threat and
+  resulted in a notification but request was not blocked" — it asserts NOT-blocked,
+  not unknown (ADR-0067 RC3). The qualified-Tier-2 disposition ``block_status_unknown``
+  is therefore NOT an OCSF mapping: it is ADR-0067 D6's conservative label for
+  undeclared enforcement posture — core cannot say "not blocked by this control"
+  until it knows the control's posture. It narrows to the genuinely-unknown
+  (inline-silent) case when the posture axis lands (#44: ``not_blocked_passive`` /
+  ``detected_no_action``). Unqualified ALERT/LOG ≈ ``action_id=3 Observed``
+  (ADR-0067 D2). Ref: schema.ocsf.io (1.8.0).
 - ADR-0035 provenance: ``justification`` is a RULE-tagged string (never LLM).
 - ADR-0012: ALERT is an honest IDS non-blocking disposition.
 - ``"partial"`` is a FireWatch extension (no OCSF equivalent) — ADR-0058 A1.
@@ -336,27 +343,26 @@ def _build_justification_tier2_qualified(qualify_result: QualifyResult) -> str:
     ``SeverityLiteral``, safe to render — when qualification came from an
     ``ALERT`` event alone.
 
-    Wording (issue #6 / ADR-0067): "flagged this traffic" replaces the
-    SOC-dialect "fired on an ALERT/LOG event"; "block status unknown" is kept
-    verbatim — it is the honest, ADR-0067-sanctioned term for what remains
-    genuinely unconfirmed (whether the traffic was actually blocked), now that
-    the assertion gate (D1) means reaching Tier 2 at all already required a
-    qualifying signal. This label does NOT claim the traffic "may have gotten
-    through" — that claim is false whenever the qualifying signal is a
-    LOG-only correlation (e.g. a brute-force rule built from failed, attested
-    logins; ADR-0067 RC3) — so it deliberately isn't made here.
+    Wording ruled on PR #38 (architect ruling, superseding the prior
+    "block status unknown" sentence RC3 indicts): both branches below are
+    reached only in the non-mixed case, so ``n_block_drop == 0`` is a tally
+    fact — "no block was recorded in this window" is engine-attested, not a
+    claim about downstream controls FireWatch cannot see (ADR-0067 D6: "a
+    passive sensor cannot see a downstream block"). It also stays true for
+    LOG-qualified populations where "not blocked" would be a category error
+    (e.g. a failed login has an attested outcome, not a block status).
     """
     if qualify_result.qualifying_detections:
         rule = _top_rule_name(qualify_result.qualifying_detections)
         ae = _auto_escalate_wording(qualify_result.qualifying_detections)
         return (
             f"[RULE] {rule}{ae} flagged this traffic"
-            " — block status unknown."
+            " — no block was recorded in this window."
         )
     severity = qualify_result.qualifying_event_severity or "high"
     return (
         f"[RULE] Source-declared severity '{severity}' flagged this traffic"
-        " — block status unknown."
+        " — no block was recorded in this window."
     )
 
 

@@ -11,7 +11,7 @@ number. One decision per file. Keep them small.
 **Phase sequencing** (which ADRs land in which release phase) lives in
 [`../ROADMAP.md`](../ROADMAP.md). The ADRs here are the *decisions*; the ROADMAP is the *order*.
 
-**Next ADR number:** 0068
+**Next ADR number:** 0069
 
 | ADR | Title | Status | File |
 |-----|-------|--------|------|
@@ -81,3 +81,5 @@ number. One decision per file. Keep them small.
 | 0064 | App-Wide Live Refresh — One Shared Heartbeat, `dataVersion` Signal, Auto-Refresh-vs-Deferred-Pill by Page Type | Proposed | [0064-app-wide-live-refresh-shared-heartbeat.md](0064-app-wide-live-refresh-shared-heartbeat.md) |
 | 0065 | Local-First Endpoint Collection & Solo/Hub Topology — journald-First SDK Readers, Cursor-Based Resume | Accepted (complements ADR-0021) | [0065-local-first-endpoint-collection-solo-hub-topology.md](0065-local-first-endpoint-collection-solo-hub-topology.md) |
 | 0066 | Honest AI State Model — Administrative vs Operational State, One Closed `ai_status` Vocabulary | Proposed (refines ADR-0022, ADR-0035 §4) | [0066-honest-ai-state-model-admin-vs-operational.md](0066-honest-ai-state-model-admin-vs-operational.md) |
+| 0067 | Assertion-Gated Triage Entry + the `observed` Stratum — Tier 2 Requires a Qualifying Signal | Proposed (partially supersedes ADR-0058 D2) | [0067-assertion-gated-triage-entry-observed-stratum.md](0067-assertion-gated-triage-entry-observed-stratum.md) |
+| 0068 | The Volume Oracle — Usability Invariants at Realistic Event Volume as a Deterministic CI Gate | Proposed | [0068-volume-oracle-usability-invariants-at-realistic-volume.md](0068-volume-oracle-usability-invariants-at-realistic-volume.md) |

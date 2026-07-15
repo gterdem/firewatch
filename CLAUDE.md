@@ -105,3 +105,30 @@ output you can show — don't infer it and move on.
   ATT&CK, OWASP, NIST, RFCs, 12-factor, …) and cite the source in the ADR / doc / code comment.
   If FireWatch deliberately deviates, write down *why* the deviation is justified. Don't anchor
   decisions on memory or convenience alone.
+
+## Evidence discipline (how to not be confidently wrong)
+
+The rule above says "never assume". These three say *how*, because "be careful" has repeatedly
+failed to fire. Each is mechanical and checkable.
+
+1. **A null result is not a finding.** Before concluding something does NOT exist, prove your
+   search CAN find something you know DOES exist. `grep -nE "^\*\*?D[0-9]" adr.md` returned 0 and
+   was read as "ADR-0067 has no D6" — the headings were `### D6`. That false "the citation is
+   fabricated" sent a correct agent back to redo good work. **Run the refuting command, not the
+   confirming one.** Absence of evidence from a search you wrote yourself is the weakest signal
+   available, and it looks like the strongest because nothing is on screen to argue with.
+
+2. **Mark evidence class inline.** If you ran a command, say so. If you are inferring, say "I
+   believe / I haven't checked". Never report an inference in the register of a fact. A reader
+   cannot calibrate a claim whose evidence is invisible, and they will inherit your confidence
+   whether or not it was earned.
+
+3. **Scrutiny scales with asymmetric cost.** Before contradicting an ADR, an agent's finding, or
+   a maintainer — verify the *counter*-claim harder than the claim. Being wrong there costs a
+   redo, a bad decision downstream, and trust; being wrong quietly to yourself costs a minute.
+   The tell: the most confident sentence in your draft is the one most likely to be unchecked.
+
+**Do not relay another agent's conclusion as fact.** Say "the agent reports X" until you have
+verified it. Three agents independently reported an aws-nfw failure as a CI cause; it was a
+missing `uv sync --all-packages` in their env, disproved by CI that was green on screen at the
+time. The relay is where a plausible claim becomes a false premise the maintainer reasons from.

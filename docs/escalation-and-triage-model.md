@@ -8,12 +8,20 @@
 
 FireWatch uses **deterministic rules** — no large language model (LLM) in the decision path — to
 classify every attacker into one of four tiers based on what the perimeter actually *did* with the
-traffic. A single SQL injection attempt that slipped through the firewall surfaces immediately in the
-triage banner, even if its raw numeric score is low. An LLM is never the trigger; it narrates the
-story *after* the rule already fired.
+traffic **and whether anything actually asserted it is hostile.** A single SQL injection attempt
+that slipped through the firewall surfaces immediately in the triage banner, even if its raw
+numeric score is low. An LLM is never the trigger; it narrates the story *after* the rule already
+fired.
 
-The dashboard leads with a triage banner: **"N actors need a BLOCK decision."** Each actor on that
-banner is one the rules have already escalated. The analyst's job is to review, investigate, and
+Reaching a tier requires a *qualifying signal* — a correlation rule the engine trusts, or a
+source-declared high/critical severity. Bare ALERT/LOG telemetry with no such signal — a passive
+IDS logging a scan, a successful SSH login — is not silently promoted to "needs a decision." It is
+recorded honestly as **observed**: on the record, no escalation claim, still fully visible in
+Network Logs and still scored on the severity-band axis. See
+[§2.1 The assertion gate](#21-the-assertion-gate-and-the-observed-stratum).
+
+The dashboard leads with a triage banner. Each actor on that banner is one the rules have already
+escalated with a nameable question attached. The analyst's job is to review, investigate, and
 record a block decision — manually in today's SIEM-first posture. Automated enforcement (SOAR-style
 auto-block) is a deliberate later phase, gated behind operator consent.
 
@@ -23,6 +31,7 @@ auto-block) is a deliberate later phase, gated behind operator consent.
 
 1. [The core idea — rules first, AI second](#1-the-core-idea)
 2. [The 4-tier action model](#2-the-4-tier-action-model)
+   - [2.1 The assertion gate and the observed stratum](#21-the-assertion-gate-and-the-observed-stratum)
 3. [block_status — what it tells an analyst](#3-block_status)
 4. [The Triage banner — what you see and what to do](#4-the-triage-banner)
 5. [SIEM now, SOAR later](#5-siem-now-soar-later)
@@ -59,11 +68,13 @@ normalizer:
 |---|---|
 | `ALLOW` | The request matched a rule and **passed through** the firewall. The attack may have succeeded. |
 | `BLOCK` / `DROP` | The firewall terminated the connection. The request did not reach the application. |
-| `ALERT` | An intrusion detection system (IDS) or WAF in detection (not blocking) mode fired. Disposition is **not asserted** — neither blocked nor allowed is confirmed. |
-| `LOG` | Non-blocking informational detection (e.g. SSH login audit). Disposition not asserted. |
+| `ALERT` | An intrusion detection system (IDS) or WAF in detection (not blocking) mode fired. Disposition is **not asserted** — neither blocked nor allowed is confirmed. Maps to ECS `event.kind: alert` — a detection rule fired externally. |
+| `LOG` | Non-blocking informational detection (e.g. SSH login audit). Disposition not asserted. Maps to ECS `event.kind: event` — general telemetry; nothing detected anything. |
 
 This field already existed and was already populated correctly across every source plugin. The
-escalation model reads it and turns it into urgency — no schema change was needed.
+escalation model reads it and turns it into urgency — no schema change was needed. The ECS
+`event.kind` distinction between `ALERT` (a detection) and `LOG` (telemetry) matters directly to the
+assertion gate below: telemetry alone is never treated as an assertion.
 
 ---
 
@@ -76,14 +87,47 @@ attached to the actor's `ThreatScore` as an `escalation` sub-object.
 
 | Tier | Actions that trigger it | Plain-language meaning | `block_status` | Banner-worthy? |
 |---|---|---|---|---|
-| **1** | `ALLOW` + a high-fidelity detection | **Allowed through — possible success.** A correlation rule fired *and* the request passed the firewall. The attack may have reached the application. | `allowed` | Yes — loudest |
-| **2** | `ALERT` or `LOG` (with or without a detection) | **Block status unknown.** An IDS or WAF-detection-mode alert fired. The perimeter did not assert a terminating verdict. The request may or may not have gotten through. | `unknown` | Yes |
+| **1** | `ALLOW` + any detection | **Allowed through — possible success.** A correlation rule fired *and* the request passed the firewall. The attack may have reached the application. Unconditional — the breach signal, never gated. | `allowed` | Yes — loudest |
+| **2** | `ALERT` or `LOG` **with a qualifying signal** (see §2.1) | **Block status unknown.** Something asserted this actor is hostile — a trusted correlation rule, or a source-declared high/critical severity — but the perimeter did not assert a terminating verdict. | `unknown` | Yes |
 | **3** | `BLOCK` / `DROP`, persistent (3 or more events) | **Blocked — persistent attacker.** The defence held, but the adversary kept trying. Consider adding an explicit edge-level or IP-level block to reduce noise. | `blocked` | No — informational |
 | **4** | `BLOCK` / `DROP`, one-off | **Blocked — one-off probe.** The firewall or IDS did its job. Single or low-volume; informational only. | `blocked` | No — informational |
+| **None** — **observed** | `ALERT`/`LOG` with **no qualifying signal**, or `ALLOW`-only with no detection | **On the record, no escalation claim.** Nothing asserted this actor is hostile. Not dropped — still scored on the severity-band axis, still visible in Network Logs. | reflects the truthful state (`unknown` / `allowed`) | No — the calm, honest default |
 
 **Only Tier 1 and Tier 2 actors enter the triage banner.** The banner is the escalation surface;
-Tiers 3 and 4 are visible in the threat table for situational awareness but do not demand immediate
-analyst action.
+Tiers 3 and 4 and the observed stratum are visible in the threat table / Network Logs for
+situational awareness but do not demand immediate analyst action.
+
+### 2.1 The assertion gate and the observed stratum
+
+Reaching **Tier 2** requires a *qualifying signal* — bare ALERT/LOG presence is not enough. This
+closes the flood: on a watch-only deployment (passive IDS, detect-only AV, auth logging), every
+event is ALERT or LOG, and without a gate 100% of actors would read "needs a decision," including
+the operator's own successful logins.
+
+An actor's ALERT/LOG population qualifies for Tier 2 when **either** is true:
+
+- **(a) a FireWatch correlation rule fired** with a declared severity of `high`/`critical` or
+  `auto_escalate=True` — see the [Escalation Policy](#6-the-three-named-thresholds) registry; or
+- **(b) an upstream assertion**: any `ALERT` event carrying a source-declared severity of
+  `high`/`critical` (Suricata signature severity, WAF CRS-category severity, ClamAV `FOUND` → high,
+  CEF banded severity) — so a single unmistakable attack still banners immediately, even with zero
+  correlation rules firing.
+
+`LOG` events never self-qualify on their own — ECS `event.kind: event` is telemetry, not an
+assertion; they escalate only via (a), a correlation rule that corroborates them (e.g. a brute-force
+detection built from LOG-only auth failures). An ALERT/LOG population with no qualifying signal —
+including an ALERT with an *undeclared* severity — is **observed**, not Tier 2. This is the one
+place the "zero-tuning, can't-miss" property is deliberately relaxed: Tier 1 (unconditional), any
+correlation rule, and the severity-band axis itself remain as the safety net that catches
+accumulation even when nothing individually qualifies.
+
+The observed stratum (`tier: null`, `disposition: "observed"`) is deliberately **not** a fifth
+tier: a numeric 5 would force a false ordering against Tier 4 ("blocked, one-off") that cannot be
+justified — neither is more urgent than the other; observation makes no urgency claim at all. It
+anchors OCSF 1.8.0's `action_id=3 Observed` — "observed, but neither explicitly allowed nor denied.
+This is common with IDS and EDR controls." Nothing is dropped: a persistent low-severity scanner
+still accumulates score on the band axis and enters triage on merit, and every observed event
+remains fully visible in Network Logs.
 
 ### Why disposition beats score
 
@@ -110,13 +154,11 @@ question: **did the perimeter stop this?**
 | `allowed` | The request passed through. Corresponds to `ALLOW` events. |
 | `blocked` | The perimeter terminated the connection (`BLOCK` or `DROP`). |
 | `unknown` | An IDS or WAF detection-mode alert fired, but no terminating verdict was asserted. The request may or may not have been stopped. This is the honest answer for `ALERT` / `LOG` events. |
+| `partial` | The actor's event window spans more than one terminal disposition class — for example, 9 unqualified ALERT · 3 confirmed BLOCK. `disposition_counts` (structured integers: `blocked` / `alert_unknown` / `allowed`) is attached so the frontend can render the exact breakdown instead of collapsing it to one label. |
 
-**Note — forthcoming `partial` value:** The current model assigns a single `block_status` to the
-actor based on the dominant action type. A known refinement (an amendment to ADR-0058) will
-introduce a `partial` value for actors whose event window spans *both* blocked and alert-only events
-— for example, "9 BLOCK · 298 ALERT-only". Until that lands, a mixed actor reads `unknown`, which
-is conservative but can misrepresent the actor's full picture. The `partial` value is the deliberate
-fix for this case.
+`block_status` means the same thing whether the verdict carries a tier or is observed — the
+[assertion gate](#21-the-assertion-gate-and-the-observed-stratum) changes whether an actor *enters
+the queue*, never what `block_status` honestly says happened.
 
 ---
 
@@ -129,7 +171,7 @@ The dashboard banner leads with: **"N actors need a BLOCK decision."**
 An actor enters the banner when:
 
 ```
-escalation.tier ≤ 2   (Tier 1 or Tier 2 — action-aware axis)
+(escalation.tier is not null AND escalation.tier ≤ 2)   (Tier 1 or Tier 2 — action-aware axis)
 OR
 threat_level ≥ triage_threshold   (severity-band axis, default HIGH)
 AND
@@ -139,7 +181,10 @@ actor has not been dismissed
 The two axes are OR-combined. A low-scoring Tier-1 actor (single allowed-through SQLi, score 40 →
 MEDIUM) banners even if the triage threshold is HIGH — because the action axis is unconditional.
 Raising the triage threshold tightens the severity-band half only; it never suppresses Tier 1 or
-Tier 2 actors.
+Tier 2 actors. **An observed actor (`tier: null`) never satisfies the action-aware half on its
+own** — it enters the banner only via the band axis, on merit (accumulated score). The explicit
+null check is load-bearing: in JavaScript `null ≤ 2` evaluates to `true`, so the frontend
+(`triageBand.ts`) guards this comparison explicitly rather than relying on it falling through.
 
 Actors within the banner are sorted by tier first (Tier 1 before Tier 2), then by score descending,
 so the loudest signals lead.
@@ -242,6 +287,7 @@ Lives in: the **Escalation Policy** settings card.
 | Document | What it covers |
 |---|---|
 | [ADR-0058](adr/0058-action-aware-deterministic-escalation-axis.md) | The full decision record for the 4-tier action model, including the original scoring blind spots it fixes and alternatives rejected |
+| [ADR-0067](adr/0067-assertion-gated-triage-entry-observed-stratum.md) | The assertion gate (§2.1), the observed stratum, and why it is `tier=null` rather than a fifth tier — partially supersedes ADR-0058's original Tier-2 entry semantics |
 | [ADR-0059](adr/0059-three-named-thresholds-and-unified-alert-worthiness-predicate.md) | The three named thresholds and the shared `is_alert_worthy` predicate |
 | [ADR-0003](adr/0003-ai-approach-sampling-not-per-log.md) | Why the AI is per-actor sampling, not per-log |
 | [ADR-0033](adr/0033-ui-action-seam-siem-now-soar-later.md) | The SIEM-now / SOAR-later action seam |

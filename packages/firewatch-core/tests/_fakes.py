@@ -302,8 +302,14 @@ def make_event(
     rule_id: str | None = None,
     category: str | None = None,
     event_id: str | None = None,
+    severity: str | None = None,
 ) -> SecurityEvent:
-    """Construct a SecurityEvent with sensible defaults for tests."""
+    """Construct a SecurityEvent with sensible defaults for tests.
+
+    ``severity`` (issue #42, ADR-0067 D1b) — additive, default None (undeclared).
+    Set to "high"/"critical" on an ALERT event to satisfy the assertion gate
+    without needing a correlation-rule detection.
+    """
     return SecurityEvent(
         source_type=source_type,
         source_id=source_id,
@@ -315,6 +321,7 @@ def make_event(
         rule_id=rule_id,
         category=category,
         event_id=event_id,
+        severity=severity,  # type: ignore[arg-type]
     )
 
 

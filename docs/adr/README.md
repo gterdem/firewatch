@@ -11,7 +11,7 @@ number. One decision per file. Keep them small.
 **Phase sequencing** (which ADRs land in which release phase) lives in
 [`../ROADMAP.md`](../ROADMAP.md). The ADRs here are the *decisions*; the ROADMAP is the *order*.
 
-**Next ADR number:** 0069
+**Next ADR number:** 0071
 
 | ADR | Title | Status | File |
 |-----|-------|--------|------|
@@ -83,3 +83,5 @@ number. One decision per file. Keep them small.
 | 0066 | Honest AI State Model — Administrative vs Operational State, One Closed `ai_status` Vocabulary | Proposed (refines ADR-0022, ADR-0035 §4) | [0066-honest-ai-state-model-admin-vs-operational.md](0066-honest-ai-state-model-admin-vs-operational.md) |
 | 0067 | Assertion-Gated Triage Entry + the `observed` Stratum — Tier 2 Requires a Qualifying Signal | Proposed (partially supersedes ADR-0058 D2) | [0067-assertion-gated-triage-entry-observed-stratum.md](0067-assertion-gated-triage-entry-observed-stratum.md) |
 | 0068 | The Volume Oracle — Usability Invariants at Realistic Event Volume as a Deterministic CI Gate | Proposed | [0068-volume-oracle-usability-invariants-at-realistic-volume.md](0068-volume-oracle-usability-invariants-at-realistic-volume.md) |
+| 0069 | Canonical Severity Semantics — Sigma-Anchored Behavioral Definitions for `SecurityEvent.severity` + the Per-Source Mapping Discipline | Proposed (coupled with ADR-0070) | [0069-canonical-severity-semantics-sigma-anchored.md](0069-canonical-severity-semantics-sigma-anchored.md) |
+| 0070 | Hostile-Attempt Pressure and Campaign Detection — Windowed, Disposition-Agnostic Persistence Scoring | Proposed (coupled with ADR-0069; corrects ADR-0067 D5(1)) | [0070-hostile-attempt-pressure-and-campaign-detection.md](0070-hostile-attempt-pressure-and-campaign-detection.md) |

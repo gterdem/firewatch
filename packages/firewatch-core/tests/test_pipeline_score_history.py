@@ -39,6 +39,13 @@ IP_B = "198.51.100.20"
 # Base timestamp used to build events with distinct timestamps (avoiding dedup).
 _T0 = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
 
+# Issue #52 (ADR-0070 D4): analyze_ip now windows run_rules/decide() to a
+# trailing W_STATE slice measured from "now". These tests seed events at
+# _T0-relative offsets (up to +60min), so a fixed synthetic clock 2h after _T0
+# keeps both event batches inside W_STATE without relying on the real wall
+# clock (no wall-clock flakiness).
+_CLOCK = lambda: _T0 + timedelta(hours=2)  # noqa: E731
+
 
 def _blocked_events_at(ip: str, n: int, start_offset_minutes: int = 0) -> list:
     """Build n BLOCK events with distinct timestamps (offset by seconds) to avoid store dedup.
@@ -78,7 +85,7 @@ async def test_analyze_ip_writes_score_history_row(store: SQLiteEventStore) -> N
     await store.save_many(_blocked_events_at(IP_A, n=3))
 
     ai = FakeAIEngine()
-    pipeline = Pipeline(store, ai)
+    pipeline = Pipeline(store, ai, clock=_CLOCK)
 
     # Before the call, no snapshots should exist.
     history_before = await store.get_score_history(IP_A, window_hours=1)
@@ -119,7 +126,7 @@ async def test_analyze_ip_second_call_has_score_delta(
     # Round 1: 3 BLOCK SQLi events → score = 40 (sqli) + 3 (blocked) = 43.
     await store.save_many(_blocked_events_at(IP_A, n=3, start_offset_minutes=0))
     ai = FakeAIEngine()
-    pipeline = Pipeline(store, ai)
+    pipeline = Pipeline(store, ai, clock=_CLOCK)
 
     first = await pipeline.analyze_ip(IP_A)
     score_1 = first.score
@@ -154,7 +161,7 @@ async def test_analyze_ip_first_call_score_delta_is_none(
     """BLOCKING-1C: First analyze_ip for an IP (no prior snapshot) → score_delta=None."""
     await store.save_many(_blocked_events_at(IP_B, n=2))
     ai = FakeAIEngine()
-    pipeline = Pipeline(store, ai)
+    pipeline = Pipeline(store, ai, clock=_CLOCK)
 
     result = await pipeline.analyze_ip(IP_B)
     assert result.score_delta is None, (
@@ -172,7 +179,7 @@ async def test_analyze_ip_empty_ip_no_snapshot_written(
 ) -> None:
     """BLOCKING-1D: analyze_ip for an IP with no events must not write a snapshot."""
     ai = FakeAIEngine()
-    pipeline = Pipeline(store, ai)
+    pipeline = Pipeline(store, ai, clock=_CLOCK)
 
     result = await pipeline.analyze_ip(IP_A)
     assert result.total_events == 0

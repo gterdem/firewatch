@@ -46,6 +46,20 @@ Issue #250 additions:
     aggregate query for all IPs) rather than calling ``analyze_ip`` per IP,
     satisfying EARS E4 (no per-IP N+1 on the list endpoint).
 
+Issue #52 additions (ADR-0070 D4 — trailing analysis windows):
+  - ``analyze_ip`` / ``analyze_ip_detailed`` fetch each actor's FULL lifetime event
+    list once (unchanged — ``first_seen``/``last_seen``/``total_events``/
+    ``blocked_events`` keep lifetime semantics), then slice it in-process into two
+    trailing windows at the fetch/slice seam: ``W_STATE`` (24h, feeds
+    ``run_rules``/``build_score_breakdown``/``decide()``) and ``W_CAMPAIGN`` (7d,
+    feeds ``detect()``).  This closes the lifetime-persistence defect — an actor
+    blocked ten times over six months no longer permanently scores
+    ``brute_force``/Tier-3.  ``run_rules``/``detect``/``decide`` gain NO
+    time-filtering logic of their own: the golden tests call them directly on
+    in-memory lists, so windowing anywhere but the pipeline seam would move the
+    oracle (ADR-0070 D4).  ``Pipeline.__init__`` takes an optional ``clock``
+    callable (default: the real wall clock) so tests can pin "now" deterministically.
+
 MK-2 additions (ADR-0044):
   - ``ledger`` optional parameter on ``__init__`` — an ``AnalysisLedger``-protocol
     object (``SqliteAnalysisLedger`` in production; None for tests that don't need it).
@@ -63,7 +77,8 @@ import asyncio
 import ipaddress
 import logging
 import time
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
 from urllib.parse import urlparse
 
@@ -117,6 +132,26 @@ _MAX_DETECTIONS = 50
 # Emitted every N seconds while Ollama is generating.
 _GENERATING_HEARTBEAT_INTERVAL_S = 2.0
 
+# ── Trailing analysis windows (issue #52, ADR-0070 D4) ───────────────────────
+#
+# W_STATE / W_CAMPAIGN are PROVISIONAL engineering estimates (ADR-0070 D5) —
+# NOT settled/calibrated values. The #50 volume-oracle manifest is the ledger
+# of record for these numbers, not this module. Code-declared only — NOT
+# operator-tunable (ADR-0070 D6). Documented in docs/escalation-and-triage-model.md.
+#
+# W_STATE  feeds run_rules / build_score_breakdown / decide() — "what is this
+#          actor's CURRENT threat state?" (score, band, tier reflect the
+#          trailing day, not the actor's lifetime).
+# W_CAMPAIGN feeds detect() — "is this actor WAGING A CAMPAIGN?" (recidivism
+#          needs memory longer than state).
+#
+# The window is applied HERE, at the pipeline fetch/slice seam, and ONLY here:
+# run_rules/detect/decide stay pure functions with NO time-filtering logic of
+# their own. tests/golden calls them directly on in-memory lists — windowing
+# inside those functions would move the golden oracle (ADR-0070 D4).
+W_STATE = timedelta(hours=24)
+W_CAMPAIGN = timedelta(days=7)
+
 
 class PullPlugin(SourcePlugin, PullSource, Protocol):
     """A pull-flavored source plugin: the common ``SourcePlugin`` surface plus
@@ -127,6 +162,24 @@ class PullPlugin(SourcePlugin, PullSource, Protocol):
 def _ms_since(start: float) -> float:
     """Milliseconds elapsed since a ``time.monotonic()`` start point."""
     return round((time.monotonic() - start) * 1000, 2)
+
+
+def _window_slice(
+    events: list[SecurityEvent], now: datetime, window: timedelta
+) -> list[SecurityEvent]:
+    """Return the subset of *events* at or after ``now - window`` (ADR-0070 D4).
+
+    Pure, in-process slice — the ONLY place the trailing analysis windows are
+    applied. Naive timestamps (should not occur in production; see
+    ``adapters/sqlite/_base.py::_row_to_security_event``) are treated as UTC so
+    a mixed naive/aware comparison never raises.
+    """
+    cutoff = now - window
+    return [
+        e for e in events
+        if (e.timestamp if e.timestamp.tzinfo is not None else e.timestamp.replace(tzinfo=timezone.utc))
+        >= cutoff
+    ]
 
 
 def _is_public_ip(ip_str: str) -> bool:
@@ -190,6 +243,7 @@ class Pipeline:
         notifier: Notifier | None = None,
         enrichers: list[Any] | None = None,
         ledger: AnalysisLedger | None = None,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         """Create the pipeline.
 
@@ -210,12 +264,19 @@ class Pipeline:
             Optional ``AnalysisLedger`` for persisting validated AI analyses
             (MK-2, ADR-0044).  When None, ledger writes are silently skipped —
             the analysis path is unaffected (additive-only, no-op when absent).
+        clock:
+            Optional zero-arg callable returning the current ``datetime`` (issue
+            #52, ADR-0070 D4) — the "now" the trailing ``W_STATE``/``W_CAMPAIGN``
+            analysis windows are measured from.  Defaults to the real wall clock
+            (``datetime.now(timezone.utc)``).  Tests inject a fixed instant so
+            windowing assertions are deterministic (no wall-clock flakiness).
         """
         self.store = store
         self.ai_engine = ai_engine
         self.notifier = notifier
         self.enrichers: list[Any] = list(enrichers) if enrichers else []
         self.ledger = ledger
+        self._clock: Callable[[], datetime] = clock or (lambda: datetime.now(timezone.utc))
 
     # ── Ingest ────────────────────────────────────────────────────
 
@@ -561,12 +622,19 @@ class Pipeline:
         Issue #209: populates ``ThreatScore.score_breakdown`` — additive field,
         no score values change (ADR-0036 D4).
 
+        Issue #52 (ADR-0070 D4): ``run_rules``, ``build_score_breakdown``, and
+        ``decide()`` see only the trailing ``W_STATE`` (24h) slice of events;
+        ``detect()`` sees only the trailing ``W_CAMPAIGN`` (7d) slice.
+        ``first_seen``/``last_seen``/``total_events``/``blocked_events`` are
+        computed from the FULL lifetime event list and keep their existing
+        meaning — only the counting rules are windowed.
+
         MK-2: after ``merge_score``, records the analysis to the ledger (fail-safe).
         """
         t_total = time.monotonic()
 
         t_fetch_start = time.monotonic()
-        events = await self.store.get_by_ip(ip)
+        events = await self.store.get_by_ip(ip)  # lifetime fetch — ONE fetch (ADR-0070 D4)
         t_fetch = _ms_since(t_fetch_start)
 
         if not events:
@@ -584,13 +652,22 @@ class Pipeline:
                 last_seen=datetime.now(),
             )
 
+        # Lifetime facts (issue #52: unchanged semantics) — computed from the FULL
+        # event list, never the windowed views below.
         blocked = [e for e in events if e.action in ("BLOCK", "DROP")]
         timestamps = [e.timestamp for e in events]
 
+        # Issue #52 (ADR-0070 D4): slice the lifetime fetch into the two named
+        # trailing windows at THIS seam only — run_rules/detect/decide stay
+        # windowing-agnostic (the golden-oracle constraint).
+        now = self._clock()
+        state_events = _window_slice(events, now, W_STATE)
+        campaign_events = _window_slice(events, now, W_CAMPAIGN)
+
         t_score_start = time.monotonic()
-        rule_score, attack_types = run_rules(events)
+        rule_score, attack_types = run_rules(state_events)
         # Cross-source correlation. Pure functions, fast.
-        detections = detect(events)
+        detections = detect(campaign_events)
         detection_boost = sum(d.score_delta for d in detections)
         t_score = _ms_since(t_score_start)
 
@@ -664,15 +741,18 @@ class Pipeline:
         )
 
         # Issue #209: compute breakdown alongside score (same inputs, additive only).
+        # Issue #52: windowed to W_STATE, same as run_rules (ADR-0070 D4).
         score_breakdown: list[ScoreBreakdownItem] = build_score_breakdown(
-            events, ai_result, detection_boost=detection_boost
+            state_events, ai_result, detection_boost=detection_boost
         )
 
         # Issue #648 — ADR-0058 D2: deterministic escalation verdict (fail-safe).
         # A bug in the decider must never abort scoring; escalation is additive.
+        # Issue #52: windowed to W_STATE — the verdict reflects the actor's current
+        # state, not a lifetime tally (ADR-0070 D4).
         escalation_verdict = None
         try:
-            escalation_verdict = _decide_escalation(events, detections)
+            escalation_verdict = _decide_escalation(state_events, detections)
         except Exception:
             logger.warning(
                 "pipeline.analyze_ip ip=%s escalation decider failed (fail-safe)",
@@ -709,9 +789,10 @@ class Pipeline:
             )
 
         logger.info(
-            "pipeline.analyze_ip ip=%s events=%d fetch=%sms score=%sms "
-            "ai=%sms total=%sms level=%s detections=%d derivation=%s",
-            ip, len(events), t_fetch, t_score, t_ai, _ms_since(t_total),
+            "pipeline.analyze_ip ip=%s events=%d state_events=%d campaign_events=%d "
+            "fetch=%sms score=%sms ai=%sms total=%sms level=%s detections=%d derivation=%s",
+            ip, len(events), len(state_events), len(campaign_events),
+            t_fetch, t_score, t_ai, _ms_since(t_total),
             level, len(detections), score_derivation,
         )
 
@@ -863,8 +944,15 @@ class Pipeline:
         blocked = [e for e in events if e.action in ("BLOCK", "DROP")]
         timestamps = [e.timestamp for e in events]
 
+        # Issue #52 (ADR-0070 D4): run_rules/build_score_breakdown see only the
+        # trailing W_STATE (24h) slice — the golden-oracle constraint means this
+        # slicing happens HERE, never inside run_rules itself. analyze_ip_detailed
+        # does not call detect(), so no W_CAMPAIGN slice is needed on this path.
+        now = self._clock()
+        state_events = _window_slice(events, now, W_STATE)
+
         t_score_start = time.monotonic()
-        rule_score, attack_types = run_rules(events)
+        rule_score, attack_types = run_rules(state_events)
         t_score = _ms_since(t_score_start)
 
         # security_mode: any non-azure_waf source → use generalized security prompt.
@@ -1059,7 +1147,8 @@ class Pipeline:
 
         # Issue #209: compute breakdown with same inputs (no detection_boost on detailed
         # path — detection correlations are not run in analyze_ip_detailed).
-        score_breakdown = build_score_breakdown(events, ai_result)
+        # Issue #52: windowed to W_STATE, same as run_rules (ADR-0070 D4).
+        score_breakdown = build_score_breakdown(state_events, ai_result)
 
         # Issue #132 DC-1: fetch recent raw log rows for the "Recent Logs" table.
         # get_by_ip_raw returns dicts ordered newest-first; cap to _MAX_DETECTIONS.

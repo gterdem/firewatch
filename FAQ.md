@@ -61,6 +61,20 @@ The full action-aware model ([ADR-0058](docs/adr/0058-action-aware-deterministic
 | **T4** | Blocked/dropped, and the adversary didn't keep trying | blocked |
 | **Observed** | Alert / log with no qualifying signal, or allow-only with no detection | reflects the truthful state |
 
+## Why does my Triage Banner show "All clear" when I know FireWatch is seeing traffic?
+
+That is the intended calm state — not a bug. Only actors carrying an escalation claim (Tier 1 or
+Tier 2, or a score that crosses your Triage threshold on its own) render as banner chips. Every
+**observed**-stratum actor — background noise with no qualifying signal — rolls up into one
+honest line instead: **"N detections on the record from M sources → Network Logs."** That line
+appears whenever observed events exist, whether the banner is showing chips or "All clear," so
+nothing is ever silently dropped; click through to Network Logs for the per-event detail. Both
+numbers are plain engine counts, never attacker-influenced text ([ADR-0035](docs/adr/0035-analytic-provenance-tagging.md)).
+This is exactly what makes "All clear" the reachable default on a watch-only install (Suricata,
+syslog, ClamAV — nothing that can block): the sensors' routine background noise is on the record,
+not in your queue. See [ADR-0067](docs/adr/0067-assertion-gated-triage-entry-observed-stratum.md)
+D5 and [docs/escalation-and-triage-model.md §4](docs/escalation-and-triage-model.md#4-the-triage-banner).
+
 ## What is score and how is it calculated?
 
 Score is a deterministic, rule-based risk number from 0–100 (`scoring.py`). Each matching signal

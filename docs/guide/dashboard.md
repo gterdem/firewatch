@@ -27,7 +27,7 @@ Panels appear on the page in this order, top to bottom:
 
 | # | Panel name | One-line purpose |
 |---|------------|-----------------|
-| 1 | **Triage Banner** | Leads the page; tells you how many threat actors need a block decision right now (or shows "All clear" when the queue is empty, with a legend explaining the escalation model). |
+| 1 | **Triage Banner** | Leads the page; tells you how many threat actors need a block decision right now (or shows "All clear" when the queue is empty, with a legend explaining the escalation model). Actors in the **Observed** stratum (no escalation claim) never appear as chips here — they roll up into one aggregate line, "N detections on the record from M sources → Network Logs," shown below the chips (or below "All clear" when the queue is empty), so nothing is silently dropped. |
 | 2 | **KPI Strip** | A thin row of four numbers — Total events, Blocked, Unique IPs (Internet Protocol addresses), and Block rate — each with a sparkline trend; the AI (Artificial Intelligence) engine status chip is pinned to the right. |
 | 3 | **Threat Summary** | A single prose block spotlighting the top-scored actor: their IP, attack types, block rate, risk score, confidence, and (when the AI engine is active) bullet-point AI insights. |
 | 4 | **Attack Categories** | A short bar chart of the attack types your adversaries attempted, ranked by how many distinct sources tried each type. |
@@ -75,6 +75,14 @@ just how high the score is. This is the escalation axis.
 A T1 or T2 actor can surface in the Triage Banner even if their numeric score is LOW —
 because a confirmed breach (T1) or a qualifying hostile assertion (T2) matters more than the score
 alone.
+
+Observed actors are the opposite case: they never surface as a banner chip on their own (unless
+the numeric score independently crosses your Triage threshold — the severity-band axis still
+scores them). Instead, the Triage Banner shows one summary line — "N detections on the record
+from M sources → Network Logs" — whenever one or more observed actors exist, whether the banner
+is showing chips or the all-clear state. This is why a watch-only install (Suricata, syslog,
+ClamAV — no source that can block anything) can now reach the calm "All clear" screen on a normal
+day: the background noise these sources generate is on the record, not in your queue.
 
 ### Disposition labels
 

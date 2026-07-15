@@ -41,6 +41,13 @@ IP = "203.0.113.5"
 IP_AZURE = "192.0.2.10"
 T0 = datetime(2026, 6, 3, 12, 0, 0, tzinfo=timezone.utc)
 
+# Issue #52 (ADR-0070 D4): analyze_ip_detailed now windows run_rules/
+# build_score_breakdown to a trailing W_STATE slice measured from "now". These
+# tests assert scoring behavior against fixed T0-relative event timestamps, so
+# every Pipeline() construction below injects this synthetic clock — fixed
+# shortly after T0, well inside W_STATE — instead of the real wall clock.
+_CLOCK = lambda: T0 + timedelta(hours=1)  # noqa: E731
+
 # A valid detailed AI result (matches the closed schema)
 _VALID_AI_RESULT: dict[str, Any] = {
     "threat_level": "HIGH",
@@ -93,7 +100,7 @@ async def test_analyze_ip_detailed_exactly_one_ai_call() -> None:
     """EARS-1: analyze_ip_detailed issues exactly ONE analyze_detailed call."""
     fake_ai = FakeAIEngine(result=_VALID_AI_RESULT)
     store: EventStore = FakeStore(_sqli_events(3))
-    await Pipeline(store, fake_ai).analyze_ip_detailed(IP)
+    await Pipeline(store, fake_ai, clock=_CLOCK).analyze_ip_detailed(IP)
     assert fake_ai.detailed_calls == 1, (
         f"Expected exactly 1 AI call, got {fake_ai.detailed_calls}. "
         "ADR-0003: one LLM call per IP."
@@ -106,7 +113,7 @@ async def test_analyze_ip_detailed_exactly_one_ai_call() -> None:
 async def test_analyze_ip_detailed_returns_dict() -> None:
     """EARS-1: returns a dict (not a ThreatScore), consistent with v1 shape."""
     store: EventStore = FakeStore(_sqli_events(3))
-    result = await Pipeline(store, FakeAIEngine(result=_VALID_AI_RESULT)).analyze_ip_detailed(IP)
+    result = await Pipeline(store, FakeAIEngine(result=_VALID_AI_RESULT), clock=_CLOCK).analyze_ip_detailed(IP)
     assert isinstance(result, dict)
 
 
@@ -119,7 +126,7 @@ async def test_analyze_ip_detailed_empty_returns_error() -> None:
     """EARS-4: no events → returns {'error': 'No logs found'} (v1 behavior)."""
     fake_ai = FakeAIEngine()
     store: EventStore = FakeStore([])
-    result = await Pipeline(store, fake_ai).analyze_ip_detailed(IP)
+    result = await Pipeline(store, fake_ai, clock=_CLOCK).analyze_ip_detailed(IP)
     assert result == {"error": "No logs found"}, (
         f"Expected {{'error': 'No logs found'}}, got {result!r}"
     )
@@ -129,7 +136,7 @@ async def test_analyze_ip_detailed_empty_no_ai_call() -> None:
     """EARS-4: no events → AI engine must NOT be called."""
     fake_ai = FakeAIEngine()
     store: EventStore = FakeStore([])
-    await Pipeline(store, fake_ai).analyze_ip_detailed(IP)
+    await Pipeline(store, fake_ai, clock=_CLOCK).analyze_ip_detailed(IP)
     assert fake_ai.detailed_calls == 0, (
         "AI engine must not be called when there are no events (EARS-4)."
     )
@@ -145,7 +152,7 @@ async def test_analyze_ip_detailed_ai_failure_does_not_raise() -> None:
     store: EventStore = FakeStore(_sqli_events(3))
     ai: AIEngine = FakeAIEngine(fail=True)
     # Must not raise
-    result = await Pipeline(store, ai).analyze_ip_detailed(IP)
+    result = await Pipeline(store, ai, clock=_CLOCK).analyze_ip_detailed(IP)
     assert isinstance(result, dict)
 
 
@@ -155,7 +162,7 @@ async def test_analyze_ip_detailed_ai_failure_rules_only_score() -> None:
     # Old math (removed): +40 sqli + 3 per-blocked = 43
     store: EventStore = FakeStore(_sqli_events(3))
     ai: AIEngine = FakeAIEngine(fail=True)
-    result = await Pipeline(store, ai).analyze_ip_detailed(IP)
+    result = await Pipeline(store, ai, clock=_CLOCK).analyze_ip_detailed(IP)
     assert result["score"] == 30, (
         f"Expected rules-only score 30, got {result['score']}. "
         "AI failure must degrade to rules-only, not zero. (#651)"
@@ -178,7 +185,7 @@ async def test_analyze_ip_detailed_fallback_envelope_rules_only() -> None:
     # Old math (removed): +40 sqli + 3 per-blocked = 43
     store: EventStore = FakeStore(_sqli_events(3))
     ai: AIEngine = FakeAIEngine(result=_FALLBACK_ENVELOPE)
-    result = await Pipeline(store, ai).analyze_ip_detailed(IP)
+    result = await Pipeline(store, ai, clock=_CLOCK).analyze_ip_detailed(IP)
     assert result["score"] == 30, (
         f"Expected rules-only score 30 for fallback envelope, got {result['score']}. "
         "NB-3: branch on ai_status BEFORE schema validating. (#651)"
@@ -194,7 +201,7 @@ async def test_analyze_ip_detailed_fallback_does_not_raise_on_unknown_threat_lev
     store: EventStore = FakeStore(_sqli_events(3))
     ai: AIEngine = FakeAIEngine(result=_FALLBACK_ENVELOPE)
     # Must not raise ValueError or any other exception
-    result = await Pipeline(store, ai).analyze_ip_detailed(IP)
+    result = await Pipeline(store, ai, clock=_CLOCK).analyze_ip_detailed(IP)
     assert isinstance(result, dict)
 
 
@@ -208,7 +215,7 @@ async def test_analyze_ip_detailed_fallback_ai_does_not_boost_score() -> None:
     rules_only_score = 30  # sqli_BLOCK(20) + persistence(10) = 30 (#651)
 
     ai: AIEngine = FakeAIEngine(result=_FALLBACK_ENVELOPE)
-    result = await Pipeline(store, ai).analyze_ip_detailed(IP)
+    result = await Pipeline(store, ai, clock=_CLOCK).analyze_ip_detailed(IP)
     assert result["score"] == rules_only_score
 
 
@@ -224,7 +231,7 @@ async def test_analyze_ip_detailed_ai_boost_applied() -> None:
     store: EventStore = FakeStore(_sqli_events(3))
     ai_result = {**_VALID_AI_RESULT, "threat_level": "CRITICAL", "confidence": 0.9}
     ai: AIEngine = FakeAIEngine(result=ai_result)
-    result = await Pipeline(store, ai).analyze_ip_detailed(IP)
+    result = await Pipeline(store, ai, clock=_CLOCK).analyze_ip_detailed(IP)
     assert result["score"] == 50, (
         f"Expected 30 (rules) + 20 (CRITICAL boost) = 50, got {result['score']}. (#651)"
     )
@@ -237,7 +244,7 @@ async def test_analyze_ip_detailed_ai_high_boost() -> None:
     store: EventStore = FakeStore(_sqli_events(3))
     ai_result = {**_VALID_AI_RESULT, "threat_level": "HIGH", "confidence": 0.85}
     ai: AIEngine = FakeAIEngine(result=ai_result)
-    result = await Pipeline(store, ai).analyze_ip_detailed(IP)
+    result = await Pipeline(store, ai, clock=_CLOCK).analyze_ip_detailed(IP)
     assert result["score"] == 40  # 30 (rules, #651) + 10 (HIGH boost) = 40
 
 
@@ -248,7 +255,7 @@ async def test_analyze_ip_detailed_ai_low_confidence_no_boost() -> None:
     store: EventStore = FakeStore(_sqli_events(3))
     ai_result = {**_VALID_AI_RESULT, "threat_level": "CRITICAL", "confidence": 0.7}
     ai: AIEngine = FakeAIEngine(result=ai_result)
-    result = await Pipeline(store, ai).analyze_ip_detailed(IP)
+    result = await Pipeline(store, ai, clock=_CLOCK).analyze_ip_detailed(IP)
     assert result["score"] == 30  # no boost; 0.7 is not > 0.7; rules-only=30 (#651)
 
 
@@ -262,7 +269,7 @@ async def test_analyze_ip_detailed_ai_cannot_lower_score() -> None:
     # Old math (removed): +30 (brute-force) + 40 (sqli) + 10 (per-blocked) = 80
     ai_result = {**_VALID_AI_RESULT, "threat_level": "LOW", "confidence": 0.9}
     ai: AIEngine = FakeAIEngine(result=ai_result)
-    result = await Pipeline(store, ai).analyze_ip_detailed(IP)
+    result = await Pipeline(store, ai, clock=_CLOCK).analyze_ip_detailed(IP)
     assert result["score"] >= 60, (
         f"AI LOW verdict must not lower the rules score 60; got {result['score']}. (#651)"
     )
@@ -290,7 +297,7 @@ async def test_analyze_ip_detailed_score_capped_at_100() -> None:
     # brute_force(30)+port_scan(25)+sqli_BLOCK(20)+persistence(10)+CRITICAL(20)=105→100 (#651)
     ai_result = {**_VALID_AI_RESULT, "threat_level": "CRITICAL", "confidence": 0.9}
     ai: AIEngine = FakeAIEngine(result=ai_result)
-    result = await Pipeline(store, ai).analyze_ip_detailed(IP)
+    result = await Pipeline(store, ai, clock=_CLOCK).analyze_ip_detailed(IP)
     assert result["score"] == 100
 
 
@@ -306,7 +313,7 @@ async def test_analyze_ip_detailed_v1_shape() -> None:
       score, threat_level, total_events, blocked_events, attack_types, source_ip.
     """
     store: EventStore = FakeStore(_sqli_events(3))
-    result = await Pipeline(store, FakeAIEngine(result=_VALID_AI_RESULT)).analyze_ip_detailed(IP)
+    result = await Pipeline(store, FakeAIEngine(result=_VALID_AI_RESULT), clock=_CLOCK).analyze_ip_detailed(IP)
     for key in ("score", "threat_level", "total_events", "blocked_events",
                 "attack_types", "source_ip"):
         assert key in result, f"Missing required v1 field: {key!r}"
@@ -315,7 +322,7 @@ async def test_analyze_ip_detailed_v1_shape() -> None:
 async def test_analyze_ip_detailed_v1_shape_values() -> None:
     """EARS-8: v1 fields carry correct computed values."""
     store: EventStore = FakeStore(_sqli_events(3))
-    result = await Pipeline(store, FakeAIEngine(result=_VALID_AI_RESULT)).analyze_ip_detailed(IP)
+    result = await Pipeline(store, FakeAIEngine(result=_VALID_AI_RESULT), clock=_CLOCK).analyze_ip_detailed(IP)
     assert result["source_ip"] == IP
     assert result["total_events"] == 3
     assert result["blocked_events"] == 3  # all BLOCK
@@ -366,7 +373,7 @@ async def test_analyze_ip_detailed_security_mode_non_azure_waf() -> None:
     fake_ai = _SecurityModeCapturingAI()
     events = _sqli_events(3, source_type="suricata")  # non-azure_waf
     store: EventStore = FakeStore(events)
-    await Pipeline(store, fake_ai).analyze_ip_detailed(IP)  # type: ignore[arg-type]
+    await Pipeline(store, fake_ai, clock=_CLOCK).analyze_ip_detailed(IP)  # type: ignore[arg-type]
     assert fake_ai.security_mode_calls == [True], (
         "Non-azure_waf source must trigger security_mode=True for detailed analysis."
     )
@@ -387,7 +394,7 @@ async def test_analyze_ip_detailed_security_mode_azure_waf_only() -> None:
         for _ in range(3)
     ]
     store: EventStore = FakeStore(events)
-    await Pipeline(store, fake_ai).analyze_ip_detailed(IP)  # type: ignore[arg-type]
+    await Pipeline(store, fake_ai, clock=_CLOCK).analyze_ip_detailed(IP)  # type: ignore[arg-type]
     assert fake_ai.security_mode_calls == [False], (
         "Pure azure_waf source must use security_mode=False."
     )
@@ -450,7 +457,7 @@ async def test_analyze_ip_detailed_passes_descriptions_to_samples() -> None:
     descs = {"942100": "SQL injection via numeric parameter"}
     store = _StoreWithDescriptions(_sqli_events(3), descs=descs)
     fake_ai = _DescriptionCapturingAI()
-    await Pipeline(store, fake_ai).analyze_ip_detailed(IP)  # type: ignore[arg-type]
+    await Pipeline(store, fake_ai, clock=_CLOCK).analyze_ip_detailed(IP)  # type: ignore[arg-type]
     assert fake_ai.detailed_calls == 1
     assert len(fake_ai.captured_samples) == 1
     assert fake_ai.captured_samples[0]["description"] == "SQL injection via numeric parameter"
@@ -460,7 +467,7 @@ async def test_analyze_ip_detailed_graceful_with_empty_rule_descs() -> None:
     """EARS-2: empty rule descriptions → blank strings (graceful degradation)."""
     store = _StoreWithDescriptions(_sqli_events(3), descs={})
     fake_ai = _DescriptionCapturingAI()
-    await Pipeline(store, fake_ai).analyze_ip_detailed(IP)  # type: ignore[arg-type]
+    await Pipeline(store, fake_ai, clock=_CLOCK).analyze_ip_detailed(IP)  # type: ignore[arg-type]
     assert fake_ai.captured_samples[0]["description"] == ""
 
 
@@ -472,7 +479,7 @@ async def test_analyze_ip_detailed_samples_uncapped() -> None:
     ]
     store = _StoreWithDescriptions(events)
     fake_ai = _DescriptionCapturingAI()
-    await Pipeline(store, fake_ai).analyze_ip_detailed(IP)  # type: ignore[arg-type]
+    await Pipeline(store, fake_ai, clock=_CLOCK).analyze_ip_detailed(IP)  # type: ignore[arg-type]
     assert len(fake_ai.captured_samples) == 20, (
         f"Detailed path must send all 20 rules to AI, got {len(fake_ai.captured_samples)}."
     )
@@ -504,7 +511,7 @@ async def test_analyze_ip_detailed_bounds_event_load_to_cap() -> None:
         for i in range(n_events)
     ]
     store: EventStore = FakeStore(events)
-    result = await Pipeline(store, FakeAIEngine(result=_VALID_AI_RESULT)).analyze_ip_detailed(IP)
+    result = await Pipeline(store, FakeAIEngine(result=_VALID_AI_RESULT), clock=_CLOCK).analyze_ip_detailed(IP)
     assert isinstance(result, dict)
     # total_events in the result must reflect the cap, not the full n_events
     assert result["total_events"] == cap, (
@@ -543,7 +550,7 @@ async def test_analyze_ip_detailed_cap_preserves_most_recent_events() -> None:
     ]
     store: EventStore = FakeStore([old_event] + recent_events)
     fake_ai = _DescriptionCapturingAI()
-    result = await Pipeline(store, fake_ai).analyze_ip_detailed(IP)  # type: ignore[arg-type]
+    result = await Pipeline(store, fake_ai, clock=_CLOCK).analyze_ip_detailed(IP)  # type: ignore[arg-type]
 
     assert result["total_events"] == cap, (
         f"Expected cap ({cap}) events in result, got {result['total_events']}."
@@ -559,7 +566,7 @@ async def test_analyze_ip_detailed_no_cap_when_under_limit() -> None:
     """F1: when total events are under MAX_DETAILED_EVENTS, ALL events are used."""
     # Use 3 events — well under the cap
     store: EventStore = FakeStore(_sqli_events(3))
-    result = await Pipeline(store, FakeAIEngine(result=_VALID_AI_RESULT)).analyze_ip_detailed(IP)
+    result = await Pipeline(store, FakeAIEngine(result=_VALID_AI_RESULT), clock=_CLOCK).analyze_ip_detailed(IP)
     assert result["total_events"] == 3, (
         "When events < MAX_DETAILED_EVENTS, all events must be used (no truncation)."
     )
@@ -580,7 +587,7 @@ async def test_analyze_ip_detailed_cap_returns_valid_result_structure() -> None:
         for i in range(n_events)
     ]
     store: EventStore = FakeStore(events)
-    result = await Pipeline(store, FakeAIEngine(result=_VALID_AI_RESULT)).analyze_ip_detailed(IP)
+    result = await Pipeline(store, FakeAIEngine(result=_VALID_AI_RESULT), clock=_CLOCK).analyze_ip_detailed(IP)
     for key in ("score", "threat_level", "total_events", "blocked_events",
                 "attack_types", "source_ip"):
         assert key in result, f"Missing required v1 field after cap: {key!r}"
@@ -646,7 +653,7 @@ async def test_analyze_ip_detailed_ai_failure_logs_at_exception_level(
     ai = _AvailableButThrowsAI()
 
     with caplog.at_level(logging.ERROR, logger="firewatch.pipeline"):
-        result = await Pipeline(store, ai).analyze_ip_detailed(IP)  # type: ignore[arg-type]
+        result = await Pipeline(store, ai, clock=_CLOCK).analyze_ip_detailed(IP)  # type: ignore[arg-type]
 
     # Graceful degradation still holds
     assert isinstance(result, dict)
@@ -678,7 +685,7 @@ async def test_analyze_ip_detailed_include_ai_false_skipped_status() -> None:
     """
     fake_ai = FakeAIEngine(result=_VALID_AI_RESULT)
     store: EventStore = FakeStore(_sqli_events(3))
-    result = await Pipeline(store, fake_ai).analyze_ip_detailed(IP, include_ai=False)
+    result = await Pipeline(store, fake_ai, clock=_CLOCK).analyze_ip_detailed(IP, include_ai=False)
     assert result.get("ai_status") == "skipped", (
         f"Expected ai_status='skipped' for include_ai=False, got {result.get('ai_status')!r}."
     )
@@ -695,7 +702,7 @@ async def test_analyze_ip_detailed_include_ai_false_rules_only_score() -> None:
     Old math (removed): +40 sqli + 3 blocked = 43.
     """
     store: EventStore = FakeStore(_sqli_events(3))
-    result = await Pipeline(store, FakeAIEngine(result=_VALID_AI_RESULT)).analyze_ip_detailed(
+    result = await Pipeline(store, FakeAIEngine(result=_VALID_AI_RESULT), clock=_CLOCK).analyze_ip_detailed(
         IP, include_ai=False
     )
     assert result["score"] == 30, (
@@ -710,7 +717,7 @@ async def test_analyze_ip_detailed_include_ai_false_v1_fields_present() -> None:
     total_events, blocked_events, attack_types, source_ip must all be present.
     """
     store: EventStore = FakeStore(_sqli_events(3))
-    result = await Pipeline(store, FakeAIEngine(result=_VALID_AI_RESULT)).analyze_ip_detailed(
+    result = await Pipeline(store, FakeAIEngine(result=_VALID_AI_RESULT), clock=_CLOCK).analyze_ip_detailed(
         IP, include_ai=False
     )
     for key in ("score", "threat_level", "total_events", "blocked_events",
@@ -728,7 +735,7 @@ async def test_analyze_ip_detailed_include_ai_true_default_unchanged() -> None:
     """
     fake_ai = FakeAIEngine(result=_VALID_AI_RESULT)
     store: EventStore = FakeStore(_sqli_events(3))
-    result = await Pipeline(store, fake_ai).analyze_ip_detailed(IP)  # default include_ai=True
+    result = await Pipeline(store, fake_ai, clock=_CLOCK).analyze_ip_detailed(IP)  # default include_ai=True
     assert fake_ai.detailed_calls == 1, (
         f"Expected exactly 1 AI call with include_ai=True (default), got {fake_ai.detailed_calls}."
     )

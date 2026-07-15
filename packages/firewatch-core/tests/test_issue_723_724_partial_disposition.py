@@ -1,4 +1,7 @@
 """Tests for issues #723 + #724 — partial block_status + disposition_counts.
+Updated for issue #42 (ADR-0067 D1/D2) — the assertion-gated Tier-2 entry means
+an unqualified ALERT/LOG mass no longer outranks a confirmed BLOCK/DROP class;
+see the ADR-0067 D8 re-bless note on ``TestDeciderMixedActor`` below.
 
 ADR-0058 Amendment 1 (A1-A5):
 - #723: SDK EscalationBlockStatusLiteral += 'partial'; DispositionCounts model;
@@ -26,11 +29,14 @@ EARS criteria → test mapping
 #724 EARS-3: BLOCK events must NOT be discarded when ALERT events are also present.
   → TestDeciderMixedActor.test_block_events_not_discarded
 
-#724 EARS-4: Single-class actors keep exact pre-amendment behaviour.
+#724 EARS-4: Single-class actors keep exact pre-amendment behaviour (subject to the
+  #42/ADR-0067 D1 gate — a single-class ALERT/LOG actor with no qualifying signal is
+  now 'observed', not Tier 2; see TestDeciderSingleClassRegression).
   → TestDeciderSingleClassRegression.*
 
-#724 EARS-5: Mixed actor tier = loudest action's tier (priority unchanged).
-  → TestDeciderMixedActor.test_tier_is_loudest_action
+#724 EARS-5: Mixed actor tier = loudest *qualifying* action's tier (priority unchanged
+  by #42; only which classes are eligible to be "loudest" changed).
+  → TestDeciderMixedActor.test_tier_is_loudest_qualifying_action
 
 #724 EARS-6: Mixed justification is RULE-tagged, integers only, no attacker fields.
   → TestDeciderMixedActor.test_justification_rule_tagged
@@ -68,13 +74,14 @@ _IP_B = "198.51.100.20"
 _IP_C = "192.0.2.30"
 
 
-def _ev(action: str, *, ip: str = _IP_A) -> SecurityEvent:
+def _ev(action: str, *, ip: str = _IP_A, severity: str | None = None) -> SecurityEvent:
     return SecurityEvent(
         source_type="suricata",
         source_id="pi-home",
         source_ip=ip,
         action=action,  # type: ignore[arg-type]
         timestamp=_T0,
+        severity=severity,  # type: ignore[arg-type]
     )
 
 
@@ -228,7 +235,17 @@ class TestIsMixedHelper:
 # ===========================================================================
 
 class TestDeciderMixedActor:
-    """#724 EARS-1 through EARS-6 — mixed actor behaviour."""
+    """#724 EARS-1 through EARS-6 — mixed actor behaviour.
+
+    ADR-0067 D8 re-bless (issue #42): ``alert_and_block_verdict`` below is the
+    same fixture shape as ``tests/golden/test_mixed_actor_escalation.py``'s
+    mixed-actor pin — 9 unqualified ALERT + 3 confirmed BLOCK/DROP, no
+    detections. It moves from tier=2/block_status_unknown to
+    tier=3/blocked_persistent for the same reason documented there: the 9
+    ALERT events assert nothing (no detection, no declared severity — ADR-0067
+    D1), so the loudest *qualifying* class is the 3 confirmed blocks.
+    ``block_status='partial'`` and ``disposition_counts`` are unchanged.
+    """
 
     @pytest.fixture(scope="class")
     def alert_and_block_verdict(self):
@@ -253,14 +270,16 @@ class TestDeciderMixedActor:
     def test_disposition_counts_allowed_zero(self, alert_and_block_verdict):
         assert alert_and_block_verdict.disposition_counts.allowed == 0
 
-    # EARS-5: tier is loudest action (ALERT/LOG wins over BLOCK here → Tier 2)
-    def test_tier_is_loudest_action(self, alert_and_block_verdict):
-        """Tier must be 2: ALERT/LOG is higher-priority (louder) than BLOCK/DROP."""
-        assert alert_and_block_verdict.tier == 2
+    # EARS-5 / ADR-0067 D8: tier is the loudest QUALIFYING action. The 9 ALERT
+    # events are unqualified (no detection, no declared severity); the 3
+    # confirmed BLOCK/DROP events are the loudest qualifying class → Tier 3.
+    def test_tier_is_loudest_qualifying_action(self, alert_and_block_verdict):
+        """Tier must be 3: the unqualified ALERT mass cannot outrank confirmed blocks."""
+        assert alert_and_block_verdict.tier == 3
 
-    def test_disposition_is_block_status_unknown(self, alert_and_block_verdict):
-        """Disposition stays 'block_status_unknown' — the ALERT headline."""
-        assert alert_and_block_verdict.disposition == "block_status_unknown"
+    def test_disposition_is_blocked_persistent(self, alert_and_block_verdict):
+        """Disposition is 'blocked_persistent' — the confirmed-block headline."""
+        assert alert_and_block_verdict.disposition == "blocked_persistent"
 
     # EARS-6: RULE-tagged, integers only, no attacker fields
     def test_justification_rule_tagged(self, alert_and_block_verdict):
@@ -287,9 +306,17 @@ class TestDeciderMixedActor:
         assert verdict.disposition_counts.allowed == 2
         assert verdict.disposition_counts.blocked == 2
 
-    def test_alert_allow_mixed_no_detection(self):
-        """ALERT + ALLOW events without detections → Tier 2, block_status='partial'."""
+    def test_alert_allow_mixed_no_detection_is_observed(self):
+        """ADR-0067 D1: unqualified ALERT + ALLOW, no detection -> observed, partial."""
         events = [_ev("ALERT")] * 3 + [_ev("ALLOW")] * 2
+        verdict = decide(events, [])
+        assert verdict.block_status == "partial"
+        assert verdict.tier is None
+        assert verdict.disposition == "observed"
+
+    def test_alert_allow_mixed_qualified_is_tier2(self):
+        """Same shape, but the ALERT carries a qualifying severity -> Tier 2, partial."""
+        events = [_ev("ALERT", severity="high")] * 3 + [_ev("ALLOW")] * 2
         verdict = decide(events, [])
         assert verdict.block_status == "partial"
         assert verdict.tier == 2
@@ -300,18 +327,37 @@ class TestDeciderMixedActor:
 # ===========================================================================
 
 class TestDeciderSingleClassRegression:
-    """Existing single-class behaviour must be byte-identical post-amendment."""
+    """Existing single-class behaviour must be byte-identical post-amendment,
+    subject to the #42/ADR-0067 D1 assertion gate on the ALERT/LOG and
+    ALLOW-only branches (Tiers 1/3/4 are untouched by ADR-0067)."""
 
-    def test_pure_alert_no_detection_tier2_unknown(self):
+    def test_pure_alert_no_qualifying_signal_is_observed(self):
+        """ADR-0067 D1: no detection, no declared severity -> observed, not Tier 2."""
         events = [_ev("ALERT")] * 5
+        v = decide(events, [])
+        assert v.tier is None
+        assert v.disposition == "observed"
+        assert v.block_status == "unknown"
+
+    def test_pure_alert_severity_qualified_tier2_unknown(self):
+        """ADR-0067 D1(b): a declared high/critical severity ALERT reaches Tier 2."""
+        events = [_ev("ALERT", severity="high")] * 5
         v = decide(events, [])
         assert v.tier == 2
         assert v.disposition == "block_status_unknown"
         assert v.block_status == "unknown"
 
-    def test_pure_alert_with_detection_tier2_unknown(self):
+    def test_pure_alert_with_non_qualifying_detection_is_observed(self):
+        """ADR-0067 D1: the D1 non-escalating default detection does not qualify."""
         events = [_ev("ALERT")] * 3
         v = decide(events, [_det()])
+        assert v.tier is None
+        assert v.disposition == "observed"
+        assert v.block_status == "unknown"
+
+    def test_pure_alert_with_qualifying_detection_tier2_unknown(self):
+        events = [_ev("ALERT")] * 3
+        v = decide(events, [_det(auto_escalate=True)])
         assert v.tier == 2
         assert v.block_status == "unknown"
 
@@ -336,16 +382,18 @@ class TestDeciderSingleClassRegression:
         assert v.disposition == "allowed_through"
         assert v.block_status == "allowed"
 
-    def test_allow_no_detection_tier4_allowed(self):
+    def test_allow_no_detection_is_observed(self):
+        """ADR-0067 D2: replaces the pre-#42 tier-4 ALLOW-only fallback."""
         events = [_ev("ALLOW")]
         v = decide(events, [])
-        assert v.tier == 4
-        assert v.disposition == "allowed_through"
+        assert v.tier is None
+        assert v.disposition == "observed"
         assert v.block_status == "allowed"
 
-    def test_empty_events_tier4(self):
+    def test_empty_events_is_observed(self):
         v = decide([], [])
-        assert v.tier == 4
+        assert v.tier is None
+        assert v.disposition == "observed"
         assert v.block_status == "allowed"
 
     def test_single_class_disposition_counts_attached(self):

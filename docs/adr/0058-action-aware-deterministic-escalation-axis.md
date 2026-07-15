@@ -1,7 +1,7 @@
 # ADR-0058: Action-Aware Deterministic Escalation Axis — Rules Escalate Instantly, AI Narrates the Post-Alert Story
 
 **Date:** 2026-06-14
-**Status:** Accepted
+**Status:** Accepted — **partially superseded by [ADR-0067](0067-assertion-gated-triage-entry-observed-stratum.md)** (D2's Tier-2 entry semantics and the ALERT/LOG "block status unknown" label; the four tiers, Tier 1's unconditional bypass, D1, D3, D5, D6 and Amendment 1 all stand). Two premises did not survive verification: D2's "no explicit OCSF disposition" for ALERT/LOG (OCSF 1.8.0 defines `disposition_id` 19 Alert / 15 Detected / 17 Logged and `action_id` 3 Observed), and D1's registry — designed as the queue-jumping gate "consumed by D2" — was wired only to a justification adjective until #42.
 
 **Implements / referenced by:** the design handoff `scratch/action-aware-escalation-handoff.md`
 (§1 problem · §3 code-grounded gap analysis · §4/§4a/§4b the approved C+B+A recommendation).

@@ -1,8 +1,10 @@
-"""Golden fixture — additive mixed-actor escalation oracle (issue #725, ADR-0058 A1-A5).
+"""Golden fixture — additive mixed-actor escalation oracle (issue #725, ADR-0058 A1-A5;
+issue #42, ADR-0067 D8 re-bless).
 
 Pins the ``block_status='partial'`` + ``disposition_counts`` behaviour introduced by
 the decider full-tally rewrite.  This is ADDITIVE coverage only — no existing value in
-``tests/golden/fixtures/expected_scores.json`` is modified.
+``tests/golden/fixtures/expected_scores.json`` is modified (ADR-0067 D8 verifies scoring
+takes no tier input; that fixture pins scores only, no tier/escalation keys).
 
 EARS acceptance criteria → test mapping:
 - EARS-1: WHEN the suite runs the mixed-actor scenario, THE oracle SHALL assert
@@ -17,10 +19,23 @@ EARS acceptance criteria → test mapping:
   pre-existing expected_scores.json score / threat_level value.
   → TestExistingScoresUnchanged (verified by the unmodified expected_scores.json)
 
-- EARS-4: WHERE the mixed actor's loudest action is ALERT/LOG, THE oracle SHALL assert
-  tier/disposition reflect that headline (priority unchanged) and the actor is
-  queue-worthy.
-  → TestMixedActorEscalation.test_tier_and_disposition_reflect_loudest_action
+- EARS-4: WHERE the mixed actor's loudest *qualifying* action is BLOCK/DROP (the 9 ALERT
+  events carry no detection and no declared severity — ADR-0067 D1 — so they do not
+  qualify), THE oracle SHALL assert tier/disposition reflect that headline (the 3
+  confirmed blocks) and the actor is queue-worthy via the band axis / Tier-3 visibility.
+  → TestMixedActorEscalation.test_tier_reflects_loudest_action /
+    test_disposition_reflects_loudest_action
+
+ADR-0067 D8 — the one, deliberate, architect-signed golden re-bless (issue #42):
+
+| Pin (was)                                                  | New expected value                                        | Why the NEW value is right |
+|---|---|---|
+| Pure-ALERT actor (5 ALERT, no detections) → `tier == 2`, `disposition == "block_status_unknown"` | `tier is None`, `disposition == "observed"`, `block_status == "unknown"` (unchanged) | A bare, severity-less ALERT population makes no assertion — nothing declared it hostile. Claiming Tier 2 ("needs a BLOCK decision") for it was the flood itself: 100% of a watch-only Suricata/WAF/ClamAV deployment is exactly this shape. `observed` states the honest fact — on the record, no claim — while the band axis still catches genuine accumulation. |
+| Mixed actor (9 ALERT + 3 BLOCK, no detections) → `tier == 2`, `disposition == "block_status_unknown"` | `tier == 3`, `disposition == "blocked_persistent"`, `block_status == "partial"` (unchanged), `disposition_counts` (unchanged) | The 9 ALERT events assert nothing (no detection, no declared severity); the 3 BLOCK/DROP events are a confirmed, terminal, persistent outcome. Letting the silent majority (ALERT) outrank the confirmed minority (BLOCK) — as the old pin did — was Amendment 1's bug in mirror image: discarding real evidence in favour of noise. The loudest *qualifying* class must decide, and here that is the perimeter's own confirmed blocks. |
+
+Justification for moving these pinned values, in ADR-0058 D5b's own words: *the old
+expected values encoded the blind spot* — here, the flood. No other value in this file
+moves; every other pin below is the regression net for this change.
 
 Fixture IPs are RFC 5737 documentation ranges only (203.0.113.x) — not real/routable.
 """
@@ -97,16 +112,19 @@ class TestMixedActorEscalation:
         """allowed count must be 0 (no ALLOW events in this fixture)."""
         assert mixed_actor_verdict.disposition_counts.allowed == 0
 
-    # EARS-4: loudest action is ALERT/LOG → Tier 2, disposition block_status_unknown
+    # EARS-4 / ADR-0067 D8 re-bless: the 9 ALERT events carry no detection and no
+    # declared severity, so they do NOT qualify (ADR-0067 D1). The 3 confirmed
+    # BLOCK/DROP events are the loudest *qualifying* class and decide the tier.
     def test_tier_reflects_loudest_action(self, mixed_actor_verdict):
-        """Tier must be 2 (ALERT/LOG is loudest — priority unchanged)."""
-        assert mixed_actor_verdict.tier == 2, (
-            f"Expected tier 2 (loudest = ALERT/LOG), got {mixed_actor_verdict.tier}"
+        """Tier must be 3 — the confirmed, persistent blocks (ALERT mass is unqualified)."""
+        assert mixed_actor_verdict.tier == 3, (
+            f"Expected tier 3 (loudest QUALIFYING class = 3 confirmed BLOCK/DROP; "
+            f"the 9 ALERT events assert nothing per ADR-0067 D1), got {mixed_actor_verdict.tier}"
         )
 
     def test_disposition_reflects_loudest_action(self, mixed_actor_verdict):
-        """Disposition must be 'block_status_unknown' (the ALERT/LOG headline)."""
-        assert mixed_actor_verdict.disposition == "block_status_unknown"
+        """Disposition must be 'blocked_persistent' (the confirmed-block headline)."""
+        assert mixed_actor_verdict.disposition == "blocked_persistent"
 
     def test_justification_is_rule_tagged(self, mixed_actor_verdict):
         """Justification must start with [RULE] per ADR-0035."""
@@ -135,12 +153,18 @@ class TestMixedActorEscalation:
 class TestMixedActorVsSingleClass:
     """Regression guard: single-class actors must be unchanged (EARS-4 of #724)."""
 
-    def test_pure_alert_actor_block_status_unknown(self):
-        """Pure ALERT actor → block_status='unknown', not 'partial'."""
+    def test_pure_alert_actor_is_observed(self):
+        """ADR-0067 D8 re-bless: a bare, severity-less ALERT population is 'observed'.
+
+        No detection fired and no event declared a qualifying severity — nothing
+        asserted this actor is hostile (ADR-0067 D1). ``block_status`` stays
+        'unknown' (unchanged truth: ALERT never asserts a terminating verdict).
+        """
         events = [_make_event("ALERT") for _ in range(5)]
         verdict = decide(events, [])
         assert verdict.block_status == "unknown"
-        assert verdict.tier == 2
+        assert verdict.tier is None
+        assert verdict.disposition == "observed"
 
     def test_pure_block_actor_persistent_block_status_blocked(self):
         """Pure BLOCK actor (≥3) → block_status='blocked', tier=3."""

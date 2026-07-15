@@ -40,20 +40,25 @@ Push sources  ──listen on a socket (sources send to FireWatch)────�
   never re-reads old events.
 - **Push** (Syslog, Syslog/CEF): FireWatch runs a listener; the source sends events to it.
 
-## What is the `T2 — Unconfirmed — may have got through` I see on the dashboard?
+## What is the `T2 — Flagged — block status unknown` I see on the dashboard?
 
-It is the **escalation tier** for an actor whose traffic only triggered detection-mode events
-(an IDS alert or a log entry) — a detection fired, but FireWatch cannot assert whether the traffic
-was blocked or allowed, so it needs an operator decision. FireWatch labels what got *through*, not
-just what was blocked. The full action-aware model ([ADR-0058](docs/adr/0058-action-aware-deterministic-escalation-axis.md);
-dashboard wording: [docs/escalation-and-triage-model.md](docs/escalation-and-triage-model.md)):
+It is the **escalation tier** for an actor whose traffic carries a *qualifying signal* — a
+FireWatch correlation rule, or a source-declared high/critical severity — but the perimeter never
+asserted a terminating verdict, so whether it was actually blocked is genuinely unconfirmed and it
+needs an operator decision. Bare detection-mode telemetry with no qualifying signal does **not**
+reach Tier 2; it is recorded honestly as **observed** instead (see
+[docs/escalation-and-triage-model.md §2.1](docs/escalation-and-triage-model.md#21-the-assertion-gate-and-the-observed-stratum)).
+The full action-aware model ([ADR-0058](docs/adr/0058-action-aware-deterministic-escalation-axis.md),
+[ADR-0067](docs/adr/0067-assertion-gated-triage-entry-observed-stratum.md); dashboard wording:
+[docs/escalation-and-triage-model.md](docs/escalation-and-triage-model.md)):
 
 | Tier | What happened | Block status |
 |------|---------------|--------------|
 | **T1** | Allowed through despite a high-fidelity detection | allowed |
-| **T2** | Alert / log only — detection fired, disposition not asserted | **unconfirmed** |
+| **T2** | Alert / log, flagged by a qualifying signal — disposition not asserted | **unconfirmed** |
 | **T3** | Blocked/dropped, and the adversary kept trying (persistent) | blocked |
 | **T4** | Blocked/dropped, and the adversary didn't keep trying | blocked |
+| **Observed** | Alert / log with no qualifying signal, or allow-only with no detection | reflects the truthful state |
 
 ## What is score and how is it calculated?
 

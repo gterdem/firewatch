@@ -13,7 +13,7 @@
  *   - Shows top-N (TOP_ACTORS_DEFAULT = 10) loudest actors by default.
  *   - When more than TOP_N actors are pending, a "view all N" expander reveals
  *     the remaining actors WITHOUT introducing an inner scrollbar (house rule).
- *   - Actors grouped under tier-group headers ("Tier 2 — Unconfirmed (84)").
+ *   - Actors grouped under tier-group headers ("Tier 2 — Flagged (84)").
  *   - Existing (tier asc, score desc) sort is preserved; top-N is the loudest slice.
  *
  * Issue #6 — self-explanatory tier copy: every label/description shown here

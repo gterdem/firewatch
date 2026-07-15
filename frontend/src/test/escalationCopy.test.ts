@@ -1,6 +1,6 @@
 /**
  * Tests for lib/escalationCopy.ts — the centralized escalation-tier copy
- * table (issue #6 / ADR-0058 / ADR-0059).
+ * table (issue #6 / ADR-0058 / ADR-0059 / ADR-0067).
  *
  * EARS criteria → test mapping:
  *   - WHEN a tier badge/chip/legend row/popover renders, THE SYSTEM SHALL use
@@ -13,10 +13,15 @@
  *   - The four labels SHALL be centralized in exactly one module.
  *     → this file existing + TriageBanner importing from it (see
  *       TriageBanner.test.tsx for the render-level assertions).
+ *   - WHEN a verdict is the ADR-0067 D2 observed stratum (tier=null,
+ *     disposition="observed"), THE SYSTEM SHALL label it as a non-claim
+ *     (never as an alert) via the same lookup helpers.
+ *     → describe('OBSERVED_COPY (ADR-0067 D2)')
  */
 import { describe, it, expect } from 'vitest'
 import {
   TIER_COPY,
+  OBSERVED_COPY,
   dispositionLabel,
   tierGroupLabel,
   blockStatusLabel,
@@ -127,5 +132,58 @@ describe('dispositionColor', () => {
 
   it('falls back to --fw-t2 for an unrecognized disposition', () => {
     expect(dispositionColor('nonsense')).toBe('var(--fw-t2)')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// ADR-0067 D2 — the observed stratum (tier=null, disposition="observed")
+// ---------------------------------------------------------------------------
+
+describe('OBSERVED_COPY (ADR-0067 D2)', () => {
+  it('is not one of the 4 ranked tiers (deliberately not a fifth tier)', () => {
+    expect(TIER_COPY.map((r) => r.disposition)).not.toContain('observed')
+  })
+
+  it('has a non-empty label, shortLabel, description, and a --fw-* color token', () => {
+    expect(OBSERVED_COPY.label.length).toBeGreaterThan(0)
+    expect(OBSERVED_COPY.shortLabel.length).toBeGreaterThan(0)
+    expect(OBSERVED_COPY.description.length).toBeGreaterThan(0)
+    expect(OBSERVED_COPY.color).toMatch(/^var\(--fw-/)
+  })
+
+  it('makes no escalation/urgency claim — must not read as an alert', () => {
+    // EARS: an observed actor is NOT queued and must not read as an alert.
+    expect(OBSERVED_COPY.label.toLowerCase()).not.toMatch(/alert|breach|block status unknown/)
+    expect(OBSERVED_COPY.label.toLowerCase()).toContain('no escalation claim')
+  })
+
+  it('dispositionLabel("observed") returns the observed label', () => {
+    expect(dispositionLabel('observed')).toBe(OBSERVED_COPY.label)
+  })
+
+  it('dispositionColor("observed") returns the observed color token', () => {
+    expect(dispositionColor('observed')).toBe(OBSERVED_COPY.color)
+  })
+
+  it('tierGroupLabel(null, "observed") returns the observed short label, not "No escalation verdict"', () => {
+    expect(tierGroupLabel(null, 'observed')).toBe(OBSERVED_COPY.shortLabel)
+  })
+
+  it('tierGroupLabel(null, undefined) still falls back to "No escalation verdict" (defensive default)', () => {
+    expect(tierGroupLabel(null, undefined)).toBe('No escalation verdict')
+  })
+})
+
+describe('Tier 2 label — rebased for ADR-0067 (issue #6 PR)', () => {
+  it('does not claim the traffic "may have got through" (false for LOG-only qualifying signals)', () => {
+    expect(TIER_COPY[1].label.toLowerCase()).not.toMatch(/may have got(ten)? (in|through)/)
+  })
+
+  it('does not open with "Unconfirmed" (undersells that a qualifying assertion was made)', () => {
+    expect(TIER_COPY[1].label.toLowerCase().startsWith('unconfirmed')).toBe(false)
+  })
+
+  it('states the honest, ADR-0067-sanctioned fact: block status unknown', () => {
+    expect(TIER_COPY[1].label.toLowerCase()).toContain('block status unknown')
   })
 })

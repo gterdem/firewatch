@@ -366,11 +366,11 @@ describe('TriageBanner — ADR-0058 D2 escalation axis (issue #649)', () => {
     expect(dispEl).toHaveTextContent('Got through — possible breach')
   })
 
-  it('shows disposition label "Unconfirmed — may have got through" for tier-2 actor', () => {
+  it('shows disposition label "Flagged — block status unknown" for tier-2 actor', () => {
     render(<TriageBanner pendingActors={[ACTOR_ESCALATED_TIER2]} onAction={vi.fn()} />)
 
     const dispEl = screen.getByTestId('triage-chip-disposition')
-    expect(dispEl).toHaveTextContent('Unconfirmed — may have got through')
+    expect(dispEl).toHaveTextContent('Flagged — block status unknown')
   })
 
   // EARS: WHERE banner renders an escalated actor → block-status label present inside popover
@@ -466,11 +466,11 @@ describe('TriageBanner — ADR-0058 D2 escalation axis (issue #649)', () => {
   })
 
   // Legend text content: tier 2 label
-  it('legend tier-2 shows "Unconfirmed — may have got through"', () => {
+  it('legend tier-2 shows "Flagged — block status unknown"', () => {
     render(<TriageBanner pendingActors={[]} onAction={vi.fn()} />)
 
     const tier2 = screen.getByTestId('legend-tier-2')
-    expect(tier2).toHaveTextContent('Unconfirmed — may have got through')
+    expect(tier2).toHaveTextContent('Flagged — block status unknown')
   })
 
   // Legend block-status badges
@@ -933,10 +933,10 @@ describe('TriageBanner — #728 top-N + view-all + tier headers', () => {
     const headers = screen.getAllByTestId('triage-tier-header')
     expect(headers.length).toBeGreaterThanOrEqual(2)
 
-    // The tier-2 header should contain "Tier 2" and "Unconfirmed"
+    // The tier-2 header should contain "Tier 2" and "Flagged"
     const tier2Header = headers.find((h) => h.textContent?.includes('Tier 2'))
     expect(tier2Header).toBeInTheDocument()
-    expect(tier2Header).toHaveTextContent('Unconfirmed')
+    expect(tier2Header).toHaveTextContent('Flagged')
 
     // The tier-3 header should contain "Tier 3" and "Blocked, repeated"
     const tier3Header = headers.find((h) => h.textContent?.includes('Tier 3'))

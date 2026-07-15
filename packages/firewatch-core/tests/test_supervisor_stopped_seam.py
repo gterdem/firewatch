@@ -24,9 +24,11 @@ NS-5  Ubiquitous: wait_until_stopped() is idempotent — a second await after
       → test_ns5_idempotent_after_stopped
 
 NS-6  Event-driven: cmd_run wires the public seam correctly — a fake supervisor
-      exposing ONLY wait_until_stopped() (no private attrs) that resolves on
-      command causes cmd_run to set server.should_exit, await the server task,
-      then call shutdown() then store.close() in that order.
+      exposing ONLY wait_until_stopped() (no private attrs) proves cmd_run needs
+      no private access.  Per issue #622 (see test_run_parked_regression.py),
+      the seam resolving is STATUS-ONLY: it must NOT cut the server task short.
+      cmd_run awaits server_task to completion, then calls shutdown() then
+      store.close() in that order.
       → test_ns6_cmd_run_uses_public_seam_and_correct_order
 
 NS-7  Ubiquitous: park-all emits exactly ONE "supervisor.stopping" ERROR log
@@ -365,14 +367,26 @@ async def test_ns6_cmd_run_uses_public_seam_and_correct_order() -> None:
 
     A fake supervisor exposing ONLY the public interface (no private attrs)
     that resolves wait_until_stopped() on demand.  Asserts:
-      - cmd_run sets server.should_exit when supervisor-stopped wins the race.
-      - shutdown() is called BEFORE store.close() (ADR-0023 §F ordering).
-      - The fake has no _shutdown_event or _stopped_event (proves no private access).
+      - The fake has no ``_shutdown_event``/``_stopped_event`` (proves cmd_run
+        needs no private access — it only calls ``startup``/``wait_until_stopped``/
+        ``shutdown``).
+      - Per issue #622 (see ``test_run_parked_regression.py``), the seam
+        resolving is STATUS-ONLY: cmd_run does NOT set ``server.should_exit``
+        when it fires, and does NOT cut the server task short.  The background
+        ``supervisor_stopped`` task still runs to completion (for status), but
+        the server keeps serving until its own ``serve()`` returns (SIGTERM/
+        SIGINT/should_exit in production; simulated here by a completing fake).
+      - shutdown() is called BEFORE store.close() (ADR-0023 §F ordering) once
+        the server task completes and cmd_run's ``finally`` runs.
 
-    Under the old private-attr design (_shutdown_event.wait()), this test would
-    either fail with AttributeError (if the attr is not present) or hang (if the
-    attr was never set, because _shutdown_event is only set by shutdown() itself,
-    not by the all-parked predicate that wait_until_stopped() is meant to cover).
+    Historical note: an earlier design (superseded by #622) raced ``server_task``
+    against ``wait_until_stopped()`` via ``FIRST_COMPLETED`` and set
+    ``server.should_exit=True`` when the seam won — this killed the API whenever
+    all sources parked.  This test previously encoded that superseded race
+    (fake ``serve()`` that never completes on its own) and hung forever once the
+    race was removed from ``cmd_run``, since nothing but the removed race could
+    make ``await server_task`` return.  It now encodes the current, shipped
+    contract instead.
     """
     from firewatch_cli.commands.run import cmd_run
 
@@ -389,7 +403,8 @@ async def test_ns6_cmd_run_uses_public_seam_and_correct_order() -> None:
             call_order.append("startup")
 
         async def wait_until_stopped(self) -> None:
-            # Simulate the all-parked condition firing after a short delay.
+            # Simulate the all-parked condition firing WHILE the server is
+            # still serving (#622 invariant: this must not cut it short).
             await stopped_event.wait()
             call_order.append("wait_until_stopped_resolved")
 
@@ -404,17 +419,20 @@ async def test_ns6_cmd_run_uses_public_seam_and_correct_order() -> None:
     class _FakeOrderPipeline:
         store = _OrderTrackingStore()
 
-    async def _long_running_serve(sockets: Any = None) -> None:
-        # Never completes on its own — supervisor_stopped wins the FIRST_COMPLETED
-        # race; _graceful_shutdown then cancels this task before awaiting it.
-        await asyncio.Event().wait()
+    async def _completing_serve(sockets: Any = None) -> None:
+        # Completes on its own after a short delay — mirrors uvicorn's
+        # serve() returning once SIGTERM/SIGINT sets should_exit.  This is the
+        # ONLY supported exit trigger post-#622; the all-parked seam never
+        # drives it.
+        await asyncio.sleep(0.05)
 
     config_file = Path("/tmp/test_ns6_empty_config.json")
     config_file.write_text('{"_instances": []}', encoding="utf-8")
 
-    # Fire the stopped_event shortly after cmd_run starts waiting.
+    # Fire the stopped_event shortly after cmd_run starts waiting, and well
+    # before _completing_serve returns, so the seam resolves mid-serve.
     async def _trigger_stopped() -> None:
-        await asyncio.sleep(0.05)
+        await asyncio.sleep(0.01)
         stopped_event.set()
 
     trigger = asyncio.create_task(_trigger_stopped())
@@ -430,7 +448,7 @@ async def test_ns6_cmd_run_uses_public_seam_and_correct_order() -> None:
             "firewatch_cli.commands.run._build_pipeline",
             return_value=_FakeOrderPipeline(),
         ), patch(
-            "uvicorn.Server.serve", side_effect=_long_running_serve,
+            "uvicorn.Server.serve", side_effect=_completing_serve,
         ):
             await cmd_run(registry={}, config_file=config_file, host="127.0.0.1", port=8000)
     finally:
@@ -443,12 +461,25 @@ async def test_ns6_cmd_run_uses_public_seam_and_correct_order() -> None:
 
     # Validate the recorded order.
     assert "startup" in call_order, "supervisor.startup() was not called"
-    assert "wait_until_stopped_resolved" in call_order, "wait_until_stopped() was not awaited"
+    assert "wait_until_stopped_resolved" in call_order, (
+        "wait_until_stopped() was not awaited to completion — the public seam "
+        "task must still run (for status), even though it no longer drives "
+        "shutdown (#622)."
+    )
     assert "shutdown" in call_order, "supervisor.shutdown() was not called"
     assert "store.close" in call_order, "store.close() was not called"
 
+    # #622 invariant: the seam resolving must not have pre-empted the server —
+    # it must resolve BEFORE the teardown steps, proving the server ran to its
+    # own completion rather than being cut short by the seam.
+    seam_idx = call_order.index("wait_until_stopped_resolved")
     shutdown_idx = call_order.index("shutdown")
     close_idx = call_order.index("store.close")
+    assert seam_idx < shutdown_idx, (
+        f"wait_until_stopped_resolved (pos {seam_idx}) must come BEFORE "
+        f"shutdown() (pos {shutdown_idx}) — the server must keep running after "
+        f"the seam fires; order was: {call_order}"
+    )
     assert shutdown_idx < close_idx, (
         f"store.close() (pos {close_idx}) must come AFTER shutdown() (pos {shutdown_idx}); "
         f"order was: {call_order}"

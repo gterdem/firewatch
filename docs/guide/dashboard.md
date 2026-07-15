@@ -67,12 +67,14 @@ just how high the score is. This is the escalation axis.
 | Tier badge | Disposition | Urgency |
 |------------|-------------|---------|
 | **T1** | Got through — possible breach | Highest. The detection fired but the request got past your defenses. The attack may have reached your application. |
-| **T2** | Unconfirmed — may have got through | High. A detection fired (IDS alert or WAF detection-mode), but nothing confirms whether it was actually stopped. |
+| **T2** | Flagged — block status unknown | High. A correlation rule or a source-declared high/critical severity flagged this actor as hostile, but nothing confirms whether it was actually blocked. |
 | **T3** | Blocked — kept trying | Moderate. Your defenses held, but the source is determined and high-volume; consider an IP-level block. |
 | **T4** | Blocked — didn't keep trying | Informational. Your defenses stopped every attempt, and this one didn't keep coming back. |
+| **Observed** | On the record — no escalation claim | Calm default. Nothing asserted this actor is hostile; still scored and visible in Network Logs, never dropped. |
 
 A T1 or T2 actor can surface in the Triage Banner even if their numeric score is LOW —
-because the outcome matters more than the score alone when traffic actually got through.
+because a confirmed breach (T1) or a qualifying hostile assertion (T2) matters more than the score
+alone.
 
 ### Disposition labels
 

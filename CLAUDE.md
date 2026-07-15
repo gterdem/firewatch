@@ -69,11 +69,28 @@ imports a plugin. Adding a source must require ZERO edits to firewatch-core.
 
 ## Build / test / lint (the gates)
 ```bash
-uv run ruff check .     # lint
-uv run pyright          # type check
-uv run pytest           # tests, including tests/golden
+bash scripts/gates-backend.sh    # sync + ruff + pyright + pytest (incl. tests/golden)
+bash scripts/gitleaks-full.sh    # secret scan over FULL history — what CI scans
 ```
-"Done" = all three green AND the security review raises no blocking findings.
+Run the scripts, not the underlying commands by hand. They are the single
+definition of "the gates" and are kept in step with `.github/workflows/`; typing
+the tools directly is how you end up testing a different thing than CI does:
+- the scripts `uv sync --all-packages` first. Skip it and packages that declare
+  their own deps (aws-nfw → boto3) can't import, so every gate reports failures
+  that exist only on your machine.
+- gitleaks scoped to `origin/main..HEAD` passes while CI — which scans full
+  history — fails. A scoped scan proves nothing.
+`FULL=1 bash scripts/gates-backend.sh` includes the `@slow` suite; that is what
+ci.yml actually runs. The default is narrower for speed.
+
+"Done" = gates green AND the security review raises no blocking findings.
+
+**A red gate is a claim about the code — verify it before believing it.** Both a
+false green and a false red are expensive: a test quarantined as "flaky" hid a
+deterministic hang for weeks (it wasn't flaky; it encoded a deleted design), and
+a scoped scan reported "clean" on a repo that was failing every commit. If a
+failure looks pre-existing or environmental, prove that with a command whose
+output you can show — don't infer it and move on.
 
 ## Core principles
 - **Simplicity first** — make every change as small as possible; touch only what's needed.

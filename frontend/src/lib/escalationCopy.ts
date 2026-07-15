@@ -1,6 +1,6 @@
 /**
- * escalationCopy — the SINGLE SOURCE OF TRUTH for the four escalation-tier
- * display labels shown across the dashboard (issue #6 / ADR-0058 / ADR-0059).
+ * escalationCopy — the SINGLE SOURCE OF TRUTH for the escalation-tier display
+ * labels shown across the dashboard (issue #6 / ADR-0058 / ADR-0059 / ADR-0067).
  *
  * WHY THIS FILE EXISTS
  * --------------------
@@ -14,17 +14,44 @@
  * Every surface that renders a tier label, a block-status badge, or a
  * tier-group header imports from here — no surface defines its own copy.
  *
- * NAMING NOTE (issue #6): wording below is the maintainer-approved final copy
- * (Galip, via the product-strategist's recommendation) — see PR #38 for the
- * alternatives considered and the reasoning.
+ * NAMING NOTE (issue #6): Tier 1/3/4 wording is the maintainer-approved final
+ * copy (Galip, via the product-strategist's recommendation) — see PR #38 for
+ * the alternatives considered and the reasoning.
+ *
+ * TIER 2 — REBASED FOR ADR-0067 (issue #6 PR, post-#42/#51):
+ * PR #38's original Tier-2 proposal, "Unconfirmed — may have got through", is
+ * falsified by ADR-0067 D1: reaching Tier 2 now REQUIRES a qualifying
+ * assertion (a correlation rule, or a source-declared high/critical
+ * severity) — it is no longer bare, unconfirmed telemetry. "Unconfirmed" as
+ * the leading word undersells that; and "may have got through" is flatly
+ * false whenever the qualifying signal is a LOG-only correlation (e.g. a
+ * brute-force rule built from failed, *attested* logins — ADR-0067 RC3, the
+ * "a failed-login LOG line ... the login failed" example). The interim label
+ * below states only what stays true under BOTH qualifying paths (D1a/D1b):
+ * something flagged this actor as hostile, and the perimeter's block status
+ * is genuinely unconfirmed. "Block status unknown" is ADR-0067's own term
+ * (D1 title, D6, the `block_status_unknown` disposition key) — kept verbatim
+ * rather than invented. The FINAL, posture-aware Tier-2 vocabulary
+ * ("not blocked — watch-only sensor" / "detected — no action taken" / a rare,
+ * genuinely unknown case) is ADR-0067 D6, implemented by #44/#45 (M3) — not
+ * this file's job; do not anticipate it here.
+ *
+ * OBSERVED STRATUM (ADR-0067 D2): an additive, deliberately NOT-a-fifth-tier
+ * row — `tier: null`, `disposition: "observed"`. An observed actor carries no
+ * escalation claim at all and must never read as an alert; it is exported
+ * separately from `TIER_COPY` (which stays the fixed 1-4 tier ladder) and
+ * merged into the lookup helpers below.
  */
 
-/** Machine-readable disposition key — from `EscalationVerdict.disposition` (fixed, ADR-0058). */
+/** Machine-readable disposition key for a ranked tier — from `EscalationVerdict.disposition` (fixed, ADR-0058). */
 export type DispositionKey =
   | 'allowed_through'
   | 'block_status_unknown'
   | 'blocked_persistent'
   | 'blocked_one_off'
+
+/** The ADR-0067 D2 observed-stratum disposition key — always paired with `tier: null`. */
+export type ObservedDispositionKey = 'observed'
 
 /** Machine-readable block_status key — from `EscalationVerdict.block_status` (fixed, ADR-0058 Amendment 1). */
 export type BlockStatusKey = 'allowed' | 'blocked' | 'unknown' | 'partial'
@@ -61,7 +88,8 @@ export interface TierCopy {
 }
 
 // ---------------------------------------------------------------------------
-// The 4-tier copy table (issue #6 — maintainer-approved final wording, PR #38)
+// The 4-tier copy table (issue #6 — maintainer-approved wording; Tier 2
+// re-derived for ADR-0067, see the module doc above)
 //
 // Tiers 3 and 4 differ on exactly one fact — persistence — so their labels
 // differ on exactly that word ("kept trying" / "didn't keep trying"). Reading
@@ -85,10 +113,10 @@ export const TIER_COPY: readonly TierCopy[] = [
     tier: 2,
     disposition: 'block_status_unknown',
     blockStatus: 'unknown',
-    label: 'Unconfirmed — may have got through',
-    shortLabel: 'Unconfirmed',
+    label: 'Flagged — block status unknown',
+    shortLabel: 'Flagged',
     description:
-      'Something suspicious was flagged, but nothing confirms whether it was actually stopped. Treat it as unresolved.',
+      'A correlation rule, or a source-declared high/critical severity, flagged this actor as hostile — but the perimeter never asserted a terminating verdict, so whether it was actually blocked is genuinely unconfirmed.',
     color: 'var(--fw-amber)',
   },
   {
@@ -122,25 +150,48 @@ const TIER_COPY_BY_DISPOSITION: Record<DispositionKey, TierCopy> = Object.fromEn
   TIER_COPY.map((row) => [row.disposition, row]),
 ) as Record<DispositionKey, TierCopy>
 
+/**
+ * The ADR-0067 D2 observed-stratum copy row. Deliberately separate from
+ * `TIER_COPY`: it has no tier number (not a fifth tier — see the module doc)
+ * and no fixed `block_status` (an observed verdict's block_status reflects
+ * whichever truthful state applies — "unknown" for an unqualified ALERT/LOG
+ * population, "allowed" for an ALLOW-only actor with no detection).
+ */
+export const OBSERVED_COPY = {
+  disposition: 'observed' as const,
+  label: 'On the record — no escalation claim',
+  shortLabel: 'Observed',
+  description:
+    'Nothing asserted this actor is hostile — no qualifying detection, no declared high/critical severity. Not dropped: still scored on the severity-band axis and fully visible in Network Logs.',
+  color: 'var(--fw-t3)',
+}
+
 // ---------------------------------------------------------------------------
 // Lookup helpers — every surface goes through these, never a switch of its own
 // ---------------------------------------------------------------------------
 
 /**
  * Full disposition label for a chip / popover trigger / legend title.
- * Falls back to the raw key for a disposition the copy table doesn't know
- * about yet (forward-compat — never throws on an unrecognized value).
+ * Handles the four ranked tiers plus the ADR-0067 observed stratum. Falls
+ * back to the raw key for a disposition the copy table doesn't know about
+ * yet (forward-compat — never throws on an unrecognized value).
  */
 export function dispositionLabel(disposition: string): string {
+  if (disposition === OBSERVED_COPY.disposition) return OBSERVED_COPY.label
   return TIER_COPY_BY_DISPOSITION[disposition as DispositionKey]?.label ?? disposition
 }
 
 /**
- * Short label for a tier-group header (e.g. "Tier 2 — Unconfirmed (84)").
- * Falls back to a bare "Tier N" when the disposition is unrecognized.
+ * Short label for a tier-group header (e.g. "Tier 2 — Flagged (84)").
+ * `tier === null` covers the observed stratum (ADR-0067 D2): returns the
+ * observed short label when the disposition says so, or a defensive
+ * "No escalation verdict" fallback for a null tier with no disposition.
  */
 export function tierGroupLabel(tier: number | null, disposition: string | undefined): string {
-  if (tier == null) return 'No escalation verdict'
+  if (tier == null) {
+    if (disposition === OBSERVED_COPY.disposition) return OBSERVED_COPY.shortLabel
+    return 'No escalation verdict'
+  }
   const row = disposition != null ? TIER_COPY_BY_DISPOSITION[disposition as DispositionKey] : undefined
   return row != null ? `Tier ${tier} — ${row.shortLabel}` : `Tier ${tier}`
 }
@@ -151,6 +202,10 @@ export function tierGroupLabel(tier: number | null, disposition: string | undefi
  * When block_status === "partial", formats a counts-derived label
  * (e.g. "9 blocked · 298 unconfirmed") from the disposition_counts
  * breakdown. Gracefully degrades to "Partial" when counts are absent.
+ *
+ * Unaffected by the Tier-2 relabel above: block_status's meaning is
+ * unchanged by ADR-0067 (an observed verdict still carries its truthful
+ * block_status — "unknown" or "allowed").
  */
 export function blockStatusLabel(blockStatus: string, counts?: DispositionCountsLike): string {
   switch (blockStatus) {
@@ -174,8 +229,10 @@ export function blockStatusLabel(blockStatus: string, counts?: DispositionCounts
  * CSS color token for a disposition.
  * Tier 1 (allowed-through) uses --fw-red (highest urgency).
  * Tier 2 (block_status_unknown) uses --fw-amber.
- * Others use the tier's own copy-table color, or --fw-t2 for an unknown key.
+ * Observed uses its own (muted) token. Others use the tier's own copy-table
+ * color, or --fw-t2 for an unrecognized key.
  */
 export function dispositionColor(disposition: string): string {
+  if (disposition === OBSERVED_COPY.disposition) return OBSERVED_COPY.color
   return TIER_COPY_BY_DISPOSITION[disposition as DispositionKey]?.color ?? 'var(--fw-t2)'
 }

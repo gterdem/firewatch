@@ -11,7 +11,7 @@ number. One decision per file. Keep them small.
 **Phase sequencing** (which ADRs land in which release phase) lives in
 [`../ROADMAP.md`](../ROADMAP.md). The ADRs here are the *decisions*; the ROADMAP is the *order*.
 
-**Next ADR number:** 0067
+**Next ADR number:** 0071
 
 | ADR | Title | Status | File |
 |-----|-------|--------|------|
@@ -72,7 +72,7 @@ number. One decision per file. Keep them small.
 | 0055 | Extend SecurityEvent with file-IOC, DNS-answer, and JA3 fields (refines ADR-0048) | Accepted | [0055-securityevent-file-ioc-and-dns-answer-fields.md](0055-securityevent-file-ioc-and-dns-answer-fields.md) |
 | 0056 | License FireWatch under AGPL-3.0 (supersedes ADR-0013) | Accepted | [0056-licensing-agpl-3.0.md](0056-licensing-agpl-3.0.md) |
 | 0057 | Design-System overlay primitives — adopt Radix Popover/Tooltip, retire hand-rolled positioner (tactical-now + #289 migration) | Proposed | [0057-radix-overlay-primitives-for-popovers-and-tooltips.md](0057-radix-overlay-primitives-for-popovers-and-tooltips.md) |
-| 0058 | Action-Aware Deterministic Escalation Axis — Rules Escalate Instantly, AI Narrates the Post-Alert Story | Accepted | [0058-action-aware-deterministic-escalation-axis.md](0058-action-aware-deterministic-escalation-axis.md) |
+| 0058 | Action-Aware Deterministic Escalation Axis — Rules Escalate Instantly, AI Narrates the Post-Alert Story | Accepted (partially superseded by ADR-0067) | [0058-action-aware-deterministic-escalation-axis.md](0058-action-aware-deterministic-escalation-axis.md) |
 | 0059 | Three Named, Purpose-Specific Thresholds (Notification / AI-confidence / Triage) + a Shared Alert-Worthiness Predicate | Accepted | [0059-three-named-thresholds-and-unified-alert-worthiness-predicate.md](0059-three-named-thresholds-and-unified-alert-worthiness-predicate.md) |
 | 0060 | Plugin-Declared Field-Production Capability — `SourceMetadata.produces` (structural axis for `/logs` empty-column hiding) | Accepted (D4 superseded by ADR-0063) | [0060-source-metadata-produces-field-capability.md](0060-source-metadata-produces-field-capability.md) |
 | 0061 | Entity Relationship Graph Navigation — d3-zoom transform layer, label level-of-detail, focus/context (amends ADR-0050) | Accepted | [0061-entity-relationship-graph-navigation.md](0061-entity-relationship-graph-navigation.md) |
@@ -81,3 +81,7 @@ number. One decision per file. Keep them small.
 | 0064 | App-Wide Live Refresh — One Shared Heartbeat, `dataVersion` Signal, Auto-Refresh-vs-Deferred-Pill by Page Type | Proposed | [0064-app-wide-live-refresh-shared-heartbeat.md](0064-app-wide-live-refresh-shared-heartbeat.md) |
 | 0065 | Local-First Endpoint Collection & Solo/Hub Topology — journald-First SDK Readers, Cursor-Based Resume | Accepted (complements ADR-0021) | [0065-local-first-endpoint-collection-solo-hub-topology.md](0065-local-first-endpoint-collection-solo-hub-topology.md) |
 | 0066 | Honest AI State Model — Administrative vs Operational State, One Closed `ai_status` Vocabulary | Proposed (refines ADR-0022, ADR-0035 §4) | [0066-honest-ai-state-model-admin-vs-operational.md](0066-honest-ai-state-model-admin-vs-operational.md) |
+| 0067 | Assertion-Gated Triage Entry + the `observed` Stratum — Tier 2 Requires a Qualifying Signal | Accepted (partially supersedes ADR-0058 D2; D5(1) corrected by ADR-0070 D7) | [0067-assertion-gated-triage-entry-observed-stratum.md](0067-assertion-gated-triage-entry-observed-stratum.md) |
+| 0068 | The Volume Oracle — Usability Invariants at Realistic Event Volume as a Deterministic CI Gate | Proposed | [0068-volume-oracle-usability-invariants-at-realistic-volume.md](0068-volume-oracle-usability-invariants-at-realistic-volume.md) |
+| 0069 | Canonical Severity Semantics — Sigma-Anchored Behavioral Definitions for `SecurityEvent.severity` + the Per-Source Mapping Discipline | Proposed (coupled with ADR-0070) | [0069-canonical-severity-semantics-sigma-anchored.md](0069-canonical-severity-semantics-sigma-anchored.md) |
+| 0070 | Hostile-Attempt Pressure and Campaign Detection — Windowed, Disposition-Agnostic Persistence Scoring | Proposed (coupled with ADR-0069; corrects ADR-0067 D5(1)) | [0070-hostile-attempt-pressure-and-campaign-detection.md](0070-hostile-attempt-pressure-and-campaign-detection.md) |

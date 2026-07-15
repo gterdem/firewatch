@@ -39,10 +39,26 @@ cycles). Cadence belongs to the supervisor's poll interval, not the reader —
 there is no ``poll_interval`` parameter. If sub-poll-interval latency is ever
 needed, a separate ``follow()`` method would back it with zero change to this
 drain contract.
+
+**Security — symlinks are refused by default.** Every open (initial and
+rotation-reopen) is atomic (``os.O_NOFOLLOW`` — no lstat-then-open TOCTOU
+gap) and refuses anything that isn't a regular file. This matters because
+this reader tails service-owned log directories (e.g. ClamAV's, #2): if that
+service account is compromised, an attacker who can write to its log
+directory could otherwise replace the log file with a symlink to
+``/etc/shadow`` or an SSH private key, and its contents would flow into
+normalized events, the UI, and AI sample context as if they were log lines —
+local-attacker-writable-dir → arbitrary-file-disclosure. A FIFO at that path
+is refused too (opening one for blocking read would hang the reader
+forever). Distros that legitimately use a symlinked canonical log name need
+explicit opt-in: ``FileTailReader(path, follow_symlinks=True)``.
 """
 from __future__ import annotations
 
+import errno
 import logging
+import os
+import stat as stat_module
 from collections.abc import AsyncGenerator, AsyncIterator
 from pathlib import Path
 from typing import TextIO
@@ -51,13 +67,40 @@ from firewatch_sdk.localhost.errors import FileTailUnavailableError
 
 logger = logging.getLogger("firewatch.sdk.localhost.filetail")
 
+_SYMLINK_REFUSED_MSG = (
+    "{path} is a symlink; refusing to follow it by default. A compromised "
+    "process with write access to this directory could otherwise redirect "
+    "this reader to an arbitrary file (e.g. /etc/shadow or an SSH private "
+    "key), and its contents would flow into normalized events. If this log "
+    "path is a legitimate distro symlink convention, construct "
+    "FileTailReader(path, follow_symlinks=True) to opt in explicitly."
+)
+_NON_REGULAR_FILE_MSG = (
+    "{path} is not a regular file; refusing to tail it (a FIFO would block "
+    "forever; a device or socket is never a plain log file)."
+)
+
 
 class FileTailReader:
-    """Tails a single plain-text log file, surviving rename or truncate rotation."""
+    """Tails a single plain-text log file, surviving rename or truncate rotation.
 
-    def __init__(self, path: str | Path, *, encoding: str = "utf-8") -> None:
+    ``follow_symlinks`` (default ``False``, safe-by-default): when ``False``,
+    every open refuses a symlink at ``path`` — see the module docstring's
+    Security note. Set ``True`` only for a deliberately symlinked canonical
+    log name; the ultimate target is still required to be a regular file
+    either way.
+    """
+
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        encoding: str = "utf-8",
+        follow_symlinks: bool = False,
+    ) -> None:
         self._path = Path(path)
         self._encoding = encoding
+        self._follow_symlinks = follow_symlinks
 
     async def read(self, start: str) -> AsyncGenerator[tuple[str, str], None]:
         """Drain every line currently available after ``start``, then return.
@@ -84,11 +127,16 @@ class FileTailReader:
         ``_check_rotation``), then returns. It never waits for more lines to
         be appended; the caller's poll loop provides cadence.
 
-        Never raises out of the loop once draining begins: a transient
-        stat/read error (e.g. the file briefly missing mid-rotation) is
-        logged and treated as "nothing more available right now" rather than
-        propagated. Cancellation (or explicit early ``aclose()``) closes the
-        open file handle promptly.
+        Never raises out of the loop once draining begins for a TRANSIENT
+        failure: a stat/read error (e.g. the file briefly missing
+        mid-rotation) is logged and treated as "nothing more available right
+        now" rather than propagated. The one exception is security-relevant,
+        not transient: if a rotation-triggered reopen finds a symlink or a
+        non-regular file at ``path`` (see the module docstring's Security
+        note), that raises ``FileTailUnavailableError`` even after lines have
+        already been yielded this cycle — this is a hard stop, not a hiccup
+        to retry past. Cancellation (or explicit early ``aclose()``) closes
+        the open file handle promptly.
         """
         if start == "tail":
             raise ValueError(
@@ -109,10 +157,12 @@ class FileTailReader:
                 async for line, cursor in self._yield_available(fh, inode):
                     yield line, cursor
 
-                action, inode = self._check_rotation(fh, inode)
+                action, _ = self._check_rotation(fh, inode)
                 if action == "reopened":
                     fh.close()
-                    fh = self._path.open("r", encoding=self._encoding)
+                    # _safe_open, not a bare open() — refuses a symlink/
+                    # non-regular file atomically (see module docstring).
+                    fh, inode = self._safe_open(self._path)
                     continue  # drain the new file immediately
                 if action == "truncated":
                     continue  # already seeked to 0; drain immediately
@@ -160,17 +210,13 @@ class FileTailReader:
         expected state), a target file that does not exist AT ALL is treated
         as a genuine "cannot run at all" precondition, consistent with
         ``read()``'s own typed-error contract for an unreadable path: raises
-        ``FileTailUnavailableError`` rather than returning a sentinel.
+        ``FileTailUnavailableError`` rather than returning a sentinel. The
+        same is true of a symlink or non-regular file at ``path`` — see the
+        module docstring's Security note.
         """
         if start != "tail":
             return start  # "head", or an already-concrete cursor — unchanged
-        try:
-            st = self._path.stat()
-        except OSError as exc:
-            raise FileTailUnavailableError(
-                f"Cannot resolve tail position for {self._path}: {exc}. "
-                "Check the path exists and is readable by this user."
-            ) from exc
+        st = self._stat_checked(self._path)
         return f"{st.st_ino}:{st.st_size}"
 
     def _open_at_start(self, start: str) -> tuple[TextIO, int]:
@@ -180,19 +226,80 @@ class FileTailReader:
         rejects ``"tail"`` with ``ValueError`` before ever calling this; the
         caller is required to resolve it via ``resolve_start()`` up front.
         """
-        try:
-            fh = self._path.open("r", encoding=self._encoding)
-        except OSError as exc:
-            raise FileTailUnavailableError(
-                f"Cannot open {self._path} for tailing: {exc}. Check the path "
-                "exists and is readable by this user."
-            ) from exc
-
-        inode = self._path.stat().st_ino
+        fh, inode = self._safe_open(self._path)
         if start != "head":
             offset = self._resume_offset(start, current_inode=inode)
             fh.seek(offset)
         return fh, inode
+
+    # ------------------------------------------------------------------ #
+    # Symlink-safe filesystem access (Security — see module docstring)
+    # ------------------------------------------------------------------ #
+
+    def _stat_checked(self, path: Path) -> os.stat_result:
+        """``lstat()`` (never follows) and classify ``path``, WITHOUT opening it.
+
+        Used where only a stat is needed (``resolve_start()``, rotation
+        detection) — the actual read path is separately hardened by
+        ``_safe_open`` with an atomic ``O_NOFOLLOW`` open, so there is no
+        TOCTOU gap between "checked" and "read" for the data that matters.
+        """
+        try:
+            st = path.lstat()
+        except OSError as exc:
+            raise FileTailUnavailableError(
+                f"Cannot stat {path}: {exc}. Check the path exists and is "
+                "readable by this user."
+            ) from exc
+
+        if stat_module.S_ISLNK(st.st_mode):
+            if not self._follow_symlinks:
+                raise FileTailUnavailableError(_SYMLINK_REFUSED_MSG.format(path=path))
+            try:
+                st = path.stat()  # explicit opt-in: follow to the target
+            except OSError as exc:
+                raise FileTailUnavailableError(
+                    f"Cannot stat symlink target of {path}: {exc}."
+                ) from exc
+
+        if not stat_module.S_ISREG(st.st_mode):
+            raise FileTailUnavailableError(_NON_REGULAR_FILE_MSG.format(path=path))
+        return st
+
+    def _safe_open(self, path: Path) -> tuple[TextIO, int]:
+        """Open ``path`` for reading, atomically refusing a symlink (unless
+        ``follow_symlinks``) and any non-regular file.
+
+        ``O_NOFOLLOW`` makes the kernel itself refuse a symlink in the same
+        syscall as the open — no separate lstat()-then-open() race an
+        attacker could win by swapping the file in between. ``O_NONBLOCK``
+        additionally prevents the open() call itself from hanging forever if
+        ``path`` is a FIFO with no writer yet; the FIFO is then rejected by
+        the ``S_ISREG`` check below rather than blocking the caller.
+        """
+        flags = os.O_RDONLY | os.O_NONBLOCK
+        if not self._follow_symlinks:
+            flags |= os.O_NOFOLLOW
+        try:
+            fd = os.open(path, flags)
+        except OSError as exc:
+            if exc.errno == errno.ELOOP:
+                raise FileTailUnavailableError(
+                    _SYMLINK_REFUSED_MSG.format(path=path)
+                ) from exc
+            raise FileTailUnavailableError(
+                f"Cannot open {path} for tailing: {exc}. Check the path "
+                "exists and is readable by this user."
+            ) from exc
+
+        try:
+            st = os.fstat(fd)
+            if not stat_module.S_ISREG(st.st_mode):
+                raise FileTailUnavailableError(_NON_REGULAR_FILE_MSG.format(path=path))
+            return os.fdopen(fd, "r", encoding=self._encoding), st.st_ino
+        except BaseException:
+            os.close(fd)
+            raise
 
     @staticmethod
     def _resume_offset(cursor: str, *, current_inode: int) -> int:
@@ -238,15 +345,28 @@ class FileTailReader:
         """Detect rotation once the current file has been fully drained.
 
         Returns ``(action, inode)`` where ``action`` is ``"reopened"``
-        (rename/recreate — caller must close ``fh`` and open a fresh handle),
-        ``"truncated"`` (copytruncate — already seeked ``fh`` to 0, same
-        handle), or ``"none"``. Only meaningful once ``_yield_available`` has
-        found nothing more at the current position — draining first (in
+        (rename/recreate — caller must close ``fh`` and open a fresh handle
+        via ``_safe_open``, never a bare ``open()``), ``"truncated"``
+        (copytruncate — already seeked ``fh`` to 0, same handle), or
+        ``"none"``. Only meaningful once ``_yield_available`` has found
+        nothing more at the current position — draining first (in
         ``read()``) means a rename rotation never skips content that was
         still unread in the old (now-renamed) file.
+
+        Matches ``_safe_open``'s own inode basis: ``lstat()`` (never follows)
+        when symlinks are refused, so a path that BECAME a symlink shows up
+        as a changed inode here too (triggering "reopened", which
+        ``_safe_open`` then atomically refuses) — or a following ``stat()``
+        when ``follow_symlinks`` is set, since ``_safe_open`` tracks the
+        TARGET's inode in that mode and comparing against the symlink's own
+        (constant, but different) inode here would misdetect "reopened"
+        forever, reopening in an infinite loop even though nothing changed.
+        The returned ``"reopened"`` inode is advisory only either way — the
+        real symlink/non-regular-file enforcement happens atomically in
+        ``_safe_open`` when the caller actually reopens.
         """
         try:
-            st = self._path.stat()
+            st = self._path.stat() if self._follow_symlinks else self._path.lstat()
         except OSError as exc:
             logger.debug(
                 "FileTailReader: stat failed for %s (%s); retrying next poll",

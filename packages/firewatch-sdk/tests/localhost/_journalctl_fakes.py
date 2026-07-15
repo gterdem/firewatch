@@ -1,24 +1,56 @@
 """Fixture ``journalctl -o json`` subprocess doubles — no live journald in CI.
 
-``FakeProcess`` stands in for ``asyncio.subprocess.Process``: an async-iterable
-``stdout`` (fixture journal lines) plus ``.terminate()``/``.kill()``/``.wait()``
-tracking so cancellation tests can assert the subprocess was never orphaned.
+``FakeProcess`` stands in for ``asyncio.subprocess.Process``: a ``.readline()``
+(+ async-iterable) double for ``stdout`` (fixture journal lines, optionally
+including an ``OVERSIZED`` marker that raises ``ValueError`` the way real
+``asyncio.StreamReader.readline()`` does past its line-length limit) plus
+``.terminate()``/``.kill()``/``.wait()`` tracking so cancellation tests can
+assert the subprocess was never orphaned.
 """
 from __future__ import annotations
 
 import asyncio
 from collections.abc import Sequence
+from typing import Union
+
+
+class _Oversized:
+    """Marker for an entry in ``stdout_lines`` meaning: raise ``ValueError``
+    here (simulating ``StreamReader.readline()`` past its line-length limit)
+    instead of returning a line."""
+
+
+OVERSIZED = _Oversized()
+
+_Line = Union[bytes, _Oversized]
 
 
 class _LineStream:
-    """Async-iterable + ``.read()`` double for ``proc.stdout`` / ``proc.stderr``."""
+    """``.readline()`` (+ async-iterable) + ``.read()`` double for
+    ``proc.stdout`` / ``proc.stderr``."""
 
     def __init__(
-        self, lines: Sequence[bytes], *, cancel_after: int | None = None
+        self, lines: Sequence[_Line], *, cancel_after: int | None = None
     ) -> None:
-        self._lines = list(lines)
+        self._lines: list[_Line] = list(lines)
         self._cancel_after = cancel_after
         self._yielded = 0
+
+    async def readline(self) -> bytes:
+        """Mirrors ``asyncio.StreamReader.readline()``: returns ``b""`` at
+        EOF, raises ``ValueError`` at an ``OVERSIZED`` marker (the fixture
+        equivalent of a line over the real limit)."""
+        if self._cancel_after is not None and self._yielded >= self._cancel_after:
+            raise asyncio.CancelledError()
+        if not self._lines:
+            return b""
+        item = self._lines.pop(0)
+        if isinstance(item, _Oversized):
+            raise ValueError(
+                "Separator is found, but chunk is longer than the limit"
+            )
+        self._yielded += 1
+        return item
 
     def __aiter__(self) -> "_LineStream":
         return self
@@ -28,13 +60,18 @@ class _LineStream:
             raise asyncio.CancelledError()
         if not self._lines:
             raise StopAsyncIteration
+        item = self._lines.pop(0)
+        if isinstance(item, _Oversized):
+            raise ValueError(
+                "Separator is found, but chunk is longer than the limit"
+            )
         self._yielded += 1
-        return self._lines.pop(0)
+        return item
 
-    async def read(self) -> bytes:
-        data = b"".join(self._lines)
+    async def read(self, n: int = -1) -> bytes:
+        data = b"".join(line for line in self._lines if isinstance(line, bytes))
         self._lines = []
-        return data
+        return data if n < 0 else data[:n]
 
 
 class FakeProcess:
@@ -43,7 +80,7 @@ class FakeProcess:
     def __init__(
         self,
         *,
-        stdout_lines: Sequence[bytes] = (),
+        stdout_lines: Sequence[_Line] = (),
         stderr: bytes = b"",
         returncode: int = 0,
         cancel_after: int | None = None,

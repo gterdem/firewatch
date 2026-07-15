@@ -282,6 +282,97 @@ class TestRotation:
 
 
 # --------------------------------------------------------------------------- #
+# Security review Finding 2 (HIGH) — refuse to follow a symlink at ``path``,
+# and refuse anything that isn't a regular file (a FIFO would block forever).
+#
+# Scenario this closes: a service-owned log directory (exactly what #2's
+# ClamAV plugin will point this at) whose service account gets compromised —
+# the attacker removes the log file and drops a symlink at the same path
+# pointing at /etc/shadow or an SSH private key. Without this check, the next
+# rotation-triggered reopen would follow it and yield the target's contents
+# as log lines, flowing into normalized events, the UI, and AI sample
+# context — local-attacker-writable-dir -> arbitrary-file-disclosure.
+# --------------------------------------------------------------------------- #
+
+
+class TestSymlinkSafety:
+    async def test_initial_open_refuses_symlink(self, tmp_path: Path) -> None:
+        secret = tmp_path / "secret.txt"
+        secret.write_text("super-secret-content\n")
+        link = tmp_path / "auth.log"
+        link.symlink_to(secret)
+
+        reader = FileTailReader(link)
+
+        with pytest.raises(FileTailUnavailableError, match="symlink"):
+            await reader.read("head").__anext__()
+
+    async def test_resolve_start_refuses_symlink(self, tmp_path: Path) -> None:
+        """The stat-side check (resolve_start()) refuses just as the
+        open-side check (read()) does — a caller that only ever calls
+        resolve_start("tail") (e.g. on a still-quiet first run) must not
+        silently accept a symlinked target either."""
+        secret = tmp_path / "secret.txt"
+        secret.write_text("super-secret-content\n")
+        link = tmp_path / "auth.log"
+        link.symlink_to(secret)
+
+        reader = FileTailReader(link)
+
+        with pytest.raises(FileTailUnavailableError, match="symlink"):
+            await reader.resolve_start("tail")
+
+    async def test_rotation_reopen_refuses_symlink_swap(self, tmp_path: Path) -> None:
+        """The exact attack scenario: a legitimate file is rotated away and
+        replaced by a symlink to a sensitive file. The rotation-triggered
+        reopen must refuse it — never silently yield the target's contents
+        as log lines — even though earlier (legitimate) lines were already
+        yielded this same read() call."""
+        path = tmp_path / "auth.log"
+        path.write_text("line1\n")
+        secret = tmp_path / "shadow-like-secret"
+        secret.write_text("root:$6$hunter2$...\n")
+        reader = FileTailReader(path)
+
+        agen = reader.read("head")
+        first = await agen.__anext__()
+        assert first[0] == "line1"
+
+        # Attacker: remove the real file, drop a symlink at the same path.
+        os.remove(path)
+        path.symlink_to(secret)
+
+        with pytest.raises(FileTailUnavailableError, match="symlink"):
+            await agen.__anext__()
+        await agen.aclose()
+
+    async def test_fifo_is_refused_not_a_hang(self, tmp_path: Path) -> None:
+        """A FIFO at the path is refused (never silently followed like a
+        regular file, and never blocks forever waiting for a writer)."""
+        fifo_path = tmp_path / "auth.log"
+        os.mkfifo(fifo_path)
+        reader = FileTailReader(fifo_path)
+
+        with pytest.raises(FileTailUnavailableError, match="not a regular file"):
+            await asyncio.wait_for(reader.read("head").__anext__(), timeout=2.0)
+
+    async def test_follow_symlinks_opt_in_reads_the_target(
+        self, tmp_path: Path
+    ) -> None:
+        """Explicit opt-in (a legitimate distro symlinked canonical log
+        name) does read through the symlink, as documented."""
+        target = tmp_path / "current.log"
+        target.write_text("line1\nline2\n")
+        link = tmp_path / "auth.log"
+        link.symlink_to(target)
+
+        reader = FileTailReader(link, follow_symlinks=True)
+        results = await _collect(reader.read("head"))
+
+        assert [line for line, _ in results] == ["line1", "line2"]
+
+
+# --------------------------------------------------------------------------- #
 # EARS-6 — cancellation: no leaked file handle
 # --------------------------------------------------------------------------- #
 
@@ -301,15 +392,18 @@ class TestCancellation:
         path.write_text("line1\nline2\nline3\n")
         reader = FileTailReader(path)
 
+        # FileTailReader opens via os.open()/os.fdopen() (not Path.open()) so
+        # the symlink refusal in _safe_open can be atomic (O_NOFOLLOW) — spy
+        # on fdopen to capture the resulting file object.
         opened: list[IO[str]] = []
-        orig_open = Path.open
+        orig_fdopen = os.fdopen
 
-        def _spy_open(self: Path, *args: object, **kwargs: object) -> IO[str]:
-            fh = orig_open(self, *args, **kwargs)  # type: ignore[arg-type]
+        def _spy_fdopen(fd: int, *args: object, **kwargs: object) -> IO[str]:
+            fh = orig_fdopen(fd, *args, **kwargs)  # type: ignore[arg-type]
             opened.append(fh)
             return fh
 
-        monkeypatch.setattr(Path, "open", _spy_open)
+        monkeypatch.setattr(os, "fdopen", _spy_fdopen)
 
         async def _consume() -> None:
             async with contextlib.aclosing(reader.read("head")) as records:

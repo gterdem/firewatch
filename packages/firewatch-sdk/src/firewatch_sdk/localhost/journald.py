@@ -25,7 +25,8 @@ position, even on a zero-record cycle. Two-call idiom, enforced structurally
     if pos != stored:
         await ctx.kv.put(NS, "cursor", pos)               # persist the pivot BEFORE draining
     async for record, cursor in reader.read(pos):
-        yield raw_event(record)
+        if record is not None:                            # None: cursor-only advancement
+            yield raw_event(record)                       # (an oversized entry was skipped)
         last = cursor
     await ctx.kv.put(NS, "cursor", last)                  # once per cycle, at drain end
 
@@ -45,6 +46,11 @@ Contract hard rules (mirrors PLUGIN_CONTRACT.md's PullSource.collect()):
     non-systemd host) raises ``JournaldUnavailableError`` — never a bare
     subprocess traceback — so a consuming plugin's ``collect()`` can catch it
     and continue (matching ``firewatch_suricata.collector.SSHConnectionError``).
+  - An oversized entry (over ``_MAX_LINE_BYTES``) is logged and skipped, never
+    a bare ``ValueError`` out of the loop — see ``_iter_lines``. Journal
+    content is attacker-influenceable (request/response bodies, crafted
+    usernames, verbose tracebacks from a compromised service), so this is a
+    real poison-pill DoS surface, not a theoretical one.
 """
 from __future__ import annotations
 
@@ -61,6 +67,21 @@ logger = logging.getLogger("firewatch.sdk.localhost.journald")
 _SHOW_CURSOR_PREFIX = "-- cursor: "
 _CURSOR_FIELD = "__CURSOR"
 
+# asyncio.StreamReader.readline() defaults to a 64 KiB line limit and raises a
+# bare ValueError past it. journalctl -o json emits one record per line, and
+# journal content is attacker-influenceable (a network-facing service logging
+# request/response bodies, a crafted username, an embedded blob, a verbose
+# traceback from a compromised service can all exceed 64 KiB easily) — so the
+# default is a poison-pill DoS, not a theoretical edge case. 16 MiB is
+# generous headroom for a single log line while still bounding worst-case
+# per-line memory.
+_MAX_LINE_BYTES = 16 * 1024 * 1024
+
+# Cap for a single journalctl stderr read — its error text is always a short,
+# one-line diagnostic (never attacker-controlled log content), but reading it
+# unbounded is needless exposure; capped for consistency with _MAX_LINE_BYTES.
+_MAX_STDERR_BYTES = 64 * 1024
+
 # RFC 5424 §6.2.1 Table 7 — syslog facility keyword -> numeric code. journalctl
 # matches SYSLOG_FACILITY as the raw numeric string, so facility *names* (the
 # ergonomic, documented-example form, e.g. "authpriv") are translated here.
@@ -74,7 +95,7 @@ FACILITY_NAME_TO_NUMBER: dict[str, str] = {
 
 
 async def _create_subprocess_exec(
-    *argv: str, stdout: int, stderr: int
+    *argv: str, stdout: int, stderr: int, limit: int = _MAX_LINE_BYTES
 ) -> asyncio.subprocess.Process:
     """Thin wrapper around ``asyncio.create_subprocess_exec``.
 
@@ -83,8 +104,13 @@ async def _create_subprocess_exec(
     "_create_subprocess_exec", fake)`` and supply fixture journal output — no
     live journald needed in CI (mirrors
     ``firewatch_suricata.collector``'s module-level ``asyncssh`` patch point).
+
+    ``limit`` is forwarded to the underlying ``StreamReader`` (default
+    ``_MAX_LINE_BYTES``, not asyncio's 64 KiB default) — see ``_MAX_LINE_BYTES``.
     """
-    return await asyncio.create_subprocess_exec(*argv, stdout=stdout, stderr=stderr)
+    return await asyncio.create_subprocess_exec(
+        *argv, stdout=stdout, stderr=stderr, limit=limit
+    )
 
 
 class JournaldReader:
@@ -96,6 +122,15 @@ class JournaldReader:
     match, names or raw numeric strings, e.g. ``"authpriv"``), and ``units``
     (``-u``, systemd unit name). Multiple values within one filter kind are
     OR'd (journalctl repeats-the-flag semantics).
+
+    ``journalctl_bin`` (default ``"journalctl"``, PATH-resolved — safe today:
+    no shell is used anywhere, argv-element binding means a value like
+    ``"--output=cat"`` is passed as a literal argument rather than
+    reinterpreted as a flag, and the operator is trusted per ADR-0015). If
+    this field is ever surfaced through a schema-driven Settings card (#2/#3),
+    it MUST be constrained to an absolute path there — a bare, PATH-resolved
+    name accepted from operator-facing config is a PATH-hijack surface for an
+    operator who never intended to change the binary.
     """
 
     def __init__(
@@ -111,7 +146,9 @@ class JournaldReader:
         self._units = tuple(units)
         self._journalctl_bin = journalctl_bin
 
-    async def read(self, start: str) -> AsyncGenerator[tuple[dict[str, Any], str], None]:
+    async def read(
+        self, start: str
+    ) -> AsyncGenerator[tuple[dict[str, Any] | None, str], None]:
         """Yield ``(record, cursor)`` pairs positioned after ``start``.
 
         ``start`` MUST be one of (no default — the caller always states one):
@@ -128,6 +165,16 @@ class JournaldReader:
         exists to prevent: call ``resolve_start("tail")`` first, persist its
         result, then pass THAT to ``read()`` — see ``resolve_start()``'s
         docstring for the full scenario.
+
+        ``record`` MAY be ``None``: this signals a cursor advancement with no
+        corresponding record — the ONLY case today is an oversized journal
+        entry (over ``_MAX_LINE_BYTES``) that could not be read at all, with
+        nothing else readable this cycle either. The caller MUST still
+        persist ``cursor`` in this case (that's the whole point — otherwise
+        the same unreadable entry is re-served, and re-skipped, forever), but
+        has no record to forward as an event. The documented caller idiom
+        (module docstring) already covers this: guard the forwarding call
+        with ``if record is not None``, and always track ``cursor``.
         """
         if start == "tail":
             raise ValueError(
@@ -206,9 +253,10 @@ class JournaldReader:
         argv = self._build_discovery_argv()
         proc = await self._spawn(argv)
         try:
-            assert proc.stdout is not None
             cursor: str | None = None
-            async for raw_line in proc.stdout:
+            async for raw_line in self._iter_lines(proc):
+                if raw_line is None:
+                    continue  # an oversized line was skipped — see _iter_lines
                 text = raw_line.decode("utf-8", errors="replace").rstrip("\n")
                 if text.startswith(_SHOW_CURSOR_PREFIX):
                     cursor = text[len(_SHOW_CURSOR_PREFIX):].strip()
@@ -226,14 +274,19 @@ class JournaldReader:
 
     async def _stream(
         self, after_cursor: str | None
-    ) -> AsyncIterator[tuple[dict[str, Any], str]]:
+    ) -> AsyncIterator[tuple[dict[str, Any] | None, str]]:
+        """Yield ``(record, cursor)`` pairs — see ``read()`` for ``record``'s
+        ``None`` case (a cursor advancement with no corresponding record)."""
         extra = ["--after-cursor", after_cursor] if after_cursor is not None else []
         argv = self._build_argv(extra=extra)
         proc = await self._spawn(argv)
         yielded_any = False
+        encountered_oversized = False
         try:
-            assert proc.stdout is not None
-            async for raw_line in proc.stdout:
+            async for raw_line in self._iter_lines(proc):
+                if raw_line is None:
+                    encountered_oversized = True
+                    continue  # see _iter_lines — already logged
                 record = self._parse_line(raw_line)
                 if record is None:
                     continue
@@ -258,6 +311,92 @@ class JournaldReader:
                 )
         finally:
             await self._terminate(proc)
+
+        if encountered_oversized and not yielded_any:
+            # An oversized entry was skipped and NOTHING else was readable
+            # this cycle either. Without this, the caller's persisted cursor
+            # would never move past it — the same oversized entry would be
+            # re-served (and re-skipped) on every future poll, forever (a
+            # crash traded for an infinite re-read of the same line). The
+            # oversized entry's own cursor is unobtainable from its
+            # (unreadable) JSON body, so recover a resume point via
+            # journalctl's own --show-cursor accounting instead, which
+            # doesn't care about payload size — see _peek_cursor_after.
+            skip_cursor = await self._peek_cursor_after(after_cursor)
+            if skip_cursor is not None:
+                yield None, skip_cursor
+
+    async def _peek_cursor_after(self, after_cursor: str | None) -> str | None:
+        """Return the cursor of the single next matching entry after
+        ``after_cursor`` (this reader's own filters applied), or None if
+        there is nothing there.
+
+        Used only to recover forward progress after an oversized entry: even
+        when that entry's own JSON body could never be read (the SAME
+        ``ValueError`` recovery in ``_iter_lines`` applies here too), its
+        ``--show-cursor`` trailer reflects journalctl's own internal
+        accounting of what it processed — independent of the entry's size —
+        so this still yields the correct cursor to resume after it.
+        """
+        extra = ["-n", "1", "--show-cursor"]
+        if after_cursor is not None:
+            extra += ["--after-cursor", after_cursor]
+        argv = self._build_argv(extra=extra)
+        proc = await self._spawn(argv)
+        try:
+            cursor: str | None = None
+            async for raw_line in self._iter_lines(proc):
+                if raw_line is None:
+                    continue
+                text = raw_line.decode("utf-8", errors="replace").rstrip("\n")
+                if text.startswith(_SHOW_CURSOR_PREFIX):
+                    cursor = text[len(_SHOW_CURSOR_PREFIX):].strip()
+            await proc.wait()
+            return cursor
+        finally:
+            await self._terminate(proc)
+
+    @staticmethod
+    async def _iter_lines(
+        proc: asyncio.subprocess.Process,
+    ) -> AsyncIterator[bytes | None]:
+        """Drive ``proc.stdout.readline()`` manually, recovering from
+        oversized lines instead of letting ``ValueError`` propagate.
+
+        Yields each line's raw bytes, or ``None`` to signal "a line was
+        skipped here" (distinct from exhaustion, which ends the generator).
+
+        A line over ``_MAX_LINE_BYTES`` makes ``StreamReader.readline()``
+        raise a bare ``ValueError`` (``asyncio.streams.StreamReader.readline``
+        converts the internal ``LimitOverrunError``). Per that method's own
+        contract, when the line's terminating newline was found, the whole
+        oversized line (through the newline) has already been removed from
+        the internal buffer — so this does NOT re-read the same line forever;
+        the next ``readline()`` call correctly returns whatever comes after
+        it. (If the newline had not yet been seen, the buffer is cleared
+        instead and refills from the pipe — also never re-serving the same
+        bytes.) Mirrors the ``json.JSONDecodeError`` log-and-skip precedent
+        already in ``_parse_line``, one level lower (a line that can't even
+        be read at all, vs. one that reads but doesn't parse).
+        """
+        assert proc.stdout is not None
+        while True:
+            try:
+                raw_line = await proc.stdout.readline()
+            except ValueError as exc:
+                logger.error(
+                    "JournaldReader: skipping oversized journal record "
+                    "(over %d bytes) — journal content is "
+                    "attacker-influenceable (request/response bodies, "
+                    "crafted usernames, verbose tracebacks); raise "
+                    "_MAX_LINE_BYTES or investigate the source: %s",
+                    _MAX_LINE_BYTES, exc,
+                )
+                yield None
+                continue
+            if not raw_line:
+                return
+            yield raw_line
 
     # ------------------------------------------------------------------ #
     # Line parsing
@@ -326,9 +465,15 @@ class JournaldReader:
 
     @staticmethod
     async def _read_stderr(proc: asyncio.subprocess.Process) -> str:
+        """Read journalctl's stderr, capped at ``_MAX_STDERR_BYTES``.
+
+        journalctl's own error text is always a short, one-line diagnostic —
+        never attacker-controlled log content — but reading it unbounded is
+        needless exposure; capped for consistency with the stdout line limit.
+        """
         if proc.stderr is None:
             return ""
-        data = await proc.stderr.read()
+        data = await proc.stderr.read(_MAX_STDERR_BYTES)
         return data.decode("utf-8", errors="replace")
 
     @staticmethod

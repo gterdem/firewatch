@@ -16,8 +16,10 @@ every test here monkeypatches to a ``FakeProcess`` fixture double.
 """
 from __future__ import annotations
 
+import asyncio
 import json
-from typing import Any
+from collections.abc import AsyncIterator
+from typing import Any, TypeVar
 
 import pytest
 
@@ -25,7 +27,13 @@ from firewatch_sdk.localhost import JournaldUnavailableError
 from firewatch_sdk.localhost.errors import LocalReaderError
 from firewatch_sdk.localhost.journald import JournaldReader
 
-from _journalctl_fakes import FakeProcess, make_spawn
+from _journalctl_fakes import OVERSIZED, FakeProcess, make_spawn
+
+_T = TypeVar("_T")
+
+
+async def _collect(agen: AsyncIterator[_T]) -> list[_T]:
+    return [item async for item in agen]
 
 
 def _record(cursor: str, **fields: Any) -> dict[str, Any]:
@@ -408,9 +416,83 @@ class TestCancellation:
         monkeypatch.setattr("firewatch_sdk.localhost.journald._create_subprocess_exec", spawn)
 
         reader = JournaldReader()
-        import asyncio
 
         with pytest.raises(asyncio.CancelledError):
             _ = [r async for r in reader.read("head")]
 
         assert proc.terminate_called is True
+
+
+# --------------------------------------------------------------------------- #
+# Security review Finding 1 (BLOCKING) — oversized journal record must never
+# stall the source. asyncio.StreamReader.readline() raises a bare ValueError
+# past its 64 KiB default limit; journal content is attacker-influenceable,
+# so an oversized entry is a poison-pill DoS if unhandled: the entry's cursor
+# is never obtained (the exception fires before it can be parsed), so the
+# persisted cursor stays put and the SAME entry is re-served — and would
+# re-raise — on every future poll, forever.
+# --------------------------------------------------------------------------- #
+
+
+class TestOversizedRecordRecovery:
+    async def test_oversized_lines_skipped_good_records_survive_and_terminate(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An over-limit line before AND after a good record: both good
+        records still arrive, and the generator terminates (asserted via
+        wait_for, not just by relying on the test eventually finishing)."""
+        proc = FakeProcess(
+            stdout_lines=[OVERSIZED, _line("c1"), OVERSIZED, _line("c2")]
+        )
+        spawn = make_spawn(proc)
+        monkeypatch.setattr("firewatch_sdk.localhost.journald._create_subprocess_exec", spawn)
+
+        reader = JournaldReader()
+        results = await asyncio.wait_for(_collect(reader.read("head")), timeout=2.0)
+
+        assert [cursor for _, cursor in results] == ["c1", "c2"]
+
+    async def test_oversized_only_record_advances_cursor_via_peek(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The poison-pill scenario: the ONLY new entry this cycle is
+        oversized — nothing else is readable. Without recovery, the caller
+        would have nothing to persist and the SAME entry would be re-served
+        (and re-skipped) on every future poll, forever. The synthetic
+        ``(None, cursor)`` yield gives the caller something to persist that
+        skips past it, recovered via journalctl's own --show-cursor
+        accounting (independent of the entry's unreadable size)."""
+        main_stream = FakeProcess(stdout_lines=[OVERSIZED])
+        peek = FakeProcess(stdout_lines=[OVERSIZED, b"-- cursor: s=after-poison\n"])
+        spawn = _SequencedSpawn([main_stream, peek])
+        monkeypatch.setattr("firewatch_sdk.localhost.journald._create_subprocess_exec", spawn)
+
+        reader = JournaldReader()
+        results = await asyncio.wait_for(
+            _collect(reader.read("s=before-poison")), timeout=2.0
+        )
+
+        assert results == [(None, "s=after-poison")]
+        assert len(spawn.calls) == 2
+        peek_argv = spawn.calls[1]
+        assert "-n" in peek_argv
+        assert peek_argv[peek_argv.index("-n") + 1] == "1"
+        assert "--show-cursor" in peek_argv
+        assert "s=before-poison" in peek_argv
+
+    async def test_oversized_only_record_with_no_recoverable_peek_yields_nothing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If even the recovery peek finds nothing (e.g. the entry vanished
+        by the time we looked, or the journal was rotated away underneath
+        us), read() must still terminate cleanly rather than hang or raise —
+        the caller simply gets an empty cycle, same as a quiet poll."""
+        main_stream = FakeProcess(stdout_lines=[OVERSIZED])
+        peek = FakeProcess(stdout_lines=[])
+        spawn = _SequencedSpawn([main_stream, peek])
+        monkeypatch.setattr("firewatch_sdk.localhost.journald._create_subprocess_exec", spawn)
+
+        reader = JournaldReader()
+        results = await asyncio.wait_for(_collect(reader.read("head")), timeout=2.0)
+
+        assert results == []

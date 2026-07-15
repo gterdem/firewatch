@@ -38,7 +38,7 @@ Test IPs use RFC 5737 documentation ranges only (192.0.2.0/24, 198.51.100.0/24,
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -49,6 +49,13 @@ from _fakes import FakeStore, FakeAIEngine, make_event
 
 T0 = datetime(2026, 6, 3, 12, 0, 0, tzinfo=timezone.utc)
 IP = "203.0.113.10"
+
+# Issue #52 (ADR-0070 D4): pipeline.analyze_ip now windows the events handed to
+# decide() to a trailing W_STATE slice measured from "now". TestPipelineEscalation
+# Wiring below builds events at (or near) T0 via make_event()'s default timestamp,
+# so it injects a synthetic clock fixed shortly after T0 — well inside W_STATE —
+# instead of relying on the real wall clock (no wall-clock flakiness).
+_NOW = T0 + timedelta(hours=1)
 
 
 # ---------------------------------------------------------------------------
@@ -503,7 +510,7 @@ class TestPipelineEscalationWiring:
     def _run(self, events: list[SecurityEvent]) -> ThreatScore:
         from firewatch_core.pipeline import Pipeline
         store = FakeStore(events)
-        pipeline = Pipeline(store=store, ai_engine=FakeAIEngine())
+        pipeline = Pipeline(store=store, ai_engine=FakeAIEngine(), clock=lambda: _NOW)
         return asyncio.run(pipeline.analyze_ip(IP, use_ai=False))
 
     def test_analyze_ip_alert_has_escalation(self):

@@ -50,6 +50,13 @@ from _fakes import FakeAIEngine, FakeStore, make_event
 # ---------------------------------------------------------------------------
 
 IP = "203.0.113.77"
+
+# Issue #52 (ADR-0070 D4): analyze_ip_detailed now windows run_rules to a
+# trailing W_STATE slice measured from "now". _sqli_events() below uses
+# make_event()'s default timestamp (_fakes.py: 2026-06-03T12:00:00Z), so this
+# synthetic clock is fixed 1h after it — well inside W_STATE — instead of the
+# real wall clock (no wall-clock flakiness).
+_CLOCK = lambda: datetime(2026, 6, 3, 13, 0, 0, tzinfo=timezone.utc)  # noqa: E731
 IP2 = "198.51.100.42"
 
 _VALID_AI_RESULT: dict[str, Any] = {
@@ -120,7 +127,7 @@ async def test_ai_true_offline_returns_unavailable_status() -> None:
     """
     offline_ai = _OfflineAIEngine()
     store: EventStore = FakeStore(_sqli_events(3))
-    result = await Pipeline(store, offline_ai).analyze_ip_detailed(  # type: ignore[arg-type]
+    result = await Pipeline(store, offline_ai, clock=_CLOCK).analyze_ip_detailed(  # type: ignore[arg-type]
         IP, include_ai=True
     )
     assert result.get("ai_status") == "unavailable", (
@@ -137,7 +144,7 @@ async def test_ai_true_offline_returns_rules_only_result() -> None:
     """
     offline_ai = _OfflineAIEngine()
     store: EventStore = FakeStore(_sqli_events(3))
-    result = await Pipeline(store, offline_ai).analyze_ip_detailed(  # type: ignore[arg-type]
+    result = await Pipeline(store, offline_ai, clock=_CLOCK).analyze_ip_detailed(  # type: ignore[arg-type]
         IP, include_ai=True
     )
     for key in ("score", "threat_level", "total_events", "blocked_events",
@@ -156,7 +163,7 @@ async def test_ai_true_offline_rules_only_score() -> None:
     """
     offline_ai = _OfflineAIEngine()
     store: EventStore = FakeStore(_sqli_events(3))
-    result = await Pipeline(store, offline_ai).analyze_ip_detailed(  # type: ignore[arg-type]
+    result = await Pipeline(store, offline_ai, clock=_CLOCK).analyze_ip_detailed(  # type: ignore[arg-type]
         IP, include_ai=True
     )
     assert result["score"] == 30, (
@@ -175,10 +182,10 @@ async def test_ai_false_and_ai_true_offline_produce_same_score() -> None:
     store_offline: EventStore = FakeStore(_sqli_events(3))
 
     result_false = await Pipeline(
-        store_false, FakeAIEngine(result=_VALID_AI_RESULT)
+        store_false, FakeAIEngine(result=_VALID_AI_RESULT), clock=_CLOCK
     ).analyze_ip_detailed(IP, include_ai=False)
     result_offline = await Pipeline(
-        store_offline, offline_ai  # type: ignore[arg-type]
+        store_offline, offline_ai, clock=_CLOCK  # type: ignore[arg-type]
     ).analyze_ip_detailed(IP, include_ai=True)
 
     assert result_false["score"] == result_offline["score"], (
@@ -203,7 +210,7 @@ async def test_ai_true_offline_analyze_detailed_not_called() -> None:
     offline_ai = _OfflineAIEngine()
     store: EventStore = FakeStore(_sqli_events(3))
     # Must complete without calling analyze_detailed (which would raise)
-    result = await Pipeline(store, offline_ai).analyze_ip_detailed(  # type: ignore[arg-type]
+    result = await Pipeline(store, offline_ai, clock=_CLOCK).analyze_ip_detailed(  # type: ignore[arg-type]
         IP, include_ai=True
     )
     assert offline_ai.detailed_calls == 0, (
@@ -225,7 +232,7 @@ async def test_ai_true_available_calls_analyze_detailed_once() -> None:
     """
     fake_ai = FakeAIEngine(result=_VALID_AI_RESULT)
     store: EventStore = FakeStore(_sqli_events(3))
-    await Pipeline(store, fake_ai).analyze_ip_detailed(IP, include_ai=True)
+    await Pipeline(store, fake_ai, clock=_CLOCK).analyze_ip_detailed(IP, include_ai=True)
     assert fake_ai.detailed_calls == 1, (
         f"Expected exactly 1 AI call when engine available, got {fake_ai.detailed_calls}."
     )
@@ -235,7 +242,7 @@ async def test_ai_true_available_status_not_unavailable() -> None:
     """EARS-313-3: engine available → ai_status must NOT be 'unavailable' or 'skipped'."""
     fake_ai = FakeAIEngine(result=_VALID_AI_RESULT)
     store: EventStore = FakeStore(_sqli_events(3))
-    result = await Pipeline(store, fake_ai).analyze_ip_detailed(IP, include_ai=True)
+    result = await Pipeline(store, fake_ai, clock=_CLOCK).analyze_ip_detailed(IP, include_ai=True)
     assert result.get("ai_status") not in ("unavailable", "skipped"), (
         f"ai_status={result.get('ai_status')!r} when engine IS available "
         "— must not claim degraded state on the happy path (EARS-313-3)."
@@ -247,7 +254,7 @@ async def test_ai_true_available_score_boosted() -> None:
     ai_result = {**_VALID_AI_RESULT, "threat_level": "HIGH", "confidence": 0.85}
     fake_ai = FakeAIEngine(result=ai_result)
     store: EventStore = FakeStore(_sqli_events(3))
-    result = await Pipeline(store, fake_ai).analyze_ip_detailed(IP, include_ai=True)
+    result = await Pipeline(store, fake_ai, clock=_CLOCK).analyze_ip_detailed(IP, include_ai=True)
     # 30 (rules-only, #651) + 10 (HIGH boost at conf>0.7) = 40
     # Old math (removed): 43 + 10 = 53
     assert result["score"] == 40, (

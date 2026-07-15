@@ -33,6 +33,13 @@ IP = "203.0.113.42"
 
 T0 = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
 
+# Issue #52 (ADR-0070 D4): analyze_ip_detailed now windows run_rules to a
+# trailing W_STATE slice measured from "now". _sqli_events() below uses
+# make_event()'s default timestamp (_fakes.py: 2026-06-03T12:00:00Z), so this
+# synthetic clock is fixed 1h after it — well inside W_STATE — instead of the
+# real wall clock (no wall-clock flakiness).
+_CLOCK = lambda: datetime(2026, 6, 3, 13, 0, 0, tzinfo=timezone.utc)  # noqa: E731
+
 _VALID_AI_RESULT: dict[str, Any] = {
     "threat_level": "HIGH",
     "confidence": 0.85,
@@ -148,7 +155,7 @@ async def test_rule_descriptions_not_fetched_when_ai_disabled() -> None:
     """
     store = _TrackingStore(_sqli_events(3))
     ai = _DisabledAIEngine()
-    await Pipeline(store, ai).analyze_ip_detailed(IP)  # type: ignore[arg-type]
+    await Pipeline(store, ai, clock=_CLOCK).analyze_ip_detailed(IP)  # type: ignore[arg-type]
     assert store.rule_desc_calls == 0, (
         f"get_rule_descriptions called {store.rule_desc_calls} time(s) when AI is "
         "disabled — must be skipped (issue #102)."
@@ -162,7 +169,7 @@ async def test_rule_descriptions_not_fetched_when_ai_unavailable() -> None:
     """
     store = _TrackingStore(_sqli_events(3))
     ai: AIEngine = FakeAIEngine(fail=True)
-    await Pipeline(store, ai).analyze_ip_detailed(IP)
+    await Pipeline(store, ai, clock=_CLOCK).analyze_ip_detailed(IP)
     assert store.rule_desc_calls == 0, (
         f"get_rule_descriptions called {store.rule_desc_calls} time(s) when "
         "is_available()=False — must be skipped (issue #102)."
@@ -178,7 +185,7 @@ async def test_empty_samples_passed_to_ai_when_disabled() -> None:
     """EARS-B: with is_available()=False the samples list must be [] (no sampling work done)."""
     ai = _SamplesCapturingAI(available=False)
     store: EventStore = _TrackingStore(_sqli_events(5))  # type: ignore[assignment]
-    await Pipeline(store, ai).analyze_ip_detailed(IP)  # type: ignore[arg-type]
+    await Pipeline(store, ai, clock=_CLOCK).analyze_ip_detailed(IP)  # type: ignore[arg-type]
     assert ai.captured_samples == [], (
         f"Expected samples=[] when AI unavailable, got {ai.captured_samples!r} "
         "(issue #102: sampling must be skipped)."
@@ -196,7 +203,7 @@ async def test_output_contract_preserved_when_ai_disabled() -> None:
     """
     store: EventStore = _TrackingStore(_sqli_events(3))  # type: ignore[assignment]
     ai = _DisabledAIEngine()
-    result = await Pipeline(store, ai).analyze_ip_detailed(IP)  # type: ignore[arg-type]
+    result = await Pipeline(store, ai, clock=_CLOCK).analyze_ip_detailed(IP)  # type: ignore[arg-type]
     required = ("score", "threat_level", "total_events", "blocked_events",
                 "attack_types", "source_ip")
     for field in required:
@@ -213,7 +220,7 @@ async def test_rules_only_score_when_ai_disabled() -> None:
     """
     store: EventStore = _TrackingStore(_sqli_events(3))  # type: ignore[assignment]
     ai = _DisabledAIEngine()
-    result = await Pipeline(store, ai).analyze_ip_detailed(IP)  # type: ignore[arg-type]
+    result = await Pipeline(store, ai, clock=_CLOCK).analyze_ip_detailed(IP)  # type: ignore[arg-type]
     assert result["score"] == 30, (
         f"Expected rules-only score 30, got {result['score']} (EARS-C / issue #102, #651)."
     )
@@ -227,7 +234,7 @@ async def test_detections_present_when_ai_disabled() -> None:
     """
     store: EventStore = _TrackingStore(_sqli_events(3))  # type: ignore[assignment]
     ai = _DisabledAIEngine()
-    result = await Pipeline(store, ai).analyze_ip_detailed(IP)  # type: ignore[arg-type]
+    result = await Pipeline(store, ai, clock=_CLOCK).analyze_ip_detailed(IP)  # type: ignore[arg-type]
     assert "detections" in result, (
         "detections[] must be present in result even when AI is disabled (EARS-C)."
     )
@@ -244,7 +251,7 @@ async def test_rule_descriptions_fetched_when_ai_available() -> None:
     descs = {"942100": "SQL injection via numeric parameter"}
     store = _TrackingStore(_sqli_events(3), descs=descs)
     ai = _SamplesCapturingAI(available=True)
-    await Pipeline(store, ai).analyze_ip_detailed(IP)  # type: ignore[arg-type]
+    await Pipeline(store, ai, clock=_CLOCK).analyze_ip_detailed(IP)  # type: ignore[arg-type]
     assert store.rule_desc_calls == 1, (
         f"Expected get_rule_descriptions to be called once when AI is available, "
         f"got {store.rule_desc_calls} calls (EARS-D / issue #102)."
@@ -256,7 +263,7 @@ async def test_samples_forwarded_to_ai_when_available() -> None:
     descs = {"942100": "SQL injection"}
     store = _TrackingStore(_sqli_events(3), descs=descs)
     ai = _SamplesCapturingAI(available=True)
-    await Pipeline(store, ai).analyze_ip_detailed(IP)  # type: ignore[arg-type]
+    await Pipeline(store, ai, clock=_CLOCK).analyze_ip_detailed(IP)  # type: ignore[arg-type]
     assert len(ai.captured_samples) == 1, (
         f"Expected 1 sample forwarded to AI, got {len(ai.captured_samples)} "
         "(EARS-D / issue #102: sampling must happen when AI is available)."
@@ -292,7 +299,7 @@ async def test_concurrent_coroutine_not_starved_during_detailed_call() -> None:
 
     ai: AIEngine = FakeAIEngine(result=_VALID_AI_RESULT)
     store: EventStore = _TrackingStore(_sqli_events(3))  # type: ignore[assignment]
-    pipeline = Pipeline(store, ai)
+    pipeline = Pipeline(store, ai, clock=_CLOCK)
 
     # Run both concurrently; if analyze_ip_detailed blocks the loop, _counter
     # will not advance (ticks stays empty until after detailed completes).

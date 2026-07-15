@@ -897,7 +897,7 @@ describe('DashboardRoute — #649 escalation-axis banner-worthiness (ADR-0058)',
       expect(screen.getByTestId('triage-banner-active')).toBeInTheDocument()
     })
     expect(screen.getByTestId('triage-chip-disposition')).toHaveTextContent(
-      'Flagged — block status unknown',
+      'Flagged — needs review',
     )
   })
 

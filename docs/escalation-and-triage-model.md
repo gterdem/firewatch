@@ -89,7 +89,7 @@ attached to the actor's `ThreatScore` as an `escalation` sub-object.
 | Tier | Actions that trigger it | Dashboard label (issue #6 — see `escalationCopy.ts`) | Plain-language meaning | `block_status` | Banner-worthy? |
 |---|---|---|---|---|---|
 | **1** | `ALLOW` + a high-fidelity detection | **Got through — possible breach** | A correlation rule fired *and* the request got past your defenses. The attack may have reached your system — highest priority. Unconditional — the breach signal, never gated. | `allowed` | Yes — loudest |
-| **2** | `ALERT` or `LOG` **with a qualifying signal** (see §2.1) | **Flagged — block status unknown** | A trusted correlation rule, or a source-declared high/critical severity, flagged this actor as hostile — but the perimeter did not assert a terminating verdict, so whether it was actually blocked is genuinely unconfirmed. | `unknown` | Yes |
+| **2** | `ALERT` or `LOG` **with a qualifying signal** (see §2.1) | **Flagged — needs review** ⚠ *interim, unsettled — see note below* | A trusted correlation rule, or a source-declared high/critical severity, flagged this actor as hostile. This label makes no claim about whether the traffic was actually blocked. | `unknown` | Yes |
 | **3** | `BLOCK` / `DROP`, persistent (3 or more events) | **Blocked — kept trying** | Your defenses stopped every attempt, but this attacker keeps coming back. Consider a longer-term IP block. | `blocked` | No — informational |
 | **4** | `BLOCK` / `DROP`, one-off | **Blocked — didn't keep trying** | Your defenses stopped every attempt, and this one didn't keep coming back. No action needed. | `blocked` | No — informational |
 | **None** — **observed** | `ALERT`/`LOG` with **no qualifying signal**, or `ALLOW`-only with no detection | **On the record — no escalation claim** | Nothing asserted this actor is hostile. Not dropped — still scored on the severity-band axis, still visible in Network Logs. | reflects the truthful state (`unknown` / `allowed`) | No — the calm, honest default |
@@ -102,10 +102,17 @@ threshold (`_PERSISTENCE_THRESHOLD` in `decider.py`, currently 3) means a Tier-4
 
 Tier 2's label deliberately does **not** claim the traffic "may have got through": that claim is
 false whenever the qualifying signal is a LOG-only correlation (e.g. a brute-force rule built from
-failed, *attested* logins — ADR-0067 RC3). "Flagged" states only that something asserted hostility;
-"block status unknown" states only that the perimeter's terminal disposition wasn't confirmed —
-both true regardless of which of the two qualifying paths (§2.1) fired. The **observed** row is not
-a fifth tier and carries no urgency claim at all — see [§2.1](#21-the-assertion-gate-and-the-observed-stratum).
+failed, *attested* logins — ADR-0067 RC3). It also deliberately does **not** say "block status
+unknown" — that phrase is not an ADR-0067-sanctioned replacement; it is the ADR's own falsified
+premise (ADR-0067 line 4: "...the ALERT/LOG 'block status unknown' label"; RC3's title: "the OCSF
+premise behind 'block status unknown' is factually false," verified against OCSF 1.8.0
+`disposition_id=19 Alert`, which asserts the request was **not blocked** — not unknown). ADR-0067
+settles only the *mechanism* (D1: "Tier 2 requires a qualifying assertion"), not replacement UI
+copy. **"Flagged — needs review" is this implementer's proposal, not an architect/maintainer-settled
+label** — it states only what D1 establishes (a qualifying detection/assertion exists) and makes no
+claim either way about block status; it is open for the architect/maintainer to redline, the same
+as Tier 1/3/4 originally were. The **observed** row is not a fifth tier and carries no urgency claim
+at all — see [§2.1](#21-the-assertion-gate-and-the-observed-stratum).
 
 The wording in the "Dashboard label" column is defined in exactly one place in code —
 `frontend/src/lib/escalationCopy.ts` — so a future rewording is a one-file edit, not a hunt across

@@ -366,11 +366,11 @@ describe('TriageBanner — ADR-0058 D2 escalation axis (issue #649)', () => {
     expect(dispEl).toHaveTextContent('Got through — possible breach')
   })
 
-  it('shows disposition label "Flagged — block status unknown" for tier-2 actor', () => {
+  it('shows disposition label "Flagged — needs review" for tier-2 actor', () => {
     render(<TriageBanner pendingActors={[ACTOR_ESCALATED_TIER2]} onAction={vi.fn()} />)
 
     const dispEl = screen.getByTestId('triage-chip-disposition')
-    expect(dispEl).toHaveTextContent('Flagged — block status unknown')
+    expect(dispEl).toHaveTextContent('Flagged — needs review')
   })
 
   // EARS: WHERE banner renders an escalated actor → block-status label present inside popover
@@ -466,11 +466,11 @@ describe('TriageBanner — ADR-0058 D2 escalation axis (issue #649)', () => {
   })
 
   // Legend text content: tier 2 label
-  it('legend tier-2 shows "Flagged — block status unknown"', () => {
+  it('legend tier-2 shows "Flagged — needs review"', () => {
     render(<TriageBanner pendingActors={[]} onAction={vi.fn()} />)
 
     const tier2 = screen.getByTestId('legend-tier-2')
-    expect(tier2).toHaveTextContent('Flagged — block status unknown')
+    expect(tier2).toHaveTextContent('Flagged — needs review')
   })
 
   // Legend block-status badges

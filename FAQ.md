@@ -40,12 +40,13 @@ Push sources  ──listen on a socket (sources send to FireWatch)────�
   never re-reads old events.
 - **Push** (Syslog, Syslog/CEF): FireWatch runs a listener; the source sends events to it.
 
-## What is the `T2 — Flagged — block status unknown` I see on the dashboard?
+## What is the `T2 — Flagged — needs review` I see on the dashboard?
 
 It is the **escalation tier** for an actor whose traffic carries a *qualifying signal* — a
-FireWatch correlation rule, or a source-declared high/critical severity — but the perimeter never
-asserted a terminating verdict, so whether it was actually blocked is genuinely unconfirmed and it
-needs an operator decision. Bare detection-mode telemetry with no qualifying signal does **not**
+FireWatch correlation rule, or a source-declared high/critical severity — flagging it as hostile
+and requiring an operator decision. This label makes no claim about whether the traffic was
+actually blocked (that depends on enforcement posture — a later phase, issues #44/#45 — not settled
+today). Bare detection-mode telemetry with no qualifying signal does **not**
 reach Tier 2; it is recorded honestly as **observed** instead (see
 [docs/escalation-and-triage-model.md §2.1](docs/escalation-and-triage-model.md#21-the-assertion-gate-and-the-observed-stratum)).
 The full action-aware model ([ADR-0058](docs/adr/0058-action-aware-deterministic-escalation-axis.md),

@@ -67,7 +67,7 @@ just how high the score is. This is the escalation axis.
 | Tier badge | Disposition | Urgency |
 |------------|-------------|---------|
 | **T1** | Got through — possible breach | Highest. The detection fired but the request got past your defenses. The attack may have reached your application. |
-| **T2** | Flagged — block status unknown | High. A correlation rule or a source-declared high/critical severity flagged this actor as hostile, but nothing confirms whether it was actually blocked. |
+| **T2** | Flagged — needs review | High. A correlation rule or a source-declared high/critical severity flagged this actor as hostile. This label makes no claim about whether the traffic was actually blocked. |
 | **T3** | Blocked — kept trying | Moderate. Your defenses held, but the source is determined and high-volume; consider an IP-level block. |
 | **T4** | Blocked — didn't keep trying | Informational. Your defenses stopped every attempt, and this one didn't keep coming back. |
 | **Observed** | On the record — no escalation claim | Calm default. Nothing asserted this actor is hostile; still scored and visible in Network Logs, never dropped. |

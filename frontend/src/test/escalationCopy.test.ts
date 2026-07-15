@@ -183,7 +183,16 @@ describe('Tier 2 label — rebased for ADR-0067 (issue #6 PR)', () => {
     expect(TIER_COPY[1].label.toLowerCase().startsWith('unconfirmed')).toBe(false)
   })
 
-  it('states the honest, ADR-0067-sanctioned fact: block status unknown', () => {
-    expect(TIER_COPY[1].label.toLowerCase()).toContain('block status unknown')
+  it('does not claim "block status unknown" — ADR-0067 RC3 falsifies that as a Tier-2 premise, not authorizes it', () => {
+    // ADR-0067 line 4 + RC3's own title: "the OCSF premise behind 'block
+    // status unknown' is factually false" (OCSF disposition_id=19 Alert
+    // asserts NOT-blocked, not unknown). This phrase must never reappear
+    // as the general Tier-2 label.
+    expect(TIER_COPY[1].label.toLowerCase()).not.toContain('block status unknown')
+    expect(TIER_COPY[1].description.toLowerCase()).not.toContain('block status unknown')
+  })
+
+  it('states only what ADR-0067 D1 settles: a qualifying assertion/detection exists', () => {
+    expect(TIER_COPY[1].label.toLowerCase()).toMatch(/flag/)
   })
 })

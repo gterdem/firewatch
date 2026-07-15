@@ -26,15 +26,29 @@
  * the leading word undersells that; and "may have got through" is flatly
  * false whenever the qualifying signal is a LOG-only correlation (e.g. a
  * brute-force rule built from failed, *attested* logins — ADR-0067 RC3, the
- * "a failed-login LOG line ... the login failed" example). The interim label
- * below states only what stays true under BOTH qualifying paths (D1a/D1b):
- * something flagged this actor as hostile, and the perimeter's block status
- * is genuinely unconfirmed. "Block status unknown" is ADR-0067's own term
- * (D1 title, D6, the `block_status_unknown` disposition key) — kept verbatim
- * rather than invented. The FINAL, posture-aware Tier-2 vocabulary
- * ("not blocked — watch-only sensor" / "detected — no action taken" / a rare,
- * genuinely unknown case) is ADR-0067 D6, implemented by #44/#45 (M3) — not
- * this file's job; do not anticipate it here.
+ * "a failed-login LOG line ... the login failed" example).
+ *
+ * CORRECTION: an earlier version of this label used "block status unknown"
+ * as the replacement — that is WRONG. ADR-0067 does not sanction that phrase;
+ * it is the ADR's central falsified premise (line 4: "...the ALERT/LOG
+ * 'block status unknown' label"; RC3's own title: "the OCSF premise behind
+ * 'block status unknown' is factually false" — verified live against OCSF
+ * 1.8.0 `disposition_id=19 Alert`: "...resulted in a notification but request
+ * was **not blocked**," which asserts NOT-blocked, not unknown). There is no
+ * "D6" in ADR-0067 (it has no lettered decision sections past D... verify
+ * with `grep -nE "^### D[0-9]" docs/adr/0067-*.md` before ever citing one) —
+ * the posture-aware replacement vocabulary belongs to issues #44/#45 (M3, not
+ * started), not this ADR.
+ *
+ * ADR-0067 does NOT hand over replacement UI copy for Tier 2 — the only thing
+ * it settles is the *mechanism* (D1: "Tier 2 requires a qualifying assertion
+ * ... An actor's ALERT/LOG population reaches Tier 2 only when a qualifying
+ * signal is present"). The label below is this implementer's PROPOSAL, built
+ * from that one settled fact and nothing else: it names what IS known (a
+ * qualifying detection/assertion exists) and makes NO claim about whether the
+ * traffic was blocked. Flagged here as an OPEN QUESTION for the
+ * architect/maintainer to redline, same as Tier 1/3/4 originally were in
+ * PR #38 — this wording is not architect- or maintainer-sourced.
  *
  * OBSERVED STRATUM (ADR-0067 D2): an additive, deliberately NOT-a-fifth-tier
  * row — `tier: null`, `disposition: "observed"`. An observed actor carries no
@@ -113,10 +127,10 @@ export const TIER_COPY: readonly TierCopy[] = [
     tier: 2,
     disposition: 'block_status_unknown',
     blockStatus: 'unknown',
-    label: 'Flagged — block status unknown',
+    label: 'Flagged — needs review',
     shortLabel: 'Flagged',
     description:
-      'A correlation rule, or a source-declared high/critical severity, flagged this actor as hostile — but the perimeter never asserted a terminating verdict, so whether it was actually blocked is genuinely unconfirmed.',
+      'A correlation rule fired, or a source-declared high/critical severity was present, flagging this actor as hostile. This label makes no claim about whether the traffic was actually blocked.',
     color: 'var(--fw-amber)',
   },
   {

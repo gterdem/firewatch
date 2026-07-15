@@ -1,13 +1,30 @@
-# FireWatch docker-compose — two profiles per ADR-0042.
+# FireWatch docker-compose — three profiles per ADR-0042 (+ issue #4).
 #
 # Profiles:
-#   default  — FireWatch + nginx + Ollama (recommended; best model UX).
-#   lean     — FireWatch + nginx + llama.cpp llama-server (minimal footprint;
-#              air-gapped; operator-supplied GGUF mounted as a volume).
+#   default     — FireWatch + nginx + Ollama (recommended; best model UX).
+#   lean        — FireWatch + nginx + llama.cpp llama-server (minimal footprint;
+#                 air-gapped; operator-supplied GGUF mounted as a volume).
+#   rules-only  — FireWatch + nginx ONLY. No inference container at all (no
+#                 Ollama, no llama.cpp) — zero AI footprint. Detection,
+#                 scoring, escalation, and the dashboard are unchanged; only
+#                 the optional AI narrative layer is off (ai_status="disabled",
+#                 never "error"/"unavailable" — see _DisabledAIEngine).
 #
 # One-command start:
-#   docker compose --profile default up -d   # Ollama path
-#   docker compose --profile lean up -d      # llama.cpp path
+#   docker compose --profile default up -d                       # Ollama path
+#   docker compose --profile lean up -d                          # llama.cpp path
+#   FIREWATCH_AI_ENABLED=false \
+#   FIREWATCH_OLLAMA_BASE_URL=http://127.0.0.1:11434 \
+#   docker compose --profile rules-only up -d                    # rules-only
+#
+# rules-only requires BOTH env vars above on the invocation (or in .env) —
+# see deploy/README.md. FIREWATCH_AI_ENABLED=false turns AI scoring off.
+# FIREWATCH_OLLAMA_BASE_URL must ALSO be overridden away from its default
+# (http://ollama:11434): that hostname never resolves under rules-only (the
+# `ollama` service does not start), and FireWatch's local-first validator
+# (ADR-0022) fails closed on DNS resolution failure — the container will not
+# start at all without this override. Any loopback/RFC-1918 literal works; it
+# is never dialed once ai_enabled=false selects `_DisabledAIEngine`.
 #
 # Network topology (ADR-0026 loopback constraint):
 #   The `firewatch` service binds the API to 127.0.0.1:8000 only.
@@ -19,11 +36,14 @@
 #   own ports).  nginx is the ONLY host-exposed surface.
 #
 # Optional .env (copy deploy/.env.example → deploy/.env and adjust) — every var
-# below has a safe default, so .env is only needed to override or for the lean profile:
+# below has a safe default, so .env is only needed to override, for the lean
+# profile, or to configure rules-only (both vars below are required together):
 #   FW_HOST_PORT            host port for the nginx surface (default 8080)
-#   FIREWATCH_AI_ENABLED    enable AI scoring (default true)
+#   FIREWATCH_AI_ENABLED    enable AI scoring (default true; set false for rules-only)
 #   FIREWATCH_OLLAMA_MODEL  model name
-#   FIREWATCH_OLLAMA_BASE_URL  inference endpoint (profile-specific)
+#   FIREWATCH_OLLAMA_BASE_URL  inference endpoint (profile-specific; a loopback
+#                              literal for rules-only; also the rules-only ->
+#                              LAN-endpoint upgrade path, ADR-0022)
 #   GGUF_HOST_PATH          (lean only) host path to the .gguf file
 #   MODEL_FILE              (lean only) GGUF filename inside the container
 #
@@ -36,14 +56,14 @@ x-firewatch-env: &firewatch-env
 
 services:
   # --------------------------------------------------------------------------
-  # FireWatch application (both profiles share this service).
+  # FireWatch application (all three profiles share this service).
   # --------------------------------------------------------------------------
   firewatch:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
     image: firewatch:latest
-    profiles: ["default", "lean"]
+    profiles: ["default", "lean", "rules-only"]
     restart: unless-stopped
     environment:
       <<: *firewatch-env
@@ -58,6 +78,9 @@ services:
     ports:
       - "${FW_HOST_PORT:-8080}:80"
     depends_on:
+      # Both dependencies are optional: neither is present in the rules-only
+      # profile, so `required: false` lets firewatch start with no inference
+      # service at all — the basis of the zero-AI-footprint story.
       ollama:
         condition: service_healthy
         required: false    # only present in `default` profile
@@ -81,7 +104,7 @@ services:
       context: ..
       dockerfile: deploy/nginx/Dockerfile
     image: firewatch-nginx:latest
-    profiles: ["default", "lean"]
+    profiles: ["default", "lean", "rules-only"]
     restart: unless-stopped
     network_mode: "service:firewatch"
     depends_on:
@@ -170,4 +193,5 @@ volumes:
   ollama_models:
     # Ollama model store (default profile).  Pulling models fills this volume;
     # data persists so you don't re-download on every restart.
-    # Only created when the `default` profile is active.
+    # Only created when the `default` profile is active — absent under
+    # `rules-only` (no ollama service, hence no model store).

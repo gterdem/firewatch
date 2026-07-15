@@ -112,9 +112,9 @@ what the WAF or IDS *did* with the traffic, independent of the numeric risk scor
 | Tier | Disposition | Urgency |
 |------|-------------|---------|
 | T1 | Got through — possible breach | Highest |
-| T2 | Unconfirmed — may have gotten in | High |
+| T2 | Unconfirmed — may have got through | High |
 | T3 | Blocked — kept trying | Moderate |
-| T4 | Blocked — single attempt | Informational |
+| T4 | Blocked — didn't keep trying | Informational |
 
 A T1 actor can surface in the Triage Banner even when their numeric score is LOW because
 the outcome (traffic reached the application) matters more than the score alone.

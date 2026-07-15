@@ -366,11 +366,11 @@ describe('TriageBanner — ADR-0058 D2 escalation axis (issue #649)', () => {
     expect(dispEl).toHaveTextContent('Got through — possible breach')
   })
 
-  it('shows disposition label "Unconfirmed — may have gotten in" for tier-2 actor', () => {
+  it('shows disposition label "Unconfirmed — may have got through" for tier-2 actor', () => {
     render(<TriageBanner pendingActors={[ACTOR_ESCALATED_TIER2]} onAction={vi.fn()} />)
 
     const dispEl = screen.getByTestId('triage-chip-disposition')
-    expect(dispEl).toHaveTextContent('Unconfirmed — may have gotten in')
+    expect(dispEl).toHaveTextContent('Unconfirmed — may have got through')
   })
 
   // EARS: WHERE banner renders an escalated actor → block-status label present inside popover
@@ -466,11 +466,11 @@ describe('TriageBanner — ADR-0058 D2 escalation axis (issue #649)', () => {
   })
 
   // Legend text content: tier 2 label
-  it('legend tier-2 shows "Unconfirmed — may have gotten in"', () => {
+  it('legend tier-2 shows "Unconfirmed — may have got through"', () => {
     render(<TriageBanner pendingActors={[]} onAction={vi.fn()} />)
 
     const tier2 = screen.getByTestId('legend-tier-2')
-    expect(tier2).toHaveTextContent('Unconfirmed — may have gotten in')
+    expect(tier2).toHaveTextContent('Unconfirmed — may have got through')
   })
 
   // Legend block-status badges

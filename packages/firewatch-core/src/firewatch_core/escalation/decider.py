@@ -280,12 +280,18 @@ def _build_justification_tier3(
 
 
 def _build_justification_tier4(events: list[SecurityEvent]) -> str:
-    # Wording (issue #6): plain "blocked N attempt(s)" replaces "N BLOCK/DROP
-    # event(s) — firewall held".
+    # Wording (issue #6, maintainer-approved): "didn't keep trying" pairs with
+    # Tier 3's "kept trying" — the two labels differ on exactly the one fact
+    # (persistence) that actually distinguishes the tiers. Real pluralization
+    # (not "attempt(s)") because n is a trusted engine integer, not a template
+    # placeholder. The number already speaks for itself — no paraphrase like
+    # "a single try", which goes stale/false the moment n != 1. No hard-coded
+    # reference to _PERSISTENCE_THRESHOLD: this copy stays true if that value
+    # ever moves.
     n = len(events)
     return (
-        f"[RULE] Blocked {n} attempt(s)"
-        " — a single try; informational only, no action needed."
+        f"[RULE] Blocked {n} attempt{'' if n == 1 else 's'}"
+        " — didn't keep trying; no action needed."
     )
 
 

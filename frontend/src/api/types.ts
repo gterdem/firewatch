@@ -65,8 +65,8 @@ export type ThreatLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | string
  *                          "allowed_through" | "block_status_unknown" |
  *                          "blocked_persistent" | "blocked_one_off".
  * ``justification``      — RULE-tagged (ADR-0035) human-readable sentence safe to render
- *                          as a text node (e.g. "[RULE] SQLi signature matched on an
- *                          ALLOWED request — possible success").
+ *                          as a text node (e.g. "[RULE] sqli_rule matched, and the request
+ *                          got through — this may have reached your system").
  *                          SECURITY (ADR-0029 D3): may contain operator-rule-derived
  *                          attacker field references — MUST be rendered as a text node,
  *                          never via dangerouslySetInnerHTML.

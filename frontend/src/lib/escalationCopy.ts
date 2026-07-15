@@ -14,10 +14,9 @@
  * Every surface that renders a tier label, a block-status badge, or a
  * tier-group header imports from here — no surface defines its own copy.
  *
- * NAMING NOTE (maintainer sign-off pending, issue #6): the `label` /
- * `description` / `blockStatusLabel` strings below are a PROPOSAL. See the
- * PR description for the alternatives considered; final wording is the
- * maintainer's call before merge.
+ * NAMING NOTE (issue #6): wording below is the maintainer-approved final copy
+ * (Galip, via the product-strategist's recommendation) — see PR #38 for the
+ * alternatives considered and the reasoning.
  */
 
 /** Machine-readable disposition key — from `EscalationVerdict.disposition` (fixed, ADR-0058). */
@@ -62,7 +61,13 @@ export interface TierCopy {
 }
 
 // ---------------------------------------------------------------------------
-// The 4-tier copy table (issue #6 proposal — see PR description for alternatives)
+// The 4-tier copy table (issue #6 — maintainer-approved final wording, PR #38)
+//
+// Tiers 3 and 4 differ on exactly one fact — persistence — so their labels
+// differ on exactly that word ("kept trying" / "didn't keep trying"). Reading
+// both legend rows together teaches the whole lower half of the ladder with
+// no tooltip needed. Both are count-agnostic and threshold-proof: they stay
+// true regardless of where _PERSISTENCE_THRESHOLD (decider.py) is set.
 // ---------------------------------------------------------------------------
 
 export const TIER_COPY: readonly TierCopy[] = [
@@ -80,7 +85,7 @@ export const TIER_COPY: readonly TierCopy[] = [
     tier: 2,
     disposition: 'block_status_unknown',
     blockStatus: 'unknown',
-    label: 'Unconfirmed — may have gotten in',
+    label: 'Unconfirmed — may have got through',
     shortLabel: 'Unconfirmed',
     description:
       'Something suspicious was flagged, but nothing confirms whether it was actually stopped. Treat it as unresolved.',
@@ -94,16 +99,21 @@ export const TIER_COPY: readonly TierCopy[] = [
     shortLabel: 'Blocked, repeated',
     description:
       'Your defenses stopped every attempt, but this attacker keeps coming back. Consider a longer-term block.',
+    // NOTE: --fw-t2/--fw-t3 are a text-emphasis scale (secondary/muted text),
+    // not a tier-numbered token family — the shared "t2"/"t3" naming with
+    // Tier 2/Tier 3 is coincidental. Tiers 3 and 4 are both "informational,
+    // lower urgency" so they intentionally step down through this grey scale
+    // rather than getting their own hue (reserved for Tier 1 red / Tier 2 amber).
     color: 'var(--fw-t2)',
   },
   {
     tier: 4,
     disposition: 'blocked_one_off',
     blockStatus: 'blocked',
-    label: 'Blocked — single attempt',
-    shortLabel: 'Blocked, one-off',
+    label: "Blocked — didn't keep trying",
+    shortLabel: "Didn't keep trying",
     description:
-      'Your defenses stopped this attempt. A single try only — informational, no action needed.',
+      "Your defenses stopped every attempt, and this one didn't keep coming back. No action needed.",
     color: 'var(--fw-t3)',
   },
 ] as const

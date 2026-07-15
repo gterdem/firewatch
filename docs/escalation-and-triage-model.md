@@ -75,12 +75,18 @@ The `decide(events, detections)` function in
 detections to a single escalation verdict deterministically — no I/O, no LLM. The verdict is
 attached to the actor's `ThreatScore` as an `escalation` sub-object.
 
-| Tier | Actions that trigger it | Dashboard label (issue #6 — **wording pending maintainer approval**, see PR) | Plain-language meaning | `block_status` | Banner-worthy? |
+| Tier | Actions that trigger it | Dashboard label (issue #6 — maintainer-approved) | Plain-language meaning | `block_status` | Banner-worthy? |
 |---|---|---|---|---|---|
 | **1** | `ALLOW` + a high-fidelity detection | **Got through — possible breach** | A correlation rule fired *and* the request got past your defenses. The attack may have reached your system — highest priority. | `allowed` | Yes — loudest |
-| **2** | `ALERT` or `LOG` (with or without a detection) | **Unconfirmed — may have gotten in** | Something suspicious was flagged, but nothing confirms whether it was actually stopped. Treat it as unresolved. | `unknown` | Yes |
+| **2** | `ALERT` or `LOG` (with or without a detection) | **Unconfirmed — may have got through** | Something suspicious was flagged, but nothing confirms whether it was actually stopped. Treat it as unresolved. | `unknown` | Yes |
 | **3** | `BLOCK` / `DROP`, persistent (3 or more events) | **Blocked — kept trying** | Your defenses stopped every attempt, but this attacker keeps coming back. Consider a longer-term IP block. | `blocked` | No — informational |
-| **4** | `BLOCK` / `DROP`, one-off | **Blocked — single attempt** | Your defenses stopped this attempt. A single try only — informational, no action needed. | `blocked` | No — informational |
+| **4** | `BLOCK` / `DROP`, one-off | **Blocked — didn't keep trying** | Your defenses stopped every attempt, and this one didn't keep coming back. No action needed. | `blocked` | No — informational |
+
+Tiers 3 and 4 differ on exactly one fact — persistence — so their labels differ on exactly that
+word. Reading both rows together teaches the whole lower half of the ladder without a tooltip.
+Both labels are count-agnostic: Tier 4 never says "one" or "single," because the persistence
+threshold (`_PERSISTENCE_THRESHOLD` in `decider.py`, currently 3) means a Tier-4 actor can have
+1 *or* 2 blocked events — "single attempt" would already be false at 2.
 
 The wording in the "Dashboard label" column is defined in exactly one place in code —
 `frontend/src/lib/escalationCopy.ts` — so a future rewording is a one-file edit, not a hunt across

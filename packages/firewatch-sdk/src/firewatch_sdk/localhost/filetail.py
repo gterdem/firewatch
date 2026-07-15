@@ -43,7 +43,7 @@ carries a record", governed by the SAME rule:
   - Emitted **only when the cycle yielded zero lines** — i.e. nothing else
     was readable this cycle either.
   - MUST NOT be extended to any other case — today, that is a complete
-    (newline-terminated) line over ``_MAX_LINE_BYTES``, which can be
+    (newline-terminated) line over ``_MAX_LINE_CHARS``, which can be
     *positioned* (this reader's own offset arithmetic advances past it) but
     never *read* (it is never buffered whole), so without this sentinel the
     stored cursor would never move and the same line would be re-served,
@@ -56,21 +56,23 @@ subprocess peek to recover its cursor — see ``journald.py``'s
 ``inode:<byte offset past the line's own newline>``, computed directly while
 scanning past it — no second read needed.
 
-**Bounded reads.** ``_MAX_LINE_BYTES`` (16 MiB, consistent with
-``JournaldReader``'s bound) caps each line the same way ``fh.readline()``
-used to be unbounded: a single arbitrarily long line (e.g. a compromised
-service account writing to its own watched log — the same threat model as
-``JournaldReader``'s Finding 2, and not theoretical: #2's ClamAV plugin
-points this reader at exactly such a directory) would otherwise be buffered
-whole into memory, OOMing the process. One deliberate difference from
-``JournaldReader``'s bound: this reader operates in TEXT mode
-(``TextIOWrapper``), so ``_MAX_LINE_BYTES`` here bounds DECODED CHARACTERS,
-not raw bytes — worst case (every character a 4-byte UTF-8 codepoint) admits
-up to ~64 MiB of underlying bytes for one line rather than a strict 16 MiB
-ceiling. This is still a fixed, generous, FINITE bound — the defect this
-closes is unbounded growth, not an exact byte ceiling — and switching to a
-byte-exact bound would require reopening the file in binary mode, a larger
-structural change than this fix warrants.
+**Bounded reads.** ``_MAX_LINE_CHARS`` (16 MiB, consistent with
+``JournaldReader``'s ``_MAX_LINE_BYTES`` by value) caps each line the same
+way ``fh.readline()`` used to be unbounded: a single arbitrarily long line
+(e.g. a compromised service account writing to its own watched log — the
+same threat model as ``JournaldReader``'s Finding 2, and not theoretical:
+#2's ClamAV plugin points this reader at exactly such a directory) would
+otherwise be buffered whole into memory, OOMing the process. One deliberate
+difference from ``JournaldReader``'s bound — reflected in the name, not just
+the docs: this reader operates in TEXT mode (``TextIOWrapper``), so
+``_MAX_LINE_CHARS`` counts DECODED CHARACTERS, not raw bytes like
+``JournaldReader``'s byte-exact ``_MAX_LINE_BYTES`` — worst case (every
+character a 4-byte UTF-8 codepoint) admits up to ~64 MiB of underlying bytes
+for one line rather than a strict 16 MiB ceiling. This is still a fixed,
+generous, FINITE bound — the defect this closes is unbounded growth, not an
+exact byte ceiling — and switching to a byte-exact bound would require
+reopening the file in binary mode, a larger structural change than this fix
+warrants.
 
 **Drain contract:** ``read()`` is one-shot, like ``JournaldReader`` (no
 ``-f``/follow) — it drains whatever is currently available, handles at most
@@ -123,9 +125,13 @@ _NON_REGULAR_FILE_MSG = (
 )
 
 # See the module docstring's "Bounded reads" note: consistent with
-# JournaldReader._MAX_LINE_BYTES (16 MiB) by value, but bounds DECODED
-# CHARACTERS here (text-mode reader), not raw bytes.
-_MAX_LINE_BYTES = 16 * 1024 * 1024
+# JournaldReader._MAX_LINE_BYTES (16 MiB) by value, but this reader is
+# text-mode, so this bounds DECODED CHARACTERS, not raw bytes -- hence the
+# deliberately different name (worst case ~64 MiB of underlying UTF-8 bytes
+# under 4-byte codepoints). journald's constant is byte-exact and correctly
+# named _MAX_LINE_BYTES; a reader comparing the two names side by side is
+# seeing an accurate distinction, not a typo.
+_MAX_LINE_CHARS = 16 * 1024 * 1024
 
 
 class FileTailReader:
@@ -174,7 +180,7 @@ class FileTailReader:
         ``line`` MAY be ``None``: this signals a cursor advancement with no
         corresponding line, governed by the module-level invariant above
         (see "Invariant — the ``(None, cursor)`` yield shape") — a complete
-        line over ``_MAX_LINE_BYTES`` that could not be buffered whole, with
+        line over ``_MAX_LINE_CHARS`` that could not be buffered whole, with
         nothing else readable this cycle either. The caller MUST still
         persist ``cursor`` in this case (that's the whole point — otherwise
         the same oversized line is re-served, and re-skipped, forever), but
@@ -429,8 +435,8 @@ class FileTailReader:
                     "%d characters) at offset %d — a compromised writer to "
                     "this file could otherwise buffer it whole and OOM the "
                     "process; investigate the source or raise "
-                    "_MAX_LINE_BYTES.",
-                    self._path, _MAX_LINE_BYTES, offset,
+                    "_MAX_LINE_CHARS.",
+                    self._path, _MAX_LINE_CHARS, offset,
                 )
                 yield None, f"{inode}:{offset}"
                 continue
@@ -440,7 +446,7 @@ class FileTailReader:
 
     @staticmethod
     def _read_bounded_line(fh: TextIO) -> tuple[str | None, bool]:
-        """Read one line without ever buffering more than ``_MAX_LINE_BYTES``
+        """Read one line without ever buffering more than ``_MAX_LINE_CHARS``
         characters at a time.
 
         Returns ``(text, oversized)``:
@@ -458,23 +464,23 @@ class FileTailReader:
             and try again next poll.
           - ``(None, True)`` — the terminating ``"\\n"`` WAS found, but
             cumulative length up to and including it exceeded
-            ``_MAX_LINE_BYTES``: a genuine, complete oversized line. The file
+            ``_MAX_LINE_CHARS``: a genuine, complete oversized line. The file
             position is left just past the terminator — this method never
             re-scans bytes it has already read past.
 
         Uses ``TextIO.readline(size)``'s documented cap (a maximum CHARACTER
         count for a text-mode stream, per the io module) to bound each
-        individual read call at ``_MAX_LINE_BYTES`` — an ordinary in-bound
+        individual read call at ``_MAX_LINE_CHARS`` — an ordinary in-bound
         line always resolves on the FIRST call; only an oversized line loops.
         """
         exceeded_once = False
         while True:
-            piece = fh.readline(_MAX_LINE_BYTES)
+            piece = fh.readline(_MAX_LINE_CHARS)
             if not piece:
                 return None, False
             if piece.endswith("\n"):
                 return (None, True) if exceeded_once else (piece, False)
-            if len(piece) < _MAX_LINE_BYTES:
+            if len(piece) < _MAX_LINE_CHARS:
                 return None, False  # true EOF mid-line -- ordinary partial
             exceeded_once = True  # hit the cap with no terminator -- keep scanning
 

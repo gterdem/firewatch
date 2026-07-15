@@ -455,7 +455,7 @@ class TestOversizedLineBound:
         oversized line itself never appears as a yielded record (no ``None``
         sentinel here either — a later real line's cursor already carries
         forward progress past it, per the sentinel invariant)."""
-        monkeypatch.setattr(filetail, "_MAX_LINE_BYTES", 16)
+        monkeypatch.setattr(filetail, "_MAX_LINE_CHARS", 16)
         path = tmp_path / "auth.log"
         path.write_text(f"line1\n{'x' * 64}\nline2\n")
         reader = FileTailReader(path)
@@ -471,7 +471,7 @@ class TestOversizedLineBound:
         complete, oversized line. Without the sentinel, the caller would have
         nothing to persist and the SAME line would be re-served (and
         re-skipped) on every future poll, forever."""
-        monkeypatch.setattr(filetail, "_MAX_LINE_BYTES", 16)
+        monkeypatch.setattr(filetail, "_MAX_LINE_CHARS", 16)
         path = tmp_path / "auth.log"
         path.write_text(f"{'x' * 64}\n")
         reader = FileTailReader(path)
@@ -490,7 +490,7 @@ class TestOversizedLineBound:
         """Resuming from the sentinel's cursor must not re-encounter (or
         re-attempt-and-fail on) the same oversized line — the durable-resume
         guarantee this bound exists to provide."""
-        monkeypatch.setattr(filetail, "_MAX_LINE_BYTES", 16)
+        monkeypatch.setattr(filetail, "_MAX_LINE_CHARS", 16)
         path = tmp_path / "auth.log"
         path.write_text(f"{'x' * 64}\n")
         reader = FileTailReader(path)
@@ -513,7 +513,7 @@ class TestOversizedLineBound:
         (the writer hasn't flushed it yet) must not be reported as a
         confirmed oversized skip — it is indistinguishable from an ordinary
         still-growing partial line until its terminator actually appears."""
-        monkeypatch.setattr(filetail, "_MAX_LINE_BYTES", 16)
+        monkeypatch.setattr(filetail, "_MAX_LINE_CHARS", 16)
         path = tmp_path / "auth.log"
         path.write_text("x" * 64)  # no trailing newline at all
         reader = FileTailReader(path)
@@ -538,7 +538,7 @@ class TestOversizedLineBound:
         as the final item — even when several oversized lines were skipped
         in the same drain, only one ``(None, cursor)`` is yielded, positioned
         past the LAST of them (maximum forward progress in one pass)."""
-        monkeypatch.setattr(filetail, "_MAX_LINE_BYTES", 16)
+        monkeypatch.setattr(filetail, "_MAX_LINE_CHARS", 16)
         path = tmp_path / "auth.log"
         big = "x" * 64
         path.write_text(f"{big}\n{big}\n{big}\n")
@@ -558,7 +558,7 @@ class TestOversizedLineBound:
         monkeypatch: pytest.MonkeyPatch,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        monkeypatch.setattr(filetail, "_MAX_LINE_BYTES", 16)
+        monkeypatch.setattr(filetail, "_MAX_LINE_CHARS", 16)
         path = tmp_path / "auth.log"
         path.write_text(f"{'x' * 64}\n")
         reader = FileTailReader(path)
@@ -575,7 +575,7 @@ class TestOversizedLineBound:
         unless a justified reason to differ is recorded — see the module
         docstring's note on character- vs. byte-counting for the one
         deliberate difference (this reader is text-mode)."""
-        assert filetail._MAX_LINE_BYTES == 16 * 1024 * 1024
+        assert filetail._MAX_LINE_CHARS == 16 * 1024 * 1024
 
 
 class TestDefaultBoundIsRealistic:
@@ -586,7 +586,7 @@ class TestDefaultBoundIsRealistic:
         the actual 16 MiB bound is skipped (not buffered whole), and a small
         surrounding line still survives."""
         path = tmp_path / "auth.log"
-        oversized_line = "x" * (filetail._MAX_LINE_BYTES + 1024)
+        oversized_line = "x" * (filetail._MAX_LINE_CHARS + 1024)
         path.write_text(f"before\n{oversized_line}\nafter\n")
         reader = FileTailReader(path)
 

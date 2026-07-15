@@ -5,6 +5,32 @@ binding). Present and consistent across every mainstream systemd distro (Arch,
 Ubuntu, Fedora, Debian), so reading it once here gives every endpoint plugin
 multi-distro support for free.
 
+**Invariant — the ``(None, cursor)`` yield shape.** ``read()`` MAY yield a
+``None`` record paired with a cursor. This is a narrow, load-bearing
+exception to "every yield carries a record", not a general "no event this
+time" channel — it exists solely to preserve ADR-0065's cursor-resume
+guarantee across a failure mode this reader itself creates (the
+``_MAX_LINE_BYTES`` bound below). The rule, not merely today's occasion for
+it:
+
+  - Emitted **at most once per** ``read()`` **call**.
+  - Emitted **only as the final item** of that call.
+  - Emitted **only when the cycle yielded zero records** — i.e. nothing else
+    was readable this cycle either.
+  - MUST NOT be extended to a filtered, unparseable, or missing-``__CURSOR``
+    line: those cases have somewhere else for their progress to ride —
+    either a later record's cursor within the same cycle, or the next
+    cycle's re-read starting from the same (unmoved) stored position. Only
+    an oversized entry has neither: it can be *positioned* (journalctl's own
+    accounting still advances past it) but never *read* (its JSON body
+    never reaches the caller), so without this sentinel the stored cursor
+    would never move and the same entry would be re-served, and
+    re-skipped, forever — a correctness bug against the cursor-resume
+    guarantee, and a cheap DoS.
+
+Widen this set only on new evidence of another read-but-unpositionable (or
+position-but-unreadable) failure mode — not preemptively.
+
 Resume is cursor-based, not timestamp-based: each ``-o json`` record already
 carries the entry's ``__CURSOR`` field — "an opaque text string that uniquely
 describes the position of an entry in the journal and is portable across
@@ -167,14 +193,16 @@ class JournaldReader:
         docstring for the full scenario.
 
         ``record`` MAY be ``None``: this signals a cursor advancement with no
-        corresponding record — the ONLY case today is an oversized journal
-        entry (over ``_MAX_LINE_BYTES``) that could not be read at all, with
-        nothing else readable this cycle either. The caller MUST still
-        persist ``cursor`` in this case (that's the whole point — otherwise
-        the same unreadable entry is re-served, and re-skipped, forever), but
-        has no record to forward as an event. The documented caller idiom
-        (module docstring) already covers this: guard the forwarding call
-        with ``if record is not None``, and always track ``cursor``.
+        corresponding record, governed by the module-level invariant above
+        (see "Invariant — the ``(None, cursor)`` yield shape") — today, that
+        is an oversized journal entry (over ``_MAX_LINE_BYTES``) that could
+        not be read at all, with nothing else readable this cycle either.
+        The caller MUST still persist ``cursor`` in this case (that's the
+        whole point — otherwise the same unreadable entry is re-served, and
+        re-skipped, forever), but has no record to forward as an event. The
+        documented caller idiom (module docstring) already covers this:
+        guard the forwarding call with ``if record is not None``, and always
+        track ``cursor``.
         """
         if start == "tail":
             raise ValueError(
@@ -319,40 +347,55 @@ class JournaldReader:
             # re-served (and re-skipped) on every future poll, forever (a
             # crash traded for an infinite re-read of the same line). The
             # oversized entry's own cursor is unobtainable from its
-            # (unreadable) JSON body, so recover a resume point via
-            # journalctl's own --show-cursor accounting instead, which
-            # doesn't care about payload size — see _peek_cursor_after.
+            # (unreadable, full) JSON body, so re-request the SAME entry
+            # with a shrunk field set instead — see _peek_cursor_after.
             skip_cursor = await self._peek_cursor_after(after_cursor)
             if skip_cursor is not None:
                 yield None, skip_cursor
 
     async def _peek_cursor_after(self, after_cursor: str | None) -> str | None:
-        """Return the cursor of the single next matching entry after
-        ``after_cursor`` (this reader's own filters applied), or None if
-        there is nothing there.
+        """Return the oversized entry's own cursor, or None if it's no
+        longer there (rotated away, vanished, ...).
 
-        Used only to recover forward progress after an oversized entry: even
-        when that entry's own JSON body could never be read (the SAME
-        ``ValueError`` recovery in ``_iter_lines`` applies here too), its
-        ``--show-cursor`` trailer reflects journalctl's own internal
-        accounting of what it processed — independent of the entry's size —
-        so this still yields the correct cursor to resume after it.
+        This re-requests the SAME next matching entry after ``after_cursor``
+        (this reader's own identifier/facility/unit filters kept — we
+        already know a matching entry exists at this position, unlike
+        ``_discover_tail_cursor``'s deliberately unfiltered tail probe), but
+        with ``--output-fields=_BOOT_ID``. journalctl(1) documents that
+        ``__CURSOR``, ``__REALTIME_TIMESTAMP``, ``__MONOTONIC_TIMESTAMP``,
+        and ``_BOOT_ID`` "are always printed" regardless of
+        ``--output-fields`` (added in systemd 236) — so the SAME entry that
+        was oversized in full now prints as a handful of bytes and reads
+        cleanly, even though its full body still doesn't fit. The first
+        parsed line's ``__CURSOR`` is that entry's own cursor: an exact,
+        race-free resume point, not a neighbour inferred from arrival
+        timing.
+
+        This replaces an earlier ``-n 1 --show-cursor`` peek that happened
+        to work but relied on an undocumented interaction: the man page
+        defines ``-n``/``--lines=`` only as showing "the most recent
+        journal events and limit[ing] the number of events shown"
+        (journalctl(1), systemd 255) — it says nothing about combining with
+        ``--after-cursor``, so nothing promised that pairing would keep
+        returning the *first* entry after the cursor (rather than, say, the
+        most recent matching entry overall) across the systemd versions
+        this reader targets.
         """
-        extra = ["-n", "1", "--show-cursor"]
+        extra = ["--output-fields", "_BOOT_ID"]
         if after_cursor is not None:
             extra += ["--after-cursor", after_cursor]
         argv = self._build_argv(extra=extra)
         proc = await self._spawn(argv)
         try:
-            cursor: str | None = None
             async for raw_line in self._iter_lines(proc):
                 if raw_line is None:
+                    continue  # the shrunk line should never be oversized; stay defensive
+                record = self._parse_line(raw_line)
+                if record is None:
                     continue
-                text = raw_line.decode("utf-8", errors="replace").rstrip("\n")
-                if text.startswith(_SHOW_CURSOR_PREFIX):
-                    cursor = text[len(_SHOW_CURSOR_PREFIX):].strip()
-            await proc.wait()
-            return cursor
+                cursor = record.get(_CURSOR_FIELD)
+                return cursor if isinstance(cursor, str) else None
+            return None
         finally:
             await self._terminate(proc)
 

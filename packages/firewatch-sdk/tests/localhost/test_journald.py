@@ -460,10 +460,13 @@ class TestOversizedRecordRecovery:
         would have nothing to persist and the SAME entry would be re-served
         (and re-skipped) on every future poll, forever. The synthetic
         ``(None, cursor)`` yield gives the caller something to persist that
-        skips past it, recovered via journalctl's own --show-cursor
-        accounting (independent of the entry's unreadable size)."""
+        skips past it, recovered by re-requesting the SAME entry with
+        ``--output-fields=_BOOT_ID`` — journalctl(1) documents that
+        ``__CURSOR`` is always printed regardless of ``--output-fields``, so
+        the shrunk line reads cleanly and carries the oversized entry's own
+        cursor (not a neighbour's)."""
         main_stream = FakeProcess(stdout_lines=[OVERSIZED])
-        peek = FakeProcess(stdout_lines=[OVERSIZED, b"-- cursor: s=after-poison\n"])
+        peek = FakeProcess(stdout_lines=[_line("s=after-poison")])
         spawn = _SequencedSpawn([main_stream, peek])
         monkeypatch.setattr("firewatch_sdk.localhost.journald._create_subprocess_exec", spawn)
 
@@ -475,9 +478,10 @@ class TestOversizedRecordRecovery:
         assert results == [(None, "s=after-poison")]
         assert len(spawn.calls) == 2
         peek_argv = spawn.calls[1]
-        assert "-n" in peek_argv
-        assert peek_argv[peek_argv.index("-n") + 1] == "1"
-        assert "--show-cursor" in peek_argv
+        assert "-n" not in peek_argv
+        assert "--show-cursor" not in peek_argv
+        assert "--output-fields" in peek_argv
+        assert peek_argv[peek_argv.index("--output-fields") + 1] == "_BOOT_ID"
         assert "s=before-poison" in peek_argv
 
     async def test_oversized_only_record_with_no_recoverable_peek_yields_nothing(

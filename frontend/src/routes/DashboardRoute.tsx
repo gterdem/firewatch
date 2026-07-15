@@ -56,6 +56,9 @@
  *   - Ubiquitous: ThreatActorSummary (#207) uses RULE chip when ai_status != ok;
  *     title is always "Threat summary" (never "AI …" when rule-only content — ADR-0035).
  *   - #253: "Recently Blocked Network Logs" pane spans full content width (hero placement).
+ *   - #43 (ADR-0067 D5(2)): observed-stratum actors (tier=null) rolled up into
+ *     deriveObservedRecord and passed to TriageBanner as one aggregate line —
+ *     never rendered as individual chips, never silently dropped.
  *
  * ADR-0015: AI is additive-only. /threats failure must not break the dashboard.
  * ADR-0029 D3: raw data rendered as text nodes only.
@@ -71,7 +74,7 @@ import { fetchAttackDispositions } from '../api/analytics'
 import type { StatsResponse, TimelineBucket, CategoryCount, AiStatus, ThreatScore, HealthResponse, AttackDispositionRow } from '../api/types'
 import { makeOnAction, isDismissed, reconcileAcknowledged } from '../lib/triageActions'
 import type { OnAction } from '../lib/triageActions'
-import { deriveTriageActors } from '../lib/triageBand'
+import { deriveTriageActors, deriveObservedRecord } from '../lib/triageBand'
 import { toDatetimeLocalValue } from '../lib/timelineDateRange'
 import KpiStripBase from '../components/dashboard/KpiStrip'
 import TimelineChartBase from '../components/dashboard/TimelineChart'
@@ -380,6 +383,14 @@ export default function DashboardRoute() {
     [data, triageThreshold, dismissVersion], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
+  // Issue #43 (ADR-0067 D5(2)): the observed-stratum aggregate record line.
+  // null when there is nothing below the bar to report — TriageBanner renders
+  // no line in that case.
+  const observedRecord = useMemo(
+    () => (data != null ? deriveObservedRecord(data.threats, pendingActors) : null),
+    [data, pendingActors],
+  )
+
   const activeThreats = useMemo(
     () => (data != null ? data.threats.filter((t) => !isDismissed(t)) : []),
     [data, dismissVersion], // eslint-disable-line react-hooks/exhaustive-deps
@@ -459,7 +470,7 @@ export default function DashboardRoute() {
       }}
     >
       {/* Triage banner — leads with "N actors need BLOCK decision" (SIEM, ADR-0033) */}
-      <TriageBanner pendingActors={pendingActors} onAction={onAction} />
+      <TriageBanner pendingActors={pendingActors} onAction={onAction} observedRecord={observedRecord} />
 
       {/* KPI strip — v2 thin row (demoted from large 5-up grid) */}
       {/* health is authoritative for AI chip; aiStatus is the fallback (fix #180) */}

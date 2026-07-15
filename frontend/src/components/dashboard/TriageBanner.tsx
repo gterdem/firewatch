@@ -22,12 +22,24 @@
  * component owns ZERO copy strings of its own; rewording the four tiers is a
  * one-file edit in that module, not a hunt through this component.
  *
+ * Issue #43 (ADR-0067 D2/D5) — the observed stratum: an actor whose verdict
+ * carries `tier: null` / `disposition: "observed"` never renders as a chip
+ * (unless the band axis independently qualifies it — unchanged). Instead,
+ * when one or more such actors exist, the banner renders ONE aggregate
+ * record line — "N detections on the record from M sources → Network Logs"
+ * — built entirely from `deriveObservedRecord` (lib/triageBand.ts), which
+ * emits engine integers only (ADR-0035 discipline: no attacker-controlled
+ * text ever reaches this line). The line is shown in BOTH the active and
+ * calm banner states, and the legend gains one "Observed" row.
+ *
  * EARS:
  *   - WHILE one or more actors need a decision → show count + actor chips.
  *   - WHERE banner renders an escalated actor → show justification + disposition.
  *   - WHILE none do → show calm/all-clear state + escalation-tier legend.
  *   - WHILE more than TOP_N actors pending → show top-N + "view all N" expander.
  *   - WHERE actors span multiple tiers → group under tier-group headers.
+ *   - WHEN observedRecord is non-null → show the aggregate record line
+ *     linking to Network Logs, in the active or calm state alike.
  *
  * Actor chips display each IP via ClickableIp (ADR-0037 / issue #204): clicking
  * or keyboard-activating the IP opens the entity slide-over for that actor, with
@@ -52,10 +64,13 @@
  */
 
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { ThreatScore, EscalationVerdict } from '../../api/types'
 import type { OnAction } from '../../lib/triageActions'
+import type { ObservedRecordSummary } from '../../lib/triageBand'
 import {
   TIER_COPY,
+  OBSERVED_COPY,
   dispositionLabel,
   dispositionColor,
   blockStatusLabel,
@@ -80,6 +95,14 @@ interface TriageBannerProps {
   pendingActors: ThreatScore[]
   /** The action seam — onAction(actor, verb). Never contains per-verb logic. */
   onAction: OnAction
+  /**
+   * Aggregate "on the record" summary for observed-stratum actors that did
+   * NOT independently earn a banner slot (issue #43, ADR-0067 D5(2)). `null`/
+   * `undefined` when there is nothing to report — no aggregate line renders.
+   * Computed by `deriveObservedRecord` (lib/triageBand.ts); this component
+   * never derives it — it only renders the two integers it is handed.
+   */
+  observedRecord?: ObservedRecordSummary | null
 }
 
 // ---------------------------------------------------------------------------
@@ -125,7 +148,7 @@ function groupByTier(actors: ThreatScore[]): TierBucket[] {
   return buckets
 }
 
-export default function TriageBanner({ pendingActors, onAction }: TriageBannerProps) {
+export default function TriageBanner({ pendingActors, onAction, observedRecord }: TriageBannerProps) {
   const count = pendingActors.length
 
   // Issue #728: view-all expander state.
@@ -164,6 +187,11 @@ export default function TriageBanner({ pendingActors, onAction }: TriageBannerPr
           </span>
           <span>All clear — no actors need a triage decision.</span>
         </div>
+
+        {/* Observed-stratum aggregate record line (issue #43, ADR-0067 D5(2)) —
+            still visible when observed events exist, so the record is never
+            silently dropped even in the calm state (EARS). */}
+        {observedRecord != null && <ObservedRecordLine record={observedRecord} />}
 
         {/* 4-tier escalation legend (ADR-0058 §4a) */}
         <EscalationLegend />
@@ -255,6 +283,71 @@ export default function TriageBanner({ pendingActors, onAction }: TriageBannerPr
           </button>
         </div>
       )}
+
+      {/* Observed-stratum aggregate record line (issue #43, ADR-0067 D5(2)) —
+          rendered alongside the active queue too: the record is honest about
+          what exists below the bar even while the banner has chips to show. */}
+      {observedRecord != null && (
+        <div style={{ marginTop: 8 }}>
+          <ObservedRecordLine record={observedRecord} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// ObservedRecordLine — the ADR-0067 D5(2) aggregate safety net (issue #43)
+//
+// Renders exactly one honest sentence built from engine integers handed in
+// via `observedRecord` (never derived here — see lib/triageBand.ts). Text
+// nodes only (ADR-0029 D3); the link navigates to Network Logs (client-side
+// route, no full page reload).
+// ---------------------------------------------------------------------------
+
+interface ObservedRecordLineProps {
+  record: ObservedRecordSummary
+}
+
+function ObservedRecordLine({ record }: ObservedRecordLineProps) {
+  const navigate = useNavigate()
+
+  return (
+    <div
+      data-testid="triage-observed-record"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        fontSize: 12,
+        color: 'var(--fw-t3)',
+        marginBottom: 12,
+      }}
+    >
+      <span>
+        {/* Text nodes only — both values are engine integers (ADR-0035 discipline,
+            issue #43 hard constraint): a summed event count and a distinct
+            source-type count, never attacker-controlled text. */}
+        {record.eventCount} detection{record.eventCount === 1 ? '' : 's'} on the record from{' '}
+        {record.sourceCount} source{record.sourceCount === 1 ? '' : 's'}
+        {' → '}
+      </span>
+      <button
+        type="button"
+        data-testid="triage-observed-record-link"
+        onClick={() => { navigate('/logs') }}
+        style={{
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          font: 'inherit',
+          color: 'var(--fw-t1)',
+          textDecoration: 'underline',
+          cursor: 'pointer',
+        }}
+      >
+        Network Logs
+      </button>
     </div>
   )
 }
@@ -418,6 +511,67 @@ function EscalationLegend() {
             </span>
           </div>
         ))}
+
+        {/* Observed-stratum legend row (issue #43, ADR-0067 D2) — deliberately NOT
+            a 5th tier: no tier number, no fixed block-status badge (an observed
+            verdict's block_status reflects whichever truthful state applies).
+            Copy sourced from OBSERVED_COPY — this component owns zero copy of
+            its own (issue #6 discipline). */}
+        <div
+          data-testid="legend-tier-observed"
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 8,
+            padding: '6px 8px',
+            borderRadius: 5,
+            background: 'var(--fw-bg-input)',
+            border: '1px solid var(--fw-border-l)',
+          }}
+        >
+          {/* "Observed" badge — no tier number (not a 5th tier, ADR-0067 D2) */}
+          <span
+            aria-label="Observed"
+            style={{
+              flexShrink: 0,
+              fontSize: 10,
+              fontWeight: 700,
+              color: OBSERVED_COPY.color,
+              background: 'transparent',
+              border: `1px solid ${OBSERVED_COPY.color}`,
+              borderRadius: 3,
+              padding: '1px 5px',
+              lineHeight: 1.6,
+              minWidth: 44,
+              textAlign: 'center',
+            }}
+          >
+            {/* Text node only — no dangerouslySetInnerHTML (ADR-0029 D3) */}
+            {OBSERVED_COPY.shortLabel}
+          </span>
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: OBSERVED_COPY.color,
+                marginBottom: 2,
+              }}
+            >
+              {OBSERVED_COPY.label}
+            </div>
+            <div
+              style={{
+                fontSize: 11,
+                color: 'var(--fw-t3)',
+                lineHeight: 1.4,
+              }}
+            >
+              {OBSERVED_COPY.description}
+            </div>
+          </div>
+        </div>
 
         {/* Explanatory note about partial actors — not a 5th tier row (ADR-0058 Amendment 1 A4).
             Text node only — ADR-0029 D3. No overflow:scroll — house rule. */}

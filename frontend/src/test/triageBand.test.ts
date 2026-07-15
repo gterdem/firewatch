@@ -29,7 +29,7 @@
  * Fixture IPs are RFC 5737 documentation ranges only (192.0.2.0/24).
  */
 import { describe, it, expect } from 'vitest'
-import { isHighTierEscalation, deriveTriageActors } from '../lib/triageBand'
+import { isHighTierEscalation, deriveTriageActors, deriveObservedRecord } from '../lib/triageBand'
 import type { EscalationVerdict, ThreatScore } from '../api/types'
 
 // ---------------------------------------------------------------------------
@@ -196,5 +196,149 @@ describe('deriveTriageActors — observed (tier=null) actors do not flood the ba
     })
     const result = deriveTriageActors([observedButBanded, tier2], 'HIGH')
     expect(result.map((t) => t.source_ip)).toEqual(['192.0.2.30', '192.0.2.31'])
+  })
+
+  // Issue #43 DoD: "Sorting SHALL be regression-tested for tier: null actors
+  // (existing ?? 99 fallback)". Full ladder regression: tier 1 through 4 plus
+  // a band-qualified tier=null actor, all CRITICAL band so every actor is
+  // admitted — the ONLY thing under test here is sort order (tier asc, the
+  // ?? 99 fallback placing tier=null last).
+  it('sorts a mixed tier-1/2/3/4/null ladder with tier=null always last (the ?? 99 fallback)', () => {
+    const t1 = makeThreat({
+      source_ip: '192.0.2.40',
+      threat_level: 'CRITICAL',
+      score: 50,
+      escalation: makeVerdict({ tier: 1, disposition: 'allowed_through', block_status: 'allowed' }),
+    })
+    const t2 = makeThreat({
+      source_ip: '192.0.2.41',
+      threat_level: 'CRITICAL',
+      score: 50,
+      escalation: makeVerdict({ tier: 2, disposition: 'block_status_unknown' }),
+    })
+    const t3 = makeThreat({
+      source_ip: '192.0.2.42',
+      threat_level: 'CRITICAL',
+      score: 50,
+      escalation: makeVerdict({ tier: 3, disposition: 'blocked_persistent', block_status: 'blocked' }),
+    })
+    const t4 = makeThreat({
+      source_ip: '192.0.2.43',
+      threat_level: 'CRITICAL',
+      score: 50,
+      escalation: makeVerdict({ tier: 4, disposition: 'blocked_one_off', block_status: 'blocked' }),
+    })
+    const tNull = makeThreat({
+      source_ip: '192.0.2.44',
+      threat_level: 'CRITICAL',
+      score: 100, // highest score of all — would sort first if tier=null coerced to 0
+      escalation: makeVerdict({ tier: null, disposition: 'observed', block_status: 'unknown' }),
+    })
+
+    // Deliberately shuffled input order — sort must not depend on input order.
+    const result = deriveTriageActors([tNull, t3, t1, t4, t2], 'HIGH')
+
+    expect(result.map((t) => t.source_ip)).toEqual([
+      '192.0.2.40', // tier 1
+      '192.0.2.41', // tier 2
+      '192.0.2.42', // tier 3
+      '192.0.2.43', // tier 4
+      '192.0.2.44', // tier null — last, despite the highest score
+    ])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// deriveObservedRecord — the ADR-0067 D5(2) aggregate record line (issue #43)
+// ---------------------------------------------------------------------------
+
+describe('deriveObservedRecord — the aggregate "on the record" line (issue #43, ADR-0067 D5(2))', () => {
+  it('returns null when there are no observed-disposition actors', () => {
+    const tier1 = makeThreat({
+      source_ip: '192.0.2.50',
+      escalation: makeVerdict({ tier: 1, disposition: 'allowed_through', block_status: 'allowed' }),
+    })
+    const result = deriveObservedRecord([tier1], [tier1])
+    expect(result).toBeNull()
+  })
+
+  it('returns null when every observed actor already earned a banner slot via the band axis', () => {
+    const bandQualifiedObserved = makeThreat({
+      source_ip: '192.0.2.51',
+      threat_level: 'CRITICAL',
+      escalation: makeVerdict({ tier: null, disposition: 'observed', block_status: 'unknown' }),
+    })
+    // bandQualifiedObserved is present in pendingActors (it qualified via the band axis).
+    const result = deriveObservedRecord([bandQualifiedObserved], [bandQualifiedObserved])
+    expect(result).toBeNull()
+  })
+
+  it('sums total_events and counts distinct source_types for observed-only actors', () => {
+    const observedA = makeThreat({
+      source_ip: '192.0.2.52',
+      total_events: 10,
+      source_types: ['suricata'],
+      escalation: makeVerdict({ tier: null, disposition: 'observed', block_status: 'unknown' }),
+    })
+    const observedB = makeThreat({
+      source_ip: '192.0.2.53',
+      total_events: 32,
+      source_types: ['syslog', 'suricata'],
+      escalation: makeVerdict({ tier: null, disposition: 'observed', block_status: 'allowed' }),
+    })
+    const result = deriveObservedRecord([observedA, observedB], [])
+    expect(result).toEqual({ eventCount: 42, sourceCount: 2 })
+  })
+
+  it('excludes actors already present in pendingActors (band-qualified, not "only observed")', () => {
+    const bandQualified = makeThreat({
+      source_ip: '192.0.2.54',
+      threat_level: 'CRITICAL',
+      total_events: 10,
+      source_types: ['suricata'],
+      escalation: makeVerdict({ tier: null, disposition: 'observed', block_status: 'unknown' }),
+    })
+    const observedOnly = makeThreat({
+      source_ip: '192.0.2.55',
+      threat_level: 'LOW',
+      total_events: 5,
+      source_types: ['azure_waf'],
+      escalation: makeVerdict({ tier: null, disposition: 'observed', block_status: 'allowed' }),
+    })
+    // bandQualified is in pendingActors — only observedOnly should count.
+    const result = deriveObservedRecord([bandQualified, observedOnly], [bandQualified])
+    expect(result).toEqual({ eventCount: 5, sourceCount: 1 })
+  })
+
+  it('ignores tiered (non-observed) actors even when absent from pendingActors', () => {
+    // A tier-4 actor that isn't band-qualified never enters pendingActors, but
+    // it is NOT part of the observed stratum (it has a real disposition) —
+    // it must not be swept into the aggregate line.
+    const tier4 = makeThreat({
+      source_ip: '192.0.2.56',
+      threat_level: 'LOW',
+      total_events: 7,
+      escalation: makeVerdict({ tier: 4, disposition: 'blocked_one_off', block_status: 'blocked' }),
+    })
+    const result = deriveObservedRecord([tier4], [])
+    expect(result).toBeNull()
+  })
+
+  it('ignores actors with no escalation verdict at all', () => {
+    const noVerdict = makeThreat({ source_ip: '192.0.2.57', total_events: 9 })
+    const result = deriveObservedRecord([noVerdict], [])
+    expect(result).toBeNull()
+  })
+
+  it('returns an integer-only summary — no source_ip or source_type text in the result', () => {
+    const observed = makeThreat({
+      source_ip: '192.0.2.58',
+      total_events: 3,
+      source_types: ['suricata'],
+      escalation: makeVerdict({ tier: null, disposition: 'observed', block_status: 'unknown' }),
+    })
+    const result = deriveObservedRecord([observed], [])
+    expect(result).not.toBeNull()
+    expect(Object.values(result!).every((v) => typeof v === 'number')).toBe(true)
   })
 })

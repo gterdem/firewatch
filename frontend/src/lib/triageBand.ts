@@ -13,6 +13,14 @@
  *
  * The two axes are OR-combined and NEVER collapsed into a single number (ADR-0036).
  *
+ * ``deriveObservedRecord`` (issue #43, ADR-0067 D5(2)) is the aggregate-line
+ * derivation for the observed stratum: every actor carrying disposition
+ * "observed" that did NOT independently earn a banner slot (via the band
+ * axis) rolls up into one honest count — never silently dropped. Built from
+ * engine integers only (a sum of ``total_events``, a count of distinct
+ * ``source_types`` values) — no attacker-controlled text ever reaches the
+ * banner (ADR-0035 discipline).
+ *
  * SECURITY / correctness (ADR-0067 D2, issue #42): ``EscalationVerdict.tier`` is
  * ``number | null`` — the ADR-0067 observed stratum emits ``tier: null`` for actors
  * with no qualifying escalation signal. In JavaScript, ``null <= 2`` evaluates to
@@ -77,4 +85,59 @@ export function deriveTriageActors(
       // Within same tier: higher score first
       return b.score - a.score
     })
+}
+
+/**
+ * Aggregate summary of the observed stratum's "on the record" mass —
+ * everything the banner does NOT show as a chip, expressed as one honest
+ * count (ADR-0067 D5(2), issue #43).
+ */
+export interface ObservedRecordSummary {
+  /** Sum of `total_events` across all observed-only actors — an engine integer. */
+  eventCount: number
+  /** Count of distinct `source_types` values across those actors — an engine integer. */
+  sourceCount: number
+}
+
+/**
+ * Derive the "N detections on the record from M sources" aggregate — the
+ * ADR-0067 D5(2) safety net that keeps observed events visible without
+ * flooding the banner with chips.
+ *
+ * An actor qualifies for this rollup when:
+ *   - its escalation verdict has `disposition === "observed"` (tier: null —
+ *     no escalation claim at all, ADR-0067 D2), AND
+ *   - it is NOT already present in `pendingActors` (i.e. it did not
+ *     independently earn a banner slot via the band axis — ADR-0067 D5(1)).
+ *
+ * Returns `null` when there is nothing to report (no observed actors, or
+ * every observed actor already banded its way into the queue) — the caller
+ * renders no aggregate line in that case (EARS: WHEN zero observed-only
+ * actors exist, no aggregate line).
+ *
+ * SECURITY (ADR-0035 / issue #43 hard constraint): both fields are plain
+ * engine integers — a summed count and a distinct-value count — never the
+ * underlying attacker-influenceable source-type or IP text.
+ */
+export function deriveObservedRecord(
+  threats: ThreatScore[],
+  pendingActors: ThreatScore[],
+): ObservedRecordSummary | null {
+  const pendingIps = new Set(pendingActors.map((t) => t.source_ip))
+  const observedOnly = threats.filter(
+    (t) =>
+      !isDismissed(t) &&
+      t.escalation?.disposition === 'observed' &&
+      !pendingIps.has(t.source_ip),
+  )
+
+  if (observedOnly.length === 0) return null
+
+  const eventCount = observedOnly.reduce((sum, t) => sum + t.total_events, 0)
+  const sourceTypes = new Set<string>()
+  for (const t of observedOnly) {
+    for (const sourceType of t.source_types) sourceTypes.add(sourceType)
+  }
+
+  return { eventCount, sourceCount: sourceTypes.size }
 }

@@ -964,6 +964,185 @@ describe('DashboardRoute — #649 escalation-axis banner-worthiness (ADR-0058)',
 })
 
 // ---------------------------------------------------------------------------
+// Issue #43 — ADR-0067 D2/D5: the observed stratum reaches the dashboard
+//
+// EARS criteria under test (wired end to end, not just deriveObservedRecord
+// in isolation):
+//   - WHEN an actor's verdict is observed (tier=None) → NOT rendered as a chip.
+//   - WHEN one or more observed-only actors exist → the aggregate record
+//     line renders, built from real /threats fixture data.
+//   - WHEN zero actors are queue-eligible → the calm state renders, WITH the
+//     aggregate line still visible — the "calm is the reachable default day
+//     one screen" claim this issue exists to prove.
+// ---------------------------------------------------------------------------
+
+describe('DashboardRoute — #43 observed stratum reaches the banner (ADR-0067 D2/D5)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    clearDismissed()
+    mockFetchHealth.mockResolvedValue(HEALTH_AI_ONLINE)
+  })
+
+  function makeObserved(overrides: Partial<ThreatScore> = {}): ThreatScore {
+    return {
+      source_ip: '192.0.2.60',
+      threat_level: 'LOW',
+      score: 15,
+      total_events: 20,
+      blocked_events: 0,
+      attack_types: [],
+      first_seen: '2026-07-15T08:00:00Z',
+      last_seen: '2026-07-15T09:00:00Z',
+      source_types: ['suricata'],
+      detections: [],
+      ai_insights: null,
+      ai_confidence: null,
+      ai_status: 'disabled',
+      location: null,
+      score_breakdown: [],
+      asn: null,
+      as_name: null,
+      score_delta: null,
+      escalation: {
+        tier: null,
+        disposition: 'observed',
+        justification: '[RULE] Suricata ALERT — no qualifying signal',
+        block_status: 'unknown',
+      },
+      ...overrides,
+    }
+  }
+
+  it('a watch-only install with ONLY observed actors renders the calm state, not a flood', async () => {
+    // The exact scenario D2/D3 exist to fix: a mass of unqualified ALERT/LOG
+    // actors on a passive install must never flood the banner as chips.
+    const flood = Array.from({ length: 50 }, (_, i) =>
+      makeObserved({ source_ip: `192.0.2.${60 + (i % 190)}`, total_events: 4 }),
+    )
+
+    mockFetchStats.mockResolvedValue(STATS_FIXTURE)
+    mockFetchTimeline.mockResolvedValue(TIMELINE_FIXTURE)
+    mockFetchCategories.mockResolvedValue(CATEGORIES_FIXTURE)
+    mockFetchThreats.mockResolvedValue(flood)
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('triage-banner-calm')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('triage-banner-active')).toBeNull()
+    expect(screen.queryByTestId('triage-actor-chip')).toBeNull()
+  })
+
+  it('the calm state still shows the aggregate record line built from real fixture data', async () => {
+    const observedA = makeObserved({
+      source_ip: '192.0.2.61',
+      total_events: 30,
+      source_types: ['suricata'],
+    })
+    const observedB = makeObserved({
+      source_ip: '192.0.2.62',
+      total_events: 12,
+      source_types: ['syslog'],
+    })
+
+    mockFetchStats.mockResolvedValue(STATS_FIXTURE)
+    mockFetchTimeline.mockResolvedValue(TIMELINE_FIXTURE)
+    mockFetchCategories.mockResolvedValue(CATEGORIES_FIXTURE)
+    mockFetchThreats.mockResolvedValue([observedA, observedB])
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('triage-banner-calm')).toBeInTheDocument()
+    })
+    const line = screen.getByTestId('triage-observed-record')
+    expect(line).toHaveTextContent('42 detections on the record from 2 sources')
+  })
+
+  it('an observed actor that ALSO crosses the band threshold appears as a chip, not in the aggregate', async () => {
+    const bandQualifiedObserved = makeObserved({
+      source_ip: '192.0.2.63',
+      threat_level: 'CRITICAL',
+      total_events: 300,
+    })
+
+    mockFetchStats.mockResolvedValue(STATS_FIXTURE)
+    mockFetchTimeline.mockResolvedValue(TIMELINE_FIXTURE)
+    mockFetchCategories.mockResolvedValue(CATEGORIES_FIXTURE)
+    mockFetchThreats.mockResolvedValue([bandQualifiedObserved])
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('triage-banner-active')).toBeInTheDocument()
+    })
+    // It is a chip, not folded into the aggregate line.
+    expect(screen.getAllByTestId('triage-actor-chip')).toHaveLength(1)
+    expect(screen.queryByTestId('triage-observed-record')).toBeNull()
+  })
+
+  it('the aggregate record line renders even while the active banner has chips (mixed population)', async () => {
+    const tier1: ThreatScore = {
+      source_ip: '192.0.2.64',
+      threat_level: 'LOW',
+      score: 40,
+      total_events: 2,
+      blocked_events: 0,
+      attack_types: ['SQL Injection'],
+      first_seen: '2026-07-15T08:00:00Z',
+      last_seen: '2026-07-15T08:05:00Z',
+      source_types: ['azure_waf'],
+      detections: [],
+      ai_insights: null,
+      ai_confidence: null,
+      ai_status: 'disabled',
+      location: null,
+      score_breakdown: [],
+      asn: null,
+      as_name: null,
+      score_delta: null,
+      escalation: {
+        tier: 1,
+        disposition: 'allowed_through',
+        justification: '[RULE] SQLi matched on ALLOWED request',
+        block_status: 'allowed',
+      },
+    }
+    const observedOnly = makeObserved({ source_ip: '192.0.2.65', total_events: 8 })
+
+    mockFetchStats.mockResolvedValue(STATS_FIXTURE)
+    mockFetchTimeline.mockResolvedValue(TIMELINE_FIXTURE)
+    mockFetchCategories.mockResolvedValue(CATEGORIES_FIXTURE)
+    mockFetchThreats.mockResolvedValue([tier1, observedOnly])
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('triage-banner-active')).toBeInTheDocument()
+    })
+    expect(screen.getAllByTestId('triage-actor-chip')).toHaveLength(1)
+    expect(screen.getByTestId('triage-observed-record')).toHaveTextContent(
+      '8 detections on the record from 1 source',
+    )
+  })
+
+  it('no aggregate line renders when there are no observed actors at all', async () => {
+    mockFetchStats.mockResolvedValue(STATS_FIXTURE)
+    mockFetchTimeline.mockResolvedValue(TIMELINE_FIXTURE)
+    mockFetchCategories.mockResolvedValue(CATEGORIES_FIXTURE)
+    mockFetchThreats.mockResolvedValue([])
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('triage-banner-calm')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('triage-observed-record')).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Issue #262 — 2×2 bento grid layout
 // ---------------------------------------------------------------------------
 

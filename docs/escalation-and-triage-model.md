@@ -248,7 +248,32 @@ take any automatic action. When an actor appears:
 3. Record that decision (block / watch / false-positive) and dismiss the actor from the banner.
 
 The empty/all-clear banner state shows the **4-tier escalation legend** so analysts are oriented to
-the model even when the queue is empty.
+the model even when the queue is empty. The legend now also carries an **Observed** row (issue #43,
+ADR-0067 D2) alongside the four numbered tiers — deliberately not a fifth tier (see §2.1) — so
+analysts learn the whole model, calm state included.
+
+### The aggregate record line (issue #43, ADR-0067 D5(2))
+
+Observed-stratum actors — `tier: null`, `disposition: "observed"` — never render as a banner chip
+on their own (they surface only via the band axis, on merit, unchanged). They are never silently
+dropped either: whenever one or more observed-only actors exist in the window, the banner renders
+exactly one honest sentence:
+
+> **N detections on the record from M sources → Network Logs**
+
+- **N** and **M** are engine integers only — a summed event count and a count of distinct
+  contributing source types (`lib/triageBand.ts`'s `deriveObservedRecord`) — never
+  attacker-controlled text (ADR-0035 discipline). The link opens Network Logs, where every
+  underlying event is still visible in full detail.
+- The line renders in **both** banner states: alongside the active chips when a mixed population
+  exists, and below "All clear" when the queue is empty but observed events still exist. It is the
+  D5(2) safety net that makes the observed stratum honest rather than a silent drop.
+- **This is what makes "All clear" reachable on a normal day.** A watch-only M1 bundle (Suricata,
+  syslog, ClamAV — nothing that can block) previously guaranteed a nonzero triage queue forever,
+  because every ALERT/LOG event auto-escalated to Tier 2 (the pre-assertion-gate flood described
+  in §2.1). With the assertion gate (§2.1) and this aggregate line, that same install now shows
+  "All clear — 214 detections on the record from 3 sources → Network Logs" — the calm, honest
+  default day-one screen.
 
 ---
 

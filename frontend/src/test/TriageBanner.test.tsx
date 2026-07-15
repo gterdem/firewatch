@@ -31,6 +31,21 @@ import { EntityPanelContext } from '../components/entity/EntityPanelContext'
 import type { EntityPanelContextValue } from '../components/entity/EntityPanelContext'
 import type { ThreatScore, EscalationVerdict } from '../api/types'
 import type { OnAction } from '../lib/triageActions'
+import type { ObservedRecordSummary } from '../lib/triageBand'
+
+// ---------------------------------------------------------------------------
+// Mock react-router-dom useNavigate (issue #43 — the observed-record link)
+// ---------------------------------------------------------------------------
+
+const mockNavigate = vi.fn()
+
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>()
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  }
+})
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -1019,5 +1034,115 @@ describe('TriageBanner — #728 top-N + view-all + tier headers', () => {
       const style = group.getAttribute('style') ?? ''
       expect(style).not.toMatch(/overflow\s*:\s*(scroll|auto)/)
     }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Observed-stratum aggregate record line (issue #43, ADR-0067 D2/D5)
+//
+// EARS criteria under test:
+//   - WHEN observedRecord is null/absent → no aggregate line renders, in
+//     either the calm or active state.
+//   - WHEN observedRecord is present → the banner renders ONE line built from
+//     its engine integers (never re-derived, never attacker-controlled text),
+//     in BOTH the calm and active states.
+//   - The line's link navigates to Network Logs (/logs).
+//   - The tier legend gains one "Observed" row (bounded, no inner scrollbar).
+// ---------------------------------------------------------------------------
+
+describe('TriageBanner — observed-stratum aggregate record line (issue #43)', () => {
+  const RECORD: ObservedRecordSummary = { eventCount: 42, sourceCount: 3 }
+
+  it('does NOT render the aggregate line when observedRecord is absent (calm state)', () => {
+    render(<TriageBanner pendingActors={[]} onAction={vi.fn()} />)
+    expect(screen.queryByTestId('triage-observed-record')).toBeNull()
+  })
+
+  it('does NOT render the aggregate line when observedRecord is null (calm state)', () => {
+    render(<TriageBanner pendingActors={[]} onAction={vi.fn()} observedRecord={null} />)
+    expect(screen.queryByTestId('triage-observed-record')).toBeNull()
+  })
+
+  it('does NOT render the aggregate line when observedRecord is absent (active state)', () => {
+    render(<TriageBanner pendingActors={[ACTOR_ESCALATED_TIER1]} onAction={vi.fn()} />)
+    expect(screen.queryByTestId('triage-observed-record')).toBeNull()
+  })
+
+  it('renders the aggregate line in the calm state when observedRecord is present', () => {
+    render(<TriageBanner pendingActors={[]} onAction={vi.fn()} observedRecord={RECORD} />)
+
+    const line = screen.getByTestId('triage-observed-record')
+    expect(line).toHaveTextContent('42 detections on the record from 3 sources')
+  })
+
+  it('renders the aggregate line in the active state when observedRecord is present', () => {
+    render(
+      <TriageBanner
+        pendingActors={[ACTOR_ESCALATED_TIER1]}
+        onAction={vi.fn()}
+        observedRecord={RECORD}
+      />,
+    )
+
+    const line = screen.getByTestId('triage-observed-record')
+    expect(line).toHaveTextContent('42 detections on the record from 3 sources')
+  })
+
+  it('singularizes "detection" and "source" when counts are 1', () => {
+    render(
+      <TriageBanner
+        pendingActors={[]}
+        onAction={vi.fn()}
+        observedRecord={{ eventCount: 1, sourceCount: 1 }}
+      />,
+    )
+
+    const line = screen.getByTestId('triage-observed-record')
+    expect(line).toHaveTextContent('1 detection on the record from 1 source')
+    expect(line).not.toHaveTextContent('1 detections')
+    expect(line).not.toHaveTextContent('1 sources')
+  })
+
+  it('clicking the Network Logs link navigates to /logs', async () => {
+    mockNavigate.mockClear()
+    render(<TriageBanner pendingActors={[]} onAction={vi.fn()} observedRecord={RECORD} />)
+
+    await userEvent.click(screen.getByTestId('triage-observed-record-link'))
+
+    expect(mockNavigate).toHaveBeenCalledOnce()
+    expect(mockNavigate).toHaveBeenCalledWith('/logs')
+  })
+
+  it('renders the record line as text nodes only (ADR-0029 D3 — no injection surface)', () => {
+    render(<TriageBanner pendingActors={[]} onAction={vi.fn()} observedRecord={RECORD} />)
+
+    expect(document.querySelectorAll('script').length).toBe(0)
+  })
+
+  it('calm banner container (with observed line + legend) has no overflow:scroll/auto', () => {
+    render(<TriageBanner pendingActors={[]} onAction={vi.fn()} observedRecord={RECORD} />)
+
+    const banner = screen.getByTestId('triage-banner-calm')
+    const style = banner.getAttribute('style') ?? ''
+    expect(style).not.toMatch(/overflow\s*:\s*(scroll|auto)/)
+  })
+
+  // Legend gains an "Observed" row (ADR-0067 D2) — bounded block, no 5th tier number
+  it('legend shows an "Observed" row alongside the 4 tier rows', () => {
+    render(<TriageBanner pendingActors={[]} onAction={vi.fn()} />)
+
+    const observedRow = screen.getByTestId('legend-tier-observed')
+    expect(observedRow).toHaveTextContent('On the record — no escalation claim')
+    // The 4 numbered tiers are still present, unchanged
+    expect(screen.getByTestId('legend-tier-1')).toBeInTheDocument()
+    expect(screen.getByTestId('legend-tier-4')).toBeInTheDocument()
+  })
+
+  it('legend Observed row has no inner scrollbar (house rule)', () => {
+    render(<TriageBanner pendingActors={[]} onAction={vi.fn()} />)
+
+    const observedRow = screen.getByTestId('legend-tier-observed')
+    const style = observedRow.getAttribute('style') ?? ''
+    expect(style).not.toMatch(/overflow\s*:\s*(scroll|auto)/)
   })
 })

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections.abc import AsyncIterator
 from typing import Any, TypeVar
 
@@ -500,3 +501,99 @@ class TestOversizedRecordRecovery:
         results = await asyncio.wait_for(_collect(reader.read("head")), timeout=2.0)
 
         assert results == []
+
+
+# --------------------------------------------------------------------------- #
+# Security re-review (non-blocking hardening, PR #36) — the peek's silent
+# `None` return conflated a genuine bug (still-oversized shrunk line, or a
+# real journalctl failure) with the ordinary "entry legitimately rotated
+# away" case. Both now log a distinguishing error, so a real bug is
+# diagnosable instead of presenting only as "the cursor never advances and
+# the oversized entry stalls forever."
+# --------------------------------------------------------------------------- #
+
+
+class TestPeekHardening:
+    async def test_peek_shrunk_line_still_oversized_is_logged_distinctly(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Regression locking in the "the shrunk peek line always fits"
+        assumption: the four always-printed fields (__CURSOR,
+        __REALTIME_TIMESTAMP, __MONOTONIC_TIMESTAMP, _BOOT_ID) are
+        journald-generated and small, so ``--output-fields=_BOOT_ID`` should
+        never itself produce an oversized line. If a future systemd behavior
+        change ever makes this happen, it must fail loudly in CI (via this
+        test) rather than degrade silently into "the cursor cannot advance
+        and an oversized entry stalls forever" in a user's deployment."""
+        main_stream = FakeProcess(stdout_lines=[OVERSIZED])
+        peek = FakeProcess(stdout_lines=[OVERSIZED])
+        spawn = _SequencedSpawn([main_stream, peek])
+        monkeypatch.setattr("firewatch_sdk.localhost.journald._create_subprocess_exec", spawn)
+
+        reader = JournaldReader()
+        with caplog.at_level(logging.ERROR, logger="firewatch.sdk.localhost.journald"):
+            results = await asyncio.wait_for(
+                _collect(reader.read("s=before-poison")), timeout=2.0
+            )
+
+        assert results == []
+        messages = " ".join(caplog.messages)
+        assert "shrunk" in messages
+        assert "_MAX_LINE_BYTES" in messages or "impossible" in messages
+
+    async def test_peek_journalctl_failure_is_logged_distinctly_from_vanished_entry(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A genuine journalctl failure during the peek (nonzero returncode)
+        must be logged distinctly from the ordinary "the entry vanished" case
+        — both currently return None from _peek_cursor_after, but only one is
+        a real bug worth investigating. Mirrors the
+        ``cursor is None and returncode != 0`` check already used in
+        ``_discover_tail_cursor``."""
+        main_stream = FakeProcess(stdout_lines=[OVERSIZED])
+        peek = FakeProcess(
+            stdout_lines=[],
+            stderr=b"Failed to open system journal: corrupted\n",
+            returncode=1,
+        )
+        spawn = _SequencedSpawn([main_stream, peek])
+        monkeypatch.setattr("firewatch_sdk.localhost.journald._create_subprocess_exec", spawn)
+
+        reader = JournaldReader()
+        with caplog.at_level(logging.ERROR, logger="firewatch.sdk.localhost.journald"):
+            results = await asyncio.wait_for(
+                _collect(reader.read("s=before-poison")), timeout=2.0
+            )
+
+        # Same externally-visible outcome as the vanished-entry case (no
+        # crash, no raise) — the point of this test is the DISTINGUISHING
+        # log line, not a behavior change.
+        assert results == []
+        messages = " ".join(caplog.messages)
+        assert "peek" in messages.lower()
+        assert "corrupted" in messages
+
+    async def test_peek_vanished_entry_returncode_zero_logs_nothing(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The ordinary, expected case — the entry rotated away and the peek
+        cleanly exits 0 with nothing to print — must NOT be logged as an
+        error; only a genuine failure (nonzero returncode) should be.
+
+        (The main stream's own oversized-line log — unrelated to the peek —
+        is expected and excluded from this assertion; see
+        ``TestOversizedRecordRecovery`` for that behavior.)"""
+        main_stream = FakeProcess(stdout_lines=[OVERSIZED])
+        peek = FakeProcess(stdout_lines=[], returncode=0)
+        spawn = _SequencedSpawn([main_stream, peek])
+        monkeypatch.setattr("firewatch_sdk.localhost.journald._create_subprocess_exec", spawn)
+
+        reader = JournaldReader()
+        with caplog.at_level(logging.ERROR, logger="firewatch.sdk.localhost.journald"):
+            results = await asyncio.wait_for(
+                _collect(reader.read("s=before-poison")), timeout=2.0
+            )
+
+        assert results == []
+        peek_messages = [m for m in caplog.messages if "peek" in m.lower()]
+        assert peek_messages == []

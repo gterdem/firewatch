@@ -5,6 +5,13 @@ binding). Present and consistent across every mainstream systemd distro (Arch,
 Ubuntu, Fedora, Debian), so reading it once here gives every endpoint plugin
 multi-distro support for free.
 
+**Effective minimum: systemd 236.** The poison-pill recovery peek
+(``_peek_cursor_after``, below) depends on ``--output-fields``, added in
+systemd 236 (journalctl(1)) — the true floor for THIS mechanism, distinct
+from the general "mainstream distro" claim above. Every mainstream distro
+release this reader targets ships well past 236, so this is a
+documentation-accuracy note, not a compatibility gap.
+
 **Invariant — the ``(None, cursor)`` yield shape.** ``read()`` MAY yield a
 ``None`` record paired with a cursor. This is a narrow, load-bearing
 exception to "every yield carries a record", not a general "no event this
@@ -380,6 +387,17 @@ class JournaldReader:
         returning the *first* entry after the cursor (rather than, say, the
         most recent matching entry overall) across the systemd versions
         this reader targets.
+
+        Both failure signals below return ``None`` — a genuinely vanished
+        entry (rotated away) is the expected, non-error case, and this
+        method's contract is unchanged (``None`` = "could not obtain the
+        entry's cursor"). What changes is that each ``None`` is no longer
+        silent: a distinguishing ``logger.error`` fires first, mirroring the
+        ``cursor is None and returncode != 0`` pattern already used in
+        ``_discover_tail_cursor`` — so a genuine ``journalctl`` failure here
+        is diagnosable from logs rather than indistinguishable from the
+        ordinary "already rotated away" case, whose only visible symptom
+        would otherwise be the SAME oversized entry stalling forever.
         """
         extra = ["--output-fields", "_BOOT_ID"]
         if after_cursor is not None:
@@ -389,12 +407,54 @@ class JournaldReader:
         try:
             async for raw_line in self._iter_lines(proc):
                 if raw_line is None:
-                    continue  # the shrunk line should never be oversized; stay defensive
+                    # Should be impossible: the four always-printed fields
+                    # (__CURSOR, __REALTIME_TIMESTAMP, __MONOTONIC_TIMESTAMP,
+                    # _BOOT_ID) are journald-generated and small, so the
+                    # shrunk peek line should never itself exceed
+                    # _MAX_LINE_BYTES. Logged distinctly (rather than a bare
+                    # `continue`) because if this ever fires, the cursor
+                    # cannot advance past the oversized entry this cycle —
+                    # it will be re-served, and re-skipped, on every future
+                    # poll, the exact poison-pill stall this mechanism
+                    # exists to prevent.
+                    logger.error(
+                        "JournaldReader: the peek's own shrunk line "
+                        "(--output-fields=_BOOT_ID) still exceeded "
+                        "_MAX_LINE_BYTES (%d bytes) — this should be "
+                        "impossible, since only journald's small "
+                        "always-printed fields remain. The oversized "
+                        "entry's cursor cannot be obtained this cycle, so "
+                        "it will be re-served (and re-skipped) on the next "
+                        "poll.",
+                        _MAX_LINE_BYTES,
+                    )
+                    continue
                 record = self._parse_line(raw_line)
                 if record is None:
                     continue
                 cursor = record.get(_CURSOR_FIELD)
                 return cursor if isinstance(cursor, str) else None
+
+            # Stdout reached EOF with no usable record — journalctl (never
+            # run with -f here) has finished or is finishing on its own, so
+            # waiting for it is safe (no deadlock risk from unread buffered
+            # output). Mirrors _discover_tail_cursor's own check: a nonzero
+            # exit is a genuine peek failure, not the ordinary "the entry
+            # already rotated away" case (which exits 0 with nothing new to
+            # print).
+            returncode = await proc.wait()
+            if returncode != 0:
+                stderr_text = await self._read_stderr(proc)
+                logger.error(
+                    "JournaldReader: peek journalctl exited %d while "
+                    "re-requesting the oversized entry's own cursor — "
+                    "cannot confirm whether the entry legitimately rotated "
+                    "away or journalctl itself failed; the cursor will not "
+                    "advance this cycle, so the oversized entry will be "
+                    "re-served (and re-skipped) on the next poll. "
+                    "stderr=%s",
+                    returncode, stderr_text.strip(),
+                )
             return None
         finally:
             await self._terminate(proc)

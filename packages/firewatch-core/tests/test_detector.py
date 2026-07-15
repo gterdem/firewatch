@@ -89,6 +89,105 @@ def test_sustained_attack_too_short_span():
     assert _by_name(detect(events), "sustained_attack") is None
 
 
+def test_ssh_login_failure_burst():
+    """issue #3 (ADR-0069 D4(e) corrected mapping): >=5 ALERT-action
+    'SSH Login Failure' events (severity=low), one IP, <=10 min."""
+    events = [
+        make_event(
+            source_type="linux_auth", category="SSH Login Failure", action="ALERT",
+            severity="low", timestamp=T0 + timedelta(minutes=i),
+        )
+        for i in range(5)
+    ]
+    d = _by_name(detect(events), "ssh_login_failure_burst")
+    assert d is not None and d.score_delta == 20
+
+
+def test_ssh_login_failure_burst_declares_qualifying_severity():
+    """ADR-0067 D1(a): the Detection must carry a qualifying severity/
+    auto_escalate so the actor passes the Tier-2 gate (escalation/qualify.py).
+    """
+    events = [
+        make_event(
+            source_type="linux_auth", category="SSH Login Failure", action="ALERT",
+            severity="low", timestamp=T0 + timedelta(minutes=i),
+        )
+        for i in range(5)
+    ]
+    d = _by_name(detect(events), "ssh_login_failure_burst")
+    assert d is not None
+    assert d.severity == "high" or d.auto_escalate is True
+
+
+def test_ssh_login_failure_burst_below_threshold():
+    events = [
+        make_event(
+            source_type="linux_auth", category="SSH Login Failure", action="ALERT",
+            severity="low", timestamp=T0 + timedelta(minutes=i),
+        )
+        for i in range(4)  # only 4 < 5
+    ]
+    assert _by_name(detect(events), "ssh_login_failure_burst") is None
+
+
+def test_ssh_login_failure_burst_too_long_span():
+    events = [
+        make_event(
+            source_type="linux_auth", category="SSH Login Failure", action="ALERT",
+            severity="low", timestamp=T0 + timedelta(minutes=15 * i),
+        )
+        for i in range(5)  # spans 60 min > 10
+    ]
+    assert _by_name(detect(events), "ssh_login_failure_burst") is None
+
+
+def test_ssh_login_failure_burst_requires_alert_action():
+    """A LOG-action population with the same category must NOT fire this
+    rule — the source's own normalize() never emits LOG for this category
+    (it's ALERT/low, ADR-0069 D4(e)); this guards the rule's own condition."""
+    events = [
+        make_event(
+            source_type="linux_auth", category="SSH Login Failure", action="LOG",
+            timestamp=T0 + timedelta(minutes=i),
+        )
+        for i in range(5)
+    ]
+    assert _by_name(detect(events), "ssh_login_failure_burst") is None
+
+
+def test_ssh_login_failure_burst_wrong_category_no_fire():
+    events = [
+        make_event(
+            source_type="linux_auth", category="SSH Login Success", action="LOG",
+            timestamp=T0 + timedelta(minutes=i),
+        )
+        for i in range(5)
+    ]
+    assert _by_name(detect(events), "ssh_login_failure_burst") is None
+
+
+def test_ssh_login_failure_alert_low_never_qualifies_at_any_volume():
+    """issue #3 Must-NOT (ADR-0069 D1 corollary / ADR-0067 D1(b)): a large
+    population of ALERT/low 'SSH Login Failure' events — even well beyond the
+    burst rule's 10-minute window, so the correlation itself does NOT fire —
+    must never qualify the severity gate directly. severity='low' structurally
+    cannot satisfy D1(b) (which requires high/critical), at any volume.
+    """
+    from firewatch_core.escalation.qualify import qualify
+
+    events = [
+        make_event(
+            source_type="linux_auth", category="SSH Login Failure", action="ALERT",
+            severity="low", timestamp=T0 + timedelta(hours=i),  # 1h apart — no burst
+        )
+        for i in range(50)
+    ]
+    detections = detect(events)
+    assert not any(d.rule_name == "ssh_login_failure_burst" for d in detections)
+    result = qualify(events, detections)
+    assert result.qualified is False
+
+
 def test_failing_rule_is_swallowed(monkeypatch):
     def _boom(events):
         raise RuntimeError("rule exploded")

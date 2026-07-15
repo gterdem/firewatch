@@ -23,6 +23,16 @@ Severity anchoring (Sigma ``level`` vocabulary):
   increases suspicion but lacks a confirmed outcome (risk_score≈48).
 - ``sustained_attack``      — ``medium``   / auto_escalate=False: persistence is notable
   but the defence held; not yet a confirmed breach (risk_score≈48).
+- ``ssh_login_failure_burst`` — ``high`` / auto_escalate=False (issue #3, ADR-0069 D4(e) /
+  ADR-0067 D1a): a pure burst of ``action=ALERT``, ``severity=low`` "SSH Login Failure" auth
+  telemetry from one IP, with no successful login and no cross-source corroboration. `low`
+  never qualifies the ADR-0067 D1(b) severity gate at ANY volume (ADR-0069 D1's ambient-mass
+  corollary + issue #3's Must-NOT criterion); none of the four rules above fire on this shape
+  either (``brute_force_then_login`` additionally requires a subsequent success;
+  ``ids_then_brute_force`` additionally requires a Suricata IDS event; ``sustained_attack``
+  counts BLOCK/DROP only) — so a pure host-level SSH brute force needs this rule to become a
+  qualifying assertion at all (Sigma T1110; risk_score≈65, below the confirmed-compromise
+  ``brute_force_then_login`` case).
 
 Skill gate: ai-engine-invariants loaded before editing this file.
 """
@@ -62,6 +72,11 @@ ESCALATION_POLICY.register(
 ESCALATION_POLICY.register(
     "sustained_attack",
     severity="medium",
+    auto_escalate=False,
+)
+ESCALATION_POLICY.register(
+    "ssh_login_failure_burst",
+    severity="high",
     auto_escalate=False,
 )
 # N-2 (issue #648): lock the registry once module-import-time registrations are
@@ -215,6 +230,56 @@ def _sustained_attack(events: list[SecurityEvent]) -> list[Detection]:
     )]
 
 
+def _ssh_login_failure_burst(events: list[SecurityEvent]) -> list[Detection]:
+    """>=5 "SSH Login Failure" ALERT events from one IP within 10 minutes.
+
+    issue #3 / ADR-0069 D4(e) / ADR-0067 D1(a): a single failed SSH login is
+    ``action=ALERT``, ``severity=low`` (Sigma `low` — "notable event but
+    rarely an incident... relevant in high numbers or combination with
+    others", a lone failed attempt letter for letter; see
+    ``firewatch_linux_auth.normalize``'s severity table). `low` never
+    qualifies the ADR-0067 D1(b) severity gate at ANY volume (issue #3's own
+    Must-NOT criterion: queue entry for auth failures belongs to the
+    correlation rules alone) — so without this dedicated rule, a pure SSH
+    brute-force burst against this host (repeated failures, no successful
+    login, no other source's corroboration) would never leave the observed
+    stratum, no matter how large the burst. This rule is the "high numbers...
+    combination" escalation path the severity table explicitly defers to.
+    Source-agnostic by design: keyed on ``category``+``action``, not
+    ``source_type`` — any future source reusing the "SSH Login Failure"
+    category joins this rule for free, matching the existing rules' own
+    category-keyed (not source_type-keyed) convention.
+
+    Threshold: 5 events within a 10-minute overall span — a conventional
+    brute-force detection threshold (e.g. fail2ban's default
+    maxretry=5/findtime=600s) consistent with the 10-minute window
+    ``_ids_then_brute_force`` already uses. Span check mirrors
+    ``_sustained_attack``'s style (first-to-last span, not a sliding window).
+    """
+    failures = sorted(
+        (
+            e for e in events
+            if e.category == "SSH Login Failure" and e.action == "ALERT"
+        ),
+        key=lambda e: e.timestamp,
+    )
+    if len(failures) < 5:
+        return []
+    span = failures[-1].timestamp - failures[0].timestamp
+    if span > timedelta(minutes=10):
+        return []
+    return [_emit(
+        source_ip=events[0].source_ip,
+        rule_name="ssh_login_failure_burst",
+        score_delta=20,
+        reason=(
+            f"{len(failures)} failed SSH login attempts within "
+            f"{int(span.total_seconds() / 60)} min — brute-force pattern"
+        ),
+        matched_event_ids=[e.event_id for e in failures if e.event_id][:20],
+    )]
+
+
 # ── Rule registry ────────────────────────────────────────────────────
 
 
@@ -223,6 +288,7 @@ BUILTIN_RULES: list[CorrelationRule] = [
     _brute_force_then_login,
     _multi_source_attack,
     _sustained_attack,
+    _ssh_login_failure_burst,
 ]
 
 

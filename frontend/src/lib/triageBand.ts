@@ -1,5 +1,6 @@
 /**
- * triageBand — shared triage-actor derivation logic (issue #650, ADR-0059 D1+D2).
+ * triageBand — shared triage-actor derivation logic (issue #650, ADR-0059 D1+D2;
+ * issue #42, ADR-0067 D2/D7 — the null-tier guard).
  *
  * Extracted from DashboardRoute.tsx so it can be imported by tests and other
  * consumers without violating the react-refresh/only-export-components lint rule
@@ -11,6 +12,15 @@
  *     OR isHighTierEscalation(threat)                  // action-aware axis — ADR-0058
  *
  * The two axes are OR-combined and NEVER collapsed into a single number (ADR-0036).
+ *
+ * SECURITY / correctness (ADR-0067 D2, issue #42): ``EscalationVerdict.tier`` is
+ * ``number | null`` — the ADR-0067 observed stratum emits ``tier: null`` for actors
+ * with no qualifying escalation signal. In JavaScript, ``null <= 2`` evaluates to
+ * ``true`` (null coerces to 0 in a relational comparison) — an unguarded
+ * ``t.escalation.tier <= 2`` would silently re-admit EVERY observed actor into the
+ * triage banner, reproducing the exact flood ADR-0067 fixes, with no error and no
+ * failing type check (TypeScript does not flag `null <= 2`). ``isHighTierEscalation``
+ * below explicitly null-guards before the comparison.
  */
 
 import { bandMeets } from './threatLevel'
@@ -24,9 +34,15 @@ import type { ThreatScore } from '../api/types'
  * ADR-0058 §4a: Tier 1 (allowed-through) and Tier 2 (block-status-unknown)
  * are banner-worthy even when the numeric score is LOW or MEDIUM — the
  * action axis is a *second axis* presented alongside the band (ADR-0036).
+ *
+ * ADR-0067 D2/D7: ``tier`` may be ``null`` (the observed stratum — no
+ * escalation claim). Explicitly null-guarded: ``null <= 2`` is ``true`` in
+ * JavaScript, so omitting this check would silently treat every observed
+ * actor as Tier 1/2 and reproduce the pre-#42 flood in the UI only.
  */
 export function isHighTierEscalation(t: ThreatScore): boolean {
-  return t.escalation != null && t.escalation.tier <= 2
+  const tier = t.escalation?.tier
+  return tier != null && tier <= 2
 }
 
 /**

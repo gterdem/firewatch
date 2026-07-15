@@ -271,6 +271,13 @@ EscalationDispositionLiteral = Literal[
     "block_status_unknown",  # ALERT/LOG — neither blocked nor allowed asserted (Tier 2)
     "blocked_persistent",    # BLOCK/DROP, persistent / high-volume (Tier 3)
     "blocked_one_off",       # BLOCK/DROP, one-off (Tier 4)
+    # ADR-0067 D2 — additive: the observed stratum. Emitted when an actor's
+    # ALERT/LOG population has no qualifying signal (ADR-0067 D1), or when all
+    # events are ALLOW with no detection. Always paired with ``tier=None`` —
+    # "on the record, no escalation claim" — deliberately NOT a fifth tier
+    # (ADR-0067 D2: a number would force a false ordering against Tier 4).
+    # Anchors OCSF 1.8.0 ``action_id=3 Observed``.
+    "observed",
 ]
 # ADR-0058 Amendment 1 (A1): adds ``"partial"`` for actors whose events span more than
 # one terminal disposition class (e.g. some ALERT/LOG AND some BLOCK/DROP).
@@ -306,11 +313,19 @@ class EscalationVerdict(BaseModel):
     function in ``firewatch_core.escalation.decider``.  **No LLM, no I/O** — free at
     ingest.  Serialises to JSON for dashboard consumption (issue #649).
 
-    Fields (ADR-0058 §D3 / Amendment 1):
-    ``tier``               — 1-4 per the 4-tier action model (lower = louder / more urgent).
-                             1 = allowed-through (highest); 4 = one-off block (informational).
-    ``disposition``        — machine-readable action label (one of four ``EscalationDispositionLiteral``
-                             values). Safe for programmatic routing (e.g. banner logic).
+    Fields (ADR-0058 §D3 / Amendment 1 / ADR-0067 D2):
+    ``tier``               — 1-4 per the 4-tier action model (lower = louder / more urgent),
+                             or ``None`` for the ADR-0067 D2 **observed** stratum — "on the
+                             record, no escalation claim." Deliberately NOT a fifth tier
+                             (ADR-0067 D2: a numeric 5 would force a false ordering against
+                             Tier 4 that cannot be justified). Widened from ``int`` to
+                             ``int | None`` — additive per the ADR-0048/0055 pattern; every
+                             consumer that compares ``tier`` MUST null-guard first
+                             (``worthiness.py`` / ``triageBand.ts``).
+    ``disposition``        — machine-readable action label (one of five
+                             ``EscalationDispositionLiteral`` values, including the additive
+                             ``"observed"`` — ADR-0067 D2). Safe for programmatic routing
+                             (e.g. banner logic).
     ``justification``      — human-readable, ``RULE``-tagged sentence (ADR-0035) safe to render
                              as a plain text node (e.g.
                              "SQLi signature matched on an ALLOWED request — possible success").
@@ -319,6 +334,8 @@ class EscalationVerdict(BaseModel):
                              ``"allowed"`` / ``"unknown"`` / ``"partial"`` (A1).
                              ALERT/LOG → ``"unknown"`` (OCSF non-terminating disposition).
                              Mixed (ALERT/LOG + BLOCK/DROP) → ``"partial"`` (ADR-0058 A1).
+                             Meaning is unchanged by ADR-0067 — an observed verdict still
+                             carries its truthful ``block_status``.
     ``disposition_counts`` — optional integer breakdown by terminal class (A2).
                              Present on every verdict produced by the decider; ``None``
                              only for legacy/external verdicts that predate the amendment.
@@ -329,11 +346,14 @@ class EscalationVerdict(BaseModel):
     - Disposition semantics anchored to OCSF ``disposition_id`` (1.8.0):
       Allowed ≈ ALLOW, Blocked ≈ BLOCK/DROP, non-terminating ≈ ALERT/LOG
       (see ADR-0058 §Standard alignment).
+    - ``"observed"`` / ``tier=None`` anchors OCSF ``action_id=3 Observed`` (ADR-0067 D2).
     - ``"partial"`` is a FireWatch extension — no OCSF equivalent; see ADR-0058 A1.
     - Provenance: ``justification`` is a ``RULE``-tagged artifact (ADR-0035).
     """
 
-    tier: int = Field(ge=1, le=4)
+    # ADR-0067 D2 — additive widen: int -> int | None. ge/le apply only to the int
+    # branch; None (the observed stratum) bypasses the numeric constraint.
+    tier: int | None = Field(default=None, ge=1, le=4)
     disposition: EscalationDispositionLiteral
     justification: str
     block_status: EscalationBlockStatusLiteral

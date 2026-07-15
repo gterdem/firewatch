@@ -1,10 +1,12 @@
 """Alert-worthiness predicate shared by the notification path and the banner feed.
 
-ADR-0059 D2 defines the shared predicate:
+ADR-0059 D2 defines the shared predicate (mechanics unchanged by ADR-0067 D7 —
+only what "tier <= 2" *means* changes, at the decider):
 
     is_alert_worthy(threat, threshold) :=
         band_meets(threat.threat_level, threshold)        # severity-band axis (ADR-0036)
         OR (threat.escalation is not None
+            AND threat.escalation.tier is not None
             AND threat.escalation.tier <= 2)              # action-aware axis (ADR-0058 D2)
 
 The band half uses ``band_meets(level, threshold)`` — the **single source of truth** for
@@ -16,6 +18,12 @@ Design decisions:
   hot path.
 - **Defensive on escalation=None.** When ``threat.escalation`` is absent the tier axis
   evaluates to False; the band axis alone determines worthiness.
+- **Defensive on escalation.tier=None (ADR-0067 D2/D7 — required, not optional).**
+  The observed stratum (``tier=None``) makes no escalation claim at all — it is not tier 0
+  or tier 5, it is the *absence* of a tier vote. ``None <= 2`` raises ``TypeError`` in
+  Python (the bug this guard fixes); the explicit ``tier is not None`` check extends the
+  same "no claim → no tier vote" defensiveness that this predicate already applies to
+  ``escalation is None`` down onto a *present* verdict with no tier.
 - **Tier threshold is <= 2.** Tier 1 (allowed-through) and Tier 2 (block_status_unknown)
   are the "auto-escalating" detections that warrant notification. Tier 3 (blocked-persistent)
   and Tier 4 (one-off block) are below the bar — they may be informational or expected.
@@ -74,7 +82,9 @@ def is_alert_worthy(threat: ThreatScore, threshold: ThreatLevelLiteral) -> bool:
     Implements the ADR-0059 D2 shared predicate:
 
         band_meets(threat.threat_level, threshold)
-        OR (threat.escalation is not None AND threat.escalation.tier <= _AUTO_ESCALATE_TIER_MAX)
+        OR (threat.escalation is not None
+            AND threat.escalation.tier is not None
+            AND threat.escalation.tier <= _AUTO_ESCALATE_TIER_MAX)
 
     The two axes are combined by OR and are never collapsed into a single value
     (ADR-0036 separability invariant).
@@ -96,8 +106,14 @@ def is_alert_worthy(threat: ThreatScore, threshold: ThreatLevelLiteral) -> bool:
 
     # Tier axis: only tiers 1 and 2 are "auto-escalating" for notification purposes.
     # Defensive: if escalation is None the tier half is False (no KeyError, no AttributeError).
+    # ADR-0067 D2/D7: also defensive on escalation.tier is None (the observed stratum) —
+    # `None <= 2` raises TypeError; a present verdict with no tier casts no tier vote.
     escalation = threat.escalation
-    if escalation is not None and escalation.tier <= _AUTO_ESCALATE_TIER_MAX:
+    if (
+        escalation is not None
+        and escalation.tier is not None
+        and escalation.tier <= _AUTO_ESCALATE_TIER_MAX
+    ):
         return True
 
     return False

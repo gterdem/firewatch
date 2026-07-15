@@ -1,4 +1,5 @@
-"""Tests for is_alert_worthy predicate + notify_on_auto_escalate notifier gate (issue #661).
+"""Tests for is_alert_worthy predicate + notify_on_auto_escalate notifier gate (issue #661),
+updated for issue #42 (ADR-0067 D2/D7) — the tier=None (observed) null-guard.
 
 EARS criteria:
 - WHEN notify_on_auto_escalate is OFF (default), THE SYSTEM SHALL gate notifications on the
@@ -7,6 +8,9 @@ EARS criteria:
   is_alert_worthy(threat, notification_threshold) (band OR escalation tier <= 2).
 - THE SYSTEM SHALL NOT notify on tier 3/4 escalations when band does not meet the threshold.
 - THE SYSTEM SHALL safely handle threat.escalation is None (the tier half is False).
+- (ADR-0067 D2/D7, issue #42) WHEN escalation.tier is None (the observed stratum), THE SYSTEM
+  SHALL evaluate the tier half as False WITHOUT raising — `None <= 2` raises TypeError in
+  Python; this is the exact bug the D7 guard fixes.
 
 Unit tests for is_alert_worthy:
 - Band-only worthy (high-band threat, no escalation) → True.
@@ -14,6 +18,7 @@ Unit tests for is_alert_worthy:
 - Tier 3 does NOT trigger (band fails, tier 3) → False.
 - Tier 4 does NOT trigger (band fails, tier 4) → False.
 - escalation=None safe (returns False for tier half, falls back to band) → False when band fails.
+- escalation.tier=None (observed) safe -- does not raise, tier half is False.
 
 Notifier integration tests:
 - Toggle OFF: tier-1 MEDIUM does NOT notify (current band-only behaviour).
@@ -21,6 +26,7 @@ Notifier integration tests:
 - Toggle ON: high-band CRITICAL always notifies regardless.
 - Toggle ON: tier 3 MEDIUM does NOT notify.
 - Toggle OFF: band still gates correctly (no regression).
+- Toggle ON: an observed (tier=None) LOW actor does NOT notify (no tier vote).
 
 RFC 5737 TEST-NET-2 (203.0.113.0/24) IPs used for SAFE_URL throughout.
 """
@@ -60,6 +66,16 @@ def _verdict(tier: int) -> EscalationVerdict:
         disposition=_disposition_for_tier[tier],  # type: ignore[arg-type]
         justification=f"[RULE] test tier {tier}",
         block_status=_block_status_for_tier[tier],  # type: ignore[arg-type]
+    )
+
+
+def _observed_verdict() -> EscalationVerdict:
+    """Build the ADR-0067 D2 observed verdict: tier=None, disposition='observed'."""
+    return EscalationVerdict(
+        tier=None,
+        disposition="observed",
+        justification="[RULE] observed test",
+        block_status="unknown",
     )
 
 
@@ -150,6 +166,32 @@ class TestIsAlertWorthy:
         threat = _threat("LOW", escalation=None)
         # Both axes False → False
         assert is_alert_worthy(threat, "CRITICAL") is False
+
+    # ADR-0067 D2/D7 (issue #42) — the observed stratum (tier=None) null-guard.
+    def test_observed_tier_none_does_not_raise(self) -> None:
+        """`None <= 2` raises TypeError in Python; is_alert_worthy must not raise."""
+        from firewatch_core.escalation.worthiness import is_alert_worthy
+
+        threat = _threat("LOW", escalation=_observed_verdict())
+        try:
+            result = is_alert_worthy(threat, "CRITICAL")
+        except TypeError:
+            pytest.fail("is_alert_worthy raised TypeError on escalation.tier=None")
+        assert result is False
+
+    def test_observed_tier_none_is_not_worthy_when_band_fails(self) -> None:
+        """An observed verdict casts no tier vote — band axis alone decides."""
+        from firewatch_core.escalation.worthiness import is_alert_worthy
+
+        threat = _threat("MEDIUM", escalation=_observed_verdict())
+        assert is_alert_worthy(threat, "CRITICAL") is False
+
+    def test_observed_tier_none_still_worthy_via_band(self) -> None:
+        """An observed verdict on a high-band threat is still worthy -- via the band axis."""
+        from firewatch_core.escalation.worthiness import is_alert_worthy
+
+        threat = _threat("CRITICAL", escalation=_observed_verdict())
+        assert is_alert_worthy(threat, "CRITICAL") is True
 
     def test_tier2_plus_band_both_worthy(self) -> None:
         """When both band AND tier are true, still True (OR semantics)."""
@@ -422,6 +464,21 @@ class TestNotifyToggleOn:
         )
         threat = _threat("CRITICAL", escalation=None)
         assert await n.check_and_alert(threat) is True
+
+    async def test_observed_low_does_not_notify_toggle_on(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """ADR-0067 D2/D7 (issue #42): an observed (tier=None) LOW actor casts no tier
+        vote -- does NOT notify even with the toggle on, and must not raise."""
+        n = _notifier(
+            monkeypatch,
+            webhook_url=SAFE_URL,
+            alert_threshold="CRITICAL",
+            notify_on_auto_escalate=True,
+        )
+        threat = _threat("LOW", escalation=_observed_verdict())
+        assert await n.check_and_alert(threat) is False
+        assert _FakeHttpx.captured == []
 
 
 # ---------------------------------------------------------------------------

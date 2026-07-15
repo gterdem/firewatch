@@ -53,17 +53,26 @@ export type AiStatus = 'active' | 'unavailable' | 'disabled' | 'error' | 'skippe
 export type ThreatLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | string
 
 /**
- * Escalation verdict sub-object on ThreatScore (ADR-0058 D2/D3).
+ * Escalation verdict sub-object on ThreatScore (ADR-0058 D2/D3; ADR-0067 D1/D2).
  *
  * Produced by the deterministic escalation decider (no LLM) and attached to
  * ThreatScore.escalation by pipeline.analyze_ip.  All fields are required when
  * the sub-object is present; the sub-object itself is optional/null (additive
  * field — absent when the decider has not run or returned no verdict).
  *
- * ``tier``               — 1-4 per the ADR-0058 §4a table (lower = louder/more urgent).
+ * ``tier``               — 1-4 per the ADR-0058 §4a table (lower = louder/more urgent),
+ *                          or ``null`` for the ADR-0067 D2 **observed** stratum — "on
+ *                          the record, no escalation claim." Deliberately NOT a fifth
+ *                          tier (a numeric 5 would force a false ordering against Tier
+ *                          4). Every consumer that compares ``tier`` MUST null-guard
+ *                          first — in JavaScript ``null <= 2`` is ``true`` (null
+ *                          coerces to 0), so an unguarded comparison silently re-admits
+ *                          every observed actor (see ``triageBand.ts``).
  * ``disposition``        — machine-readable action label:
  *                          "allowed_through" | "block_status_unknown" |
- *                          "blocked_persistent" | "blocked_one_off".
+ *                          "blocked_persistent" | "blocked_one_off" | "observed".
+ *                          "observed" (ADR-0067 D2, additive) always pairs with
+ *                          ``tier: null`` — anchors OCSF ``action_id=3 Observed``.
  * ``justification``      — RULE-tagged (ADR-0035) human-readable sentence safe to render
  *                          as a text node (e.g. "[RULE] SQLi signature matched on an
  *                          ALLOWED request — possible success").
@@ -73,21 +82,29 @@ export type ThreatLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | string
  * ``block_status``       — explicit, non-fabricated state:
  *                          "blocked" | "allowed" | "unknown" | "partial".
  *                          "partial" = actor has events in more than one terminal
- *                          disposition (ADR-0058 Amendment 1 A1).
+ *                          disposition (ADR-0058 Amendment 1 A1). Meaning is unchanged
+ *                          by ADR-0067 — an observed verdict still carries its truthful
+ *                          ``block_status``.
  * ``disposition_counts`` — structured per-class event counts when block_status is
  *                          "partial" (ADR-0058 Amendment 1 A2). Absent on older
  *                          API responses; default to zeros when missing. Integer
  *                          counts — the frontend formats the label (glass-box, i18n-safe).
  */
 export interface EscalationVerdict {
-  /** 1-4; Tier 1 = loudest (allowed-through + high-fidelity detection). */
-  tier: number
+  /**
+   * 1-4; Tier 1 = loudest (allowed-through + detection). ``null`` = the
+   * observed stratum (ADR-0067 D2) — no escalation claim was made. Null-guard
+   * before any numeric comparison (``tier != null && tier <= 2``, never bare
+   * ``tier <= 2`` — see the module doc above).
+   */
+  tier: number | null
   /** Machine-readable disposition key. */
   disposition:
     | 'allowed_through'
     | 'block_status_unknown'
     | 'blocked_persistent'
     | 'blocked_one_off'
+    | 'observed'
     | string
   /**
    * RULE-tagged justification string (ADR-0035).

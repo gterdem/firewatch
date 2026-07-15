@@ -1,6 +1,24 @@
 name: ci
+# Runs on PRs AND on every push to main. The push trigger is what makes main's
+# health a fact rather than an assumption: a PR's checks run against a PREDICTED
+# merge (your branch spliced into main as it looked at that moment), and nothing
+# re-checks that prediction once main moves. Only a run on main tests what main
+# actually became — catching semantic conflicts between two independently-green
+# PRs, and any direct push.
+# Without this, breakage sits on main unmeasured: test_ns6 hung for 29 days while
+# gitleaks.yml (which does watch main) caught its leak within a minute.
 on:
   pull_request:
+    paths:
+      - 'packages/**'
+      - 'tests/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/ci.yml'
+  push:
+    branches: [main]
+    # Same filter as above — ADR-0028 D3 (a Python change does not run Node) holds
+    # for pushes exactly as it does for PRs.
     paths:
       - 'packages/**'
       - 'tests/**'

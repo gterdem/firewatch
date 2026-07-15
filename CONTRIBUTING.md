@@ -47,6 +47,30 @@ Notes:
   explicitly and call it out in the PR; don't silently overwrite a baseline.
 - Run the full suite (`uv run pytest -n auto`) before opening the PR.
 
+## Secret scanning — full history, not a scoped diff
+
+CI's `gitleaks` workflow scans the **entire git history** (`fetch-depth: 0`), matching
+what a clone of this public repo exposes. Before opening a PR, run the same check
+locally:
+
+```bash
+scripts/gitleaks-full.sh
+```
+
+This is the exact command CI runs — a clean result here means CI's `gitleaks` job will
+be clean too. Two things it is **not** equivalent to, and which have caused false
+"looks clean" reports before:
+
+- The committed pre-commit hook (`.githooks/pre-commit`) only scans **staged**
+  changes, and doesn't fire in every checkout (e.g. an isolated agent worktree).
+- Scoping the scan to your own commits (e.g. `gitleaks git
+  --log-opts="origin/main..HEAD"`) misses false positives already baked into
+  history by earlier/other commits — CI scans everything, so a scoped local check
+  can pass while CI still fails on the same string.
+
+Fixtures must use non-routable/documentation IPs — see the `public-ipv4` rule notes in
+`.gitleaks.toml` and the `testing-conventions` skill.
+
 ## Security review for data-plane changes
 
 FireWatch ingests **attacker-controlled telemetry** and runs **local-only AI

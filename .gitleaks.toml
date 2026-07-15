@@ -58,6 +58,19 @@ regexes = [
   '''\b0\.0\.0\.0\b''',
   '''\b255\.255\.255\.255\b''',
   '''\b240\.0\.0\.0\b''',  # 240.0.0.0/4 reserved (RFC 1112 Class E) — non-routable; named in the webhook SSRF-validator docstrings
+  # WSL2 kernel version string (e.g. "6.18.33.1-microsoft-standard-WSL2" from
+  # `uname -r`), as recorded verbatim in reference-hardware / measured-footprint
+  # write-ups (docs/benchmarks/footprint-2026-06-12.md #383; deploy/README.md #37).
+  # The public-ipv4 rule's bare dotted-quad regex misreads the four-part kernel
+  # patch version as an IP — it is not one. Scoped tightly to a dotted quad
+  # immediately followed by the literal "-microsoft-standard-WSL2" suffix, so
+  # this is NOT a general "IP followed by a hyphenated word" carve-out: a real
+  # leaked IP is unaffected unless it happens to be immediately suffixed with
+  # this exact literal string, which does not occur in practice. Second
+  # occurrence of this exact false positive — allowlisted at the pattern level
+  # (not per-path) so future recurrences of the same benign string don't need a
+  # new entry.
+  '''\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}-microsoft-standard-WSL2\b''',
   # RFC 5737 documentation ranges — use these in all test fixtures:
   '''\b192\.0\.2\.[0-9]{1,3}\b''',
   '''\b198\.51\.100\.[0-9]{1,3}\b''',
@@ -132,11 +145,6 @@ paths = [
     # RFC 5737 (192.0.2.23) in the current tree. Path entry covers the historical
     # commit fingerprint; the ADR text itself does not contain credentials.
     '''(^|/)docs/adr/0036-score-confidence-presentation-contract\.md$''',
-    # MI-2 footprint benchmark (#383). The reference-hardware table records the WSL2
-    # kernel version from `uname -r` (e.g. "6.6.87.2-microsoft-standard-WSL2"), whose
-    # "6.6.87.2" sub-string the public-ipv4 rule reads as an IP. It is a kernel
-    # version, not a source/attacker IP — this benchmark doc carries no credentials.
-    '''(^|/)docs/benchmarks/footprint-2026-06-12\.md$''',
     # A1 geo-provenance ip-classifier tests (#532/#540). Uses the classic test-quad
     # placeholder IPs (1.2.3.4 / 5.6.7.8 / 9.10.11.12) as "globally routable" examples
     # to exercise the datacenter/residential/cloud/unresolved classifier — not real

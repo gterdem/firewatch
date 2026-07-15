@@ -1,5 +1,6 @@
 """Tests for ``firewatch_sdk.localhost.filetail.FileTailReader`` — EARS criteria
-mapped 1:1 to issue #1's acceptance criteria.
+mapped 1:1 to issue #1's acceptance criteria (plus issue #60's oversized-line
+bound).
 
 EARS-2  No stored offset: explicit start position required (cursor|tail|head);
         the reader never infers/defaults one.
@@ -10,6 +11,16 @@ EARS-6  Cancellation: the open file handle is closed promptly, never leaked.
 
 Plus the architect-ruled ``resolve_start()``/``read()`` split (data-loss
 regression) and the one-shot drain contract (``read()`` must terminate).
+
+Issue #60 (bounded reads, mirroring ``JournaldReader``'s ``_MAX_LINE_BYTES``):
+  - memory stays bounded on an oversized line (no whole-line buffering);
+  - an oversized line as the ONLY new content in a cycle still yields a
+    durable ``(None, cursor)`` resume position — the poison-pill case;
+  - that resume position is never re-served (skipped exactly once);
+  - the ``(None, cursor)`` sentinel obeys the same invariant as journald's:
+    at most once per ``read()`` call, final item only, zero-record cycles
+    only;
+  - an oversized skip logs an operator-visible warning.
 
 Pure filesystem I/O against ``tmp_path`` — no live journald, no subprocess.
 """
@@ -24,6 +35,7 @@ from typing import IO, TypeVar
 
 import pytest
 
+from firewatch_sdk.localhost import filetail
 from firewatch_sdk.localhost.errors import FileTailUnavailableError, LocalReaderError
 from firewatch_sdk.localhost.filetail import FileTailReader
 
@@ -418,3 +430,166 @@ class TestCancellation:
 
         assert opened
         assert all(fh.closed for fh in opened)
+
+
+# --------------------------------------------------------------------------- #
+# Issue #60 — a single oversized line must never be buffered whole, and must
+# still leave a durable resume position so it is skipped exactly once rather
+# than re-read (and re-attempted, and re-failed) forever. Mirrors
+# ``JournaldReader``'s ``_MAX_LINE_BYTES`` precedent, reusing its
+# ``(record | None, cursor)`` yield shape rather than inventing a new one.
+#
+# The bound is monkeypatched down to a small value for test speed/determinism
+# in most cases here (matching how ``test_journald.py`` uses a synthetic
+# ``OVERSIZED`` marker rather than real multi-MiB payloads); one test
+# (``TestDefaultBoundIsRealistic``) exercises the real, unmocked 16 MiB
+# constant end-to-end to prove the default itself works, not just the logic.
+# --------------------------------------------------------------------------- #
+
+
+class TestOversizedLineBound:
+    async def test_oversized_line_between_normal_lines_is_skipped_silently(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Good lines before AND after an oversized one still arrive; the
+        oversized line itself never appears as a yielded record (no ``None``
+        sentinel here either — a later real line's cursor already carries
+        forward progress past it, per the sentinel invariant)."""
+        monkeypatch.setattr(filetail, "_MAX_LINE_CHARS", 16)
+        path = tmp_path / "auth.log"
+        path.write_text(f"line1\n{'x' * 64}\nline2\n")
+        reader = FileTailReader(path)
+
+        results = await asyncio.wait_for(_collect(reader.read("head")), timeout=2.0)
+
+        assert [line for line, _ in results] == ["line1", "line2"]
+
+    async def test_oversized_only_line_yields_none_sentinel_with_durable_cursor(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The poison-pill scenario: the ONLY new content this cycle is one
+        complete, oversized line. Without the sentinel, the caller would have
+        nothing to persist and the SAME line would be re-served (and
+        re-skipped) on every future poll, forever."""
+        monkeypatch.setattr(filetail, "_MAX_LINE_CHARS", 16)
+        path = tmp_path / "auth.log"
+        path.write_text(f"{'x' * 64}\n")
+        reader = FileTailReader(path)
+
+        results = await asyncio.wait_for(_collect(reader.read("head")), timeout=2.0)
+
+        assert len(results) == 1
+        line, cursor = results[0]
+        assert line is None
+        inode = path.stat().st_ino
+        assert cursor == f"{inode}:{path.stat().st_size}"  # past the newline
+
+    async def test_poison_pill_is_skipped_once_not_reread_forever(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Resuming from the sentinel's cursor must not re-encounter (or
+        re-attempt-and-fail on) the same oversized line — the durable-resume
+        guarantee this bound exists to provide."""
+        monkeypatch.setattr(filetail, "_MAX_LINE_CHARS", 16)
+        path = tmp_path / "auth.log"
+        path.write_text(f"{'x' * 64}\n")
+        reader = FileTailReader(path)
+
+        first_pass = await asyncio.wait_for(
+            _collect(reader.read("head")), timeout=2.0
+        )
+        _, skip_cursor = first_pass[0]
+
+        second_pass = await asyncio.wait_for(
+            _collect(reader.read(skip_cursor)), timeout=2.0
+        )
+
+        assert second_pass == []  # nothing re-served; no hang, no repeat
+
+    async def test_oversized_line_still_growing_without_newline_is_left_unconsumed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A line already past the bound but NOT yet newline-terminated
+        (the writer hasn't flushed it yet) must not be reported as a
+        confirmed oversized skip — it is indistinguishable from an ordinary
+        still-growing partial line until its terminator actually appears."""
+        monkeypatch.setattr(filetail, "_MAX_LINE_CHARS", 16)
+        path = tmp_path / "auth.log"
+        path.write_text("x" * 64)  # no trailing newline at all
+        reader = FileTailReader(path)
+
+        results = await asyncio.wait_for(_collect(reader.read("head")), timeout=2.0)
+
+        assert results == []  # nothing yielded yet -- not even a sentinel
+
+        # Once the writer flushes the terminator, the (still oversized) line
+        # is now confirmed complete and is skipped normally.
+        with path.open("a") as f:
+            f.write("\n")
+        results = await asyncio.wait_for(_collect(reader.read("head")), timeout=2.0)
+
+        assert len(results) == 1
+        assert results[0][0] is None
+
+    async def test_multiple_consecutive_oversized_lines_yield_one_sentinel_at_furthest_cursor(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Sentinel invariant: emitted AT MOST ONCE per read() call, and only
+        as the final item — even when several oversized lines were skipped
+        in the same drain, only one ``(None, cursor)`` is yielded, positioned
+        past the LAST of them (maximum forward progress in one pass)."""
+        monkeypatch.setattr(filetail, "_MAX_LINE_CHARS", 16)
+        path = tmp_path / "auth.log"
+        big = "x" * 64
+        path.write_text(f"{big}\n{big}\n{big}\n")
+        reader = FileTailReader(path)
+
+        results = await asyncio.wait_for(_collect(reader.read("head")), timeout=2.0)
+
+        assert len(results) == 1
+        line, cursor = results[0]
+        assert line is None
+        inode = path.stat().st_ino
+        assert cursor == f"{inode}:{path.stat().st_size}"  # past ALL three
+
+    async def test_oversized_skip_logs_operator_visible_warning(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        monkeypatch.setattr(filetail, "_MAX_LINE_CHARS", 16)
+        path = tmp_path / "auth.log"
+        path.write_text(f"{'x' * 64}\n")
+        reader = FileTailReader(path)
+
+        with caplog.at_level("WARNING", logger="firewatch.sdk.localhost.filetail"):
+            await asyncio.wait_for(_collect(reader.read("head")), timeout=2.0)
+
+        assert any(
+            "oversized" in record.message.lower() for record in caplog.records
+        )
+
+    async def test_bound_constant_matches_journald_precedent(self) -> None:
+        """16 MiB, consistent with ``JournaldReader``'s ``_MAX_LINE_BYTES``
+        unless a justified reason to differ is recorded — see the module
+        docstring's note on character- vs. byte-counting for the one
+        deliberate difference (this reader is text-mode)."""
+        assert filetail._MAX_LINE_CHARS == 16 * 1024 * 1024
+
+
+class TestDefaultBoundIsRealistic:
+    async def test_real_16_mib_bound_bounds_a_genuinely_oversized_line(
+        self, tmp_path: Path
+    ) -> None:
+        """Unmocked end-to-end check at the real default: a line bigger than
+        the actual 16 MiB bound is skipped (not buffered whole), and a small
+        surrounding line still survives."""
+        path = tmp_path / "auth.log"
+        oversized_line = "x" * (filetail._MAX_LINE_CHARS + 1024)
+        path.write_text(f"before\n{oversized_line}\nafter\n")
+        reader = FileTailReader(path)
+
+        results = await asyncio.wait_for(_collect(reader.read("head")), timeout=5.0)
+
+        assert [line for line, _ in results] == ["before", "after"]

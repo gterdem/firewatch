@@ -9,9 +9,21 @@ fallback.
 
 Deliberately NOT coupled to ``PullSource`` or any plugin flavor (ADR-0065 §2):
 both are plain async iterators any entrypoint can drive, including M2's future
-hub push mode. Neither reader persists anything — callers pass the last cursor
-in via ``start`` and store the newly yielded cursor themselves (``ctx.kv`` in a
-consuming plugin, per ADR-0025/0027).
+hub push mode. Neither reader persists anything — callers pass a position in
+via ``start`` and store what they get back (``ctx.kv`` in a consuming plugin,
+per ADR-0025/0027).
+
+Both readers split start-position handling into two calls:
+``resolve_start()`` turns ``"head"`` / ``"tail"`` / a cursor into a concrete,
+persistable position BEFORE any draining happens, and ``read()`` drains from
+that position and REJECTS the literal ``"tail"`` with ``ValueError``. This
+exists to close a data-loss gap: a caller that persists only the cursors
+attached to yielded records has nothing to persist on a quiet cycle, so a bare
+``read("tail")`` reused across polls silently re-pivots past anything that
+arrived in between — see either reader's ``resolve_start()`` docstring for the
+full scenario. ``read()`` is a one-shot drain (no follow/``-f``): it returns
+once nothing more is available, so a consuming ``collect()`` cycle always
+terminates.
 
 These are SDK utilities, not contract surface (ADR-0065 §4) — importing this
 module never pulls in ``firewatch_core`` or any plugin.

@@ -268,7 +268,7 @@ ScoreDerivationLiteral = Literal["rule", "ai+rule"]
 # Four deterministic labels derived from the action axis (ActionLiteral).
 EscalationDispositionLiteral = Literal[
     "allowed_through",       # ALLOW  — request passed; possible success (Tier 1)
-    "block_status_unknown",  # ALERT/LOG — neither blocked nor allowed asserted (Tier 2)
+    "block_status_unknown",  # qualified Tier 2 — enforcement posture undeclared (ADR-0067 D6); narrows at #44
     "blocked_persistent",    # BLOCK/DROP, persistent / high-volume (Tier 3)
     "blocked_one_off",       # BLOCK/DROP, one-off (Tier 4)
     # ADR-0067 D2 — additive: the observed stratum. Emitted when an actor's
@@ -328,11 +328,13 @@ class EscalationVerdict(BaseModel):
                              (e.g. banner logic).
     ``justification``      — human-readable, ``RULE``-tagged sentence (ADR-0035) safe to render
                              as a plain text node (e.g.
-                             "SQLi signature matched on an ALLOWED request — possible success").
-                             Produced by the decider; never by an LLM at this stage.
+                             "sqli_rule matched, and the request got through — this may have
+                             reached your system"). Wording owned by the decider's justification
+                             builders (issue #6); produced by the decider, never by an LLM.
     ``block_status``       — honest, non-fabricated disposition state: ``"blocked"`` /
                              ``"allowed"`` / ``"unknown"`` / ``"partial"`` (A1).
-                             ALERT/LOG → ``"unknown"`` (OCSF non-terminating disposition).
+                             ALERT/LOG → ``"unknown"`` (conservative label pending declared
+                             enforcement posture — ADR-0067 D6, not an OCSF mapping).
                              Mixed (ALERT/LOG + BLOCK/DROP) → ``"partial"`` (ADR-0058 A1).
                              Meaning is unchanged by ADR-0067 — an observed verdict still
                              carries its truthful ``block_status``.

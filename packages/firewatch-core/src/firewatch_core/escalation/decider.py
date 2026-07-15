@@ -11,7 +11,7 @@ Tier model (ADR-0058 §D2/§4a, gated per ADR-0067 D1):
 | Tier | Action(s)                        | Disposition              | block_status |
 |------|-----------------------------------|--------------------------|--------------|
 |  1   | ALLOW (with any detection)       | allowed_through          | allowed      |
-|  2   | ALERT / LOG **+ qualifying signal**| block_status_unknown   | unknown      |
+|  2   | ALERT / LOG **+ qualifying signal**| block_status_unknown *(interim — posture labels, #44)* | unknown |
 |  3   | BLOCK/DROP — persistent           | blocked_persistent       | blocked      |
 |  4   | BLOCK/DROP — one-off              | blocked_one_off          | blocked      |
 | None | unqualified ALERT/LOG, or ALLOW-only with no detection | observed | unknown / allowed |
@@ -40,9 +40,16 @@ Amendment 1 (ADR-0058 A3-A5) — full-tally rewrite, unchanged by ADR-0067:
   justification even when mixed, silently dropping the alert/allow counts.
 
 Standard alignment:
-- OCSF disposition_id: ALLOW ≈ Allowed (id=1), BLOCK/DROP ≈ Blocked (id=2),
-  ALERT/LOG ≈ non-terminating ("block status unknown" when qualified) or
-  ``action_id=3 Observed`` when unqualified (ADR-0067 D2). Ref: schema.ocsf.io (1.8.0).
+- OCSF disposition_id: ALLOW ≈ Allowed (id=1), BLOCK/DROP ≈ Blocked (id=2).
+  ALERT has an explicit OCSF disposition — id=19 Alert: "detected as a threat and
+  resulted in a notification but request was not blocked" — it asserts NOT-blocked,
+  not unknown (ADR-0067 RC3). The qualified-Tier-2 disposition ``block_status_unknown``
+  is therefore NOT an OCSF mapping: it is ADR-0067 D6's conservative label for
+  undeclared enforcement posture — core cannot say "not blocked by this control"
+  until it knows the control's posture. It narrows to the genuinely-unknown
+  (inline-silent) case when the posture axis lands (#44: ``not_blocked_passive`` /
+  ``detected_no_action``). Unqualified ALERT/LOG ≈ ``action_id=3 Observed``
+  (ADR-0067 D2). Ref: schema.ocsf.io (1.8.0).
 - ADR-0035 provenance: ``justification`` is a RULE-tagged string (never LLM).
 - ADR-0012: ALERT is an honest IDS non-blocking disposition.
 - ``"partial"`` is a FireWatch extension (no OCSF equivalent) — ADR-0058 A1.
@@ -316,11 +323,14 @@ def _build_justification_tier1(detections: list[Detection]) -> str:
     # name), never attacker-influenceable event fields. Event `category` is NOT
     # embedded: at least one source (CEF) derives it from attacker-controlled header
     # fields — see #642. Keep this string rule-derived only.
+    # Wording (issue #6): plain language, no SOC dialect — "got through" instead
+    # of "passed the firewall"; "may have reached your system" instead of
+    # "possible success".
     rule = _top_rule_name(detections)
     ae = _auto_escalate_wording(detections)
     return (
-        f"[RULE] {rule}{ae} matched on an ALLOW request"
-        " — request passed the firewall; possible success."
+        f"[RULE] {rule}{ae} matched, and the request got through"
+        " — this may have reached your system."
     )
 
 
@@ -332,18 +342,27 @@ def _build_justification_tier2_qualified(qualify_result: QualifyResult) -> str:
     source-declared event severity (D1b) — a validated, bounded
     ``SeverityLiteral``, safe to render — when qualification came from an
     ``ALERT`` event alone.
+
+    Wording ruled on PR #38 (architect ruling, superseding the prior
+    "block status unknown" sentence RC3 indicts): both branches below are
+    reached only in the non-mixed case, so ``n_block_drop == 0`` is a tally
+    fact — "no block was recorded in this window" is engine-attested, not a
+    claim about downstream controls FireWatch cannot see (ADR-0067 D6: "a
+    passive sensor cannot see a downstream block"). It also stays true for
+    LOG-qualified populations where "not blocked" would be a category error
+    (e.g. a failed login has an attested outcome, not a block status).
     """
     if qualify_result.qualifying_detections:
         rule = _top_rule_name(qualify_result.qualifying_detections)
         ae = _auto_escalate_wording(qualify_result.qualifying_detections)
         return (
-            f"[RULE] {rule}{ae} fired on an ALERT/LOG event"
-            " — block status unknown; defence termination not confirmed."
+            f"[RULE] {rule}{ae} flagged this traffic"
+            " — no block was recorded in this window."
         )
     severity = qualify_result.qualifying_event_severity or "high"
     return (
-        f"[RULE] ALERT event with source-declared severity '{severity}'"
-        " — block status unknown; defence termination not confirmed."
+        f"[RULE] Source-declared severity '{severity}' flagged this traffic"
+        " — no block was recorded in this window."
     )
 
 
@@ -351,20 +370,30 @@ def _build_justification_tier3(
     events: list[SecurityEvent],
     detections: list[Detection],
 ) -> str:
+    # Wording (issue #6): "blocked N times" / "keeps coming back" replaces the
+    # SOC-dialect "adversary persisting; consider persistent IP-level enforcement".
     n = len(events)
     rule = _top_rule_name(detections) if detections else "volume rule"
     ae = _auto_escalate_wording(detections)
     return (
-        f"[RULE] {rule}{ae}: {n} BLOCK/DROP events — adversary persisting;"
-        " consider persistent IP-level enforcement."
+        f"[RULE] {rule}{ae}: blocked {n} times"
+        " — this attacker keeps coming back; consider a longer-term IP block."
     )
 
 
 def _build_justification_tier4(events: list[SecurityEvent]) -> str:
+    # Wording (issue #6, maintainer-approved): "didn't keep trying" pairs with
+    # Tier 3's "kept trying" — the two labels differ on exactly the one fact
+    # (persistence) that actually distinguishes the tiers. Real pluralization
+    # (not "attempt(s)") because n is a trusted engine integer, not a template
+    # placeholder. The number already speaks for itself — no paraphrase like
+    # "a single try", which goes stale/false the moment n != 1. No hard-coded
+    # reference to _PERSISTENCE_THRESHOLD: this copy stays true if that value
+    # ever moves.
     n = len(events)
     return (
-        f"[RULE] {n} BLOCK/DROP event(s) — firewall held; one-off or low-volume;"
-        " informational."
+        f"[RULE] Blocked {n} attempt{'' if n == 1 else 's'}"
+        " — didn't keep trying; no action needed."
     )
 
 
@@ -399,32 +428,33 @@ def _build_justification_partial(
     No attacker-controlled event fields (category, rule_name, payload) are
     embedded.  The counts are internal engine numerics — always safe to render.
 
+    Wording (issue #6): plain language — "unconfirmed" replaces "ALERT/LOG
+    (block unknown)"; "confirmed blocked" / "got through" replace SOC dialect.
+
     Applied uniformly across every branch of ``decide()`` (Tier 1/2/3/4 and
     observed) whenever the actor's events span more than one terminal
     disposition class — ADR-0067 fixes the prior asymmetry where Tier 3/4
     silently dropped the alert/allow counts from the justification.
 
     Example output:
-        "[RULE] 307 ALERT/LOG (block unknown) + 9 BLOCK/DROP — most traffic not
-        terminally blocked; 9 confirmed blocked."
+        "[RULE] 307 unconfirmed + 9 blocked — most traffic unconfirmed;
+        9 confirmed blocked."
     """
     parts: list[str] = []
     if n_alert_log > 0:
-        parts.append(f"{n_alert_log} ALERT/LOG (block unknown)")
+        parts.append(f"{n_alert_log} unconfirmed")
     if n_block_drop > 0:
-        parts.append(f"{n_block_drop} BLOCK/DROP")
+        parts.append(f"{n_block_drop} blocked")
     if n_allow > 0:
-        parts.append(f"{n_allow} ALLOW")
+        parts.append(f"{n_allow} got through")
 
     summary = " + ".join(parts)
 
     # Determine the dominant non-terminal class for the tail sentence.
     if n_block_drop > 0 and n_alert_log > 0:
-        tail = (
-            f"most traffic not terminally blocked; {n_block_drop} confirmed blocked."
-        )
+        tail = f"most traffic unconfirmed; {n_block_drop} confirmed blocked."
     elif n_block_drop > 0 and n_allow > 0:
-        tail = f"{n_block_drop} confirmed blocked; {n_allow} allowed through."
+        tail = f"{n_block_drop} confirmed blocked; {n_allow} got through."
     else:
         tail = "mixed disposition — review individual events."
 

@@ -111,13 +111,17 @@ what the WAF or IDS *did* with the traffic, independent of the numeric risk scor
 
 | Tier | Disposition | Urgency |
 |------|-------------|---------|
-| T1 | Allowed through — possible success | Highest |
-| T2 | Block status unknown | High |
-| T3 | Blocked — persistent attacker | Moderate |
-| T4 | Blocked — one-off probe | Informational |
+| T1 | Got through — possible breach | Highest |
+| T2 | Flagged — needs review | High |
+| T3 | Blocked — kept trying | Moderate |
+| T4 | Blocked — didn't keep trying | Informational |
+| — | Observed — on the record, no escalation claim | Calm default (not a tier) |
 
 A T1 actor can surface in the Triage Banner even when their numeric score is LOW because
-the outcome (traffic reached the application) matters more than the score alone.
+the outcome (traffic reached the application) matters more than the score alone. A T2 actor
+surfaces because a qualifying signal flagged it as hostile — this label makes no claim about
+whether the traffic was actually blocked. An **observed** actor makes no escalation claim and stays
+out of the banner unless its accumulated score crosses the severity-band threshold on its own merit.
 
 ---
 

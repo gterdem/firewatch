@@ -359,39 +359,39 @@ describe('TriageBanner — ADR-0058 D2 escalation axis (issue #649)', () => {
   })
 
   // EARS: WHERE banner renders an escalated actor → disposition label always visible (it is the trigger)
-  it('shows disposition label "Allowed through — possible success" for tier-1 actor', () => {
+  it('shows disposition label "Got through — possible breach" for tier-1 actor', () => {
     render(<TriageBanner pendingActors={[ACTOR_ESCALATED_TIER1]} onAction={vi.fn()} />)
 
     const dispEl = screen.getByTestId('triage-chip-disposition')
-    expect(dispEl).toHaveTextContent('Allowed through — possible success')
+    expect(dispEl).toHaveTextContent('Got through — possible breach')
   })
 
-  it('shows disposition label "Block status unknown" for tier-2 actor', () => {
+  it('shows disposition label "Flagged — needs review" for tier-2 actor', () => {
     render(<TriageBanner pendingActors={[ACTOR_ESCALATED_TIER2]} onAction={vi.fn()} />)
 
     const dispEl = screen.getByTestId('triage-chip-disposition')
-    expect(dispEl).toHaveTextContent('Block status unknown')
+    expect(dispEl).toHaveTextContent('Flagged — needs review')
   })
 
   // EARS: WHERE banner renders an escalated actor → block-status label present inside popover
-  it('shows block-status label "Allowed" for tier-1 actor inside popover (block_status=allowed)', async () => {
+  it('shows block-status label "Got through" for tier-1 actor inside popover (block_status=allowed)', async () => {
     render(<TriageBanner pendingActors={[ACTOR_ESCALATED_TIER1]} onAction={vi.fn()} />)
 
     // Block-status is inside the popover — open it first
     expect(screen.queryByTestId('triage-chip-block-status')).toBeNull()
     await userEvent.click(screen.getByTestId('triage-chip-disposition'))
     const bsEl = screen.getByTestId('triage-chip-block-status')
-    expect(bsEl).toHaveTextContent('Allowed')
+    expect(bsEl).toHaveTextContent('Got through')
   })
 
-  it('shows block-status label "Unknown" for tier-2 actor inside popover (block_status=unknown)', async () => {
+  it('shows block-status label "Unconfirmed" for tier-2 actor inside popover (block_status=unknown)', async () => {
     render(<TriageBanner pendingActors={[ACTOR_ESCALATED_TIER2]} onAction={vi.fn()} />)
 
     // Block-status is inside the popover — open it first
     expect(screen.queryByTestId('triage-chip-block-status')).toBeNull()
     await userEvent.click(screen.getByTestId('triage-chip-disposition'))
     const bsEl = screen.getByTestId('triage-chip-block-status')
-    expect(bsEl).toHaveTextContent('Unknown')
+    expect(bsEl).toHaveTextContent('Unconfirmed')
   })
 
   // EARS: tier badge displayed when escalation is present
@@ -458,32 +458,40 @@ describe('TriageBanner — ADR-0058 D2 escalation axis (issue #649)', () => {
   })
 
   // Legend text content: tier 1 label
-  it('legend tier-1 shows "Allowed through — possible success"', () => {
+  it('legend tier-1 shows "Got through — possible breach"', () => {
     render(<TriageBanner pendingActors={[]} onAction={vi.fn()} />)
 
     const tier1 = screen.getByTestId('legend-tier-1')
-    expect(tier1).toHaveTextContent('Allowed through — possible success')
+    expect(tier1).toHaveTextContent('Got through — possible breach')
   })
 
   // Legend text content: tier 2 label
-  it('legend tier-2 shows "Block status unknown"', () => {
+  it('legend tier-2 shows "Flagged — needs review"', () => {
     render(<TriageBanner pendingActors={[]} onAction={vi.fn()} />)
 
     const tier2 = screen.getByTestId('legend-tier-2')
-    expect(tier2).toHaveTextContent('Block status unknown')
+    expect(tier2).toHaveTextContent('Flagged — needs review')
   })
 
   // Legend block-status badges
-  it('legend tier-1 block-status badge shows "Allowed"', () => {
+  it('legend tier-1 block-status badge shows "Got through"', () => {
     render(<TriageBanner pendingActors={[]} onAction={vi.fn()} />)
 
-    expect(screen.getByTestId('legend-block-status-1')).toHaveTextContent('Allowed')
+    expect(screen.getByTestId('legend-block-status-1')).toHaveTextContent('Got through')
   })
 
-  it('legend tier-2 block-status badge shows "Unknown"', () => {
+  it('legend tier-2 block-status badge shows "Unconfirmed"', () => {
     render(<TriageBanner pendingActors={[]} onAction={vi.fn()} />)
 
-    expect(screen.getByTestId('legend-block-status-2')).toHaveTextContent('Unknown')
+    expect(screen.getByTestId('legend-block-status-2')).toHaveTextContent('Unconfirmed')
+  })
+
+  // Issue #6: the legend documents the two-axis "zero tuning" model as a feature
+  it('legend shows a "zero tuning required" note explaining the two-axis model', () => {
+    render(<TriageBanner pendingActors={[]} onAction={vi.fn()} />)
+
+    const note = screen.getByTestId('legend-zero-tuning-note')
+    expect(note).toHaveTextContent('no threshold to tune')
   })
 
   // Legend NOT shown when actors are pending (calm state only)
@@ -577,8 +585,8 @@ describe('TriageBanner — ADR-0058 D2 escalation axis (issue #649)', () => {
     // Block-status framing now visible
     const bsEl = screen.getByTestId('triage-chip-block-status')
     expect(bsEl).toBeInTheDocument()
-    expect(bsEl).toHaveTextContent('Allowed through — possible success')
-    expect(bsEl).toHaveTextContent('Allowed')
+    expect(bsEl).toHaveTextContent('Got through — possible breach')
+    expect(bsEl).toHaveTextContent('Got through')
 
     // Full justification now visible
     const justEl = screen.getByTestId('triage-chip-justification')
@@ -653,14 +661,14 @@ const ACTOR_PARTIAL_NO_COUNTS: ThreatScore = {
 
 describe('TriageBanner — ADR-0058 Amendment 1 partial block_status (issue #726)', () => {
   // EARS-1: WHERE block_status === "partial", label derives from disposition_counts
-  it('EARS-1: block-status label shows "N blocked · M alert-only" from disposition_counts', async () => {
+  it('EARS-1: block-status label shows "N blocked · M unconfirmed" from disposition_counts', async () => {
     render(<TriageBanner pendingActors={[ACTOR_PARTIAL_WITH_COUNTS]} onAction={vi.fn()} />)
 
     // Open the popover to reveal the block-status element
     await userEvent.click(screen.getByTestId('triage-chip-disposition'))
 
     const bsEl = screen.getByTestId('triage-chip-block-status')
-    expect(bsEl).toHaveTextContent('9 blocked · 298 alert-only')
+    expect(bsEl).toHaveTextContent('9 blocked · 298 unconfirmed')
   })
 
   // EARS-1: label must NOT show the raw key "partial"
@@ -688,9 +696,9 @@ describe('TriageBanner — ADR-0058 Amendment 1 partial block_status (issue #726
     expect(countsEl).toHaveTextContent('9')
     expect(countsEl).toHaveTextContent('blocked')
     expect(countsEl).toHaveTextContent('298')
-    expect(countsEl).toHaveTextContent('alert-only')
+    expect(countsEl).toHaveTextContent('unconfirmed')
     expect(countsEl).toHaveTextContent('0')
-    expect(countsEl).toHaveTextContent('allowed')
+    expect(countsEl).toHaveTextContent('got through')
   })
 
   // EARS-2: counts are text nodes only (ADR-0029 D3) — no dangerouslySetInnerHTML
@@ -790,8 +798,9 @@ describe('TriageBanner — ADR-0058 Amendment 1 partial block_status (issue #726
     expect(screen.queryByTestId('triage-chip-disposition-counts')).toBeNull()
   })
 
-  // EARS-5 (no regression): "unknown" actor renders "Unknown" as before
-  it('EARS-5 no regression: "unknown" actor renders "Unknown" (no regression)', async () => {
+  // EARS-5 (no regression): single-class "unknown" status renders without a counts breakdown
+  // (issue #6 updates the label text itself to "Unconfirmed" — see escalationCopy.ts)
+  it('EARS-5 no regression: "unknown" actor renders "Unconfirmed", no counts breakdown', async () => {
     const unknownEsc: EscalationVerdict = {
       tier: 2,
       disposition: 'block_status_unknown',
@@ -804,7 +813,7 @@ describe('TriageBanner — ADR-0058 Amendment 1 partial block_status (issue #726
     await userEvent.click(screen.getByTestId('triage-chip-disposition'))
 
     const bsEl = screen.getByTestId('triage-chip-block-status')
-    expect(bsEl).toHaveTextContent('Unknown')
+    expect(bsEl).toHaveTextContent('Unconfirmed')
     expect(screen.queryByTestId('triage-chip-disposition-counts')).toBeNull()
   })
 })
@@ -924,15 +933,15 @@ describe('TriageBanner — #728 top-N + view-all + tier headers', () => {
     const headers = screen.getAllByTestId('triage-tier-header')
     expect(headers.length).toBeGreaterThanOrEqual(2)
 
-    // The tier-2 header should contain "Tier 2" and "block unknown"
+    // The tier-2 header should contain "Tier 2" and "Flagged"
     const tier2Header = headers.find((h) => h.textContent?.includes('Tier 2'))
     expect(tier2Header).toBeInTheDocument()
-    expect(tier2Header).toHaveTextContent('block unknown')
+    expect(tier2Header).toHaveTextContent('Flagged')
 
-    // The tier-3 header should contain "Tier 3" and "blocked persistent"
+    // The tier-3 header should contain "Tier 3" and "Blocked, repeated"
     const tier3Header = headers.find((h) => h.textContent?.includes('Tier 3'))
     expect(tier3Header).toBeInTheDocument()
-    expect(tier3Header).toHaveTextContent('blocked persistent')
+    expect(tier3Header).toHaveTextContent('Blocked, repeated')
   })
 
   // EARS-2: tier header shows actor count for that tier
@@ -957,7 +966,7 @@ describe('TriageBanner — #728 top-N + view-all + tier headers', () => {
     const headers = screen.getAllByTestId('triage-tier-header')
     expect(headers.length).toBeGreaterThanOrEqual(1)
     expect(headers[0]).toHaveTextContent('Tier 1')
-    expect(headers[0]).toHaveTextContent('allowed through')
+    expect(headers[0]).toHaveTextContent('Got through')
   })
 
   // Tier groups + view-all work together correctly

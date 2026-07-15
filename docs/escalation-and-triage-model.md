@@ -27,7 +27,8 @@ auto-block) is a deliberate later phase, gated behind operator consent.
 4. [The Triage banner — what you see and what to do](#4-the-triage-banner)
 5. [SIEM now, SOAR later](#5-siem-now-soar-later)
 6. [The three named thresholds](#6-the-three-named-thresholds)
-7. [Further reading](#7-further-reading)
+7. [Why you don't need to tune this](#7-why-you-dont-need-to-tune-this)
+8. [Further reading](#8-further-reading)
 
 ---
 
@@ -74,12 +75,17 @@ The `decide(events, detections)` function in
 detections to a single escalation verdict deterministically — no I/O, no LLM. The verdict is
 attached to the actor's `ThreatScore` as an `escalation` sub-object.
 
-| Tier | Actions that trigger it | Plain-language meaning | `block_status` | Banner-worthy? |
-|---|---|---|---|---|
-| **1** | `ALLOW` + a high-fidelity detection | **Allowed through — possible success.** A correlation rule fired *and* the request passed the firewall. The attack may have reached the application. | `allowed` | Yes — loudest |
-| **2** | `ALERT` or `LOG` (with or without a detection) | **Block status unknown.** An IDS or WAF-detection-mode alert fired. The perimeter did not assert a terminating verdict. The request may or may not have gotten through. | `unknown` | Yes |
-| **3** | `BLOCK` / `DROP`, persistent (3 or more events) | **Blocked — persistent attacker.** The defence held, but the adversary kept trying. Consider adding an explicit edge-level or IP-level block to reduce noise. | `blocked` | No — informational |
-| **4** | `BLOCK` / `DROP`, one-off | **Blocked — one-off probe.** The firewall or IDS did its job. Single or low-volume; informational only. | `blocked` | No — informational |
+| Tier | Actions that trigger it | Dashboard label (issue #6 — **wording pending maintainer approval**, see PR) | Plain-language meaning | `block_status` | Banner-worthy? |
+|---|---|---|---|---|---|
+| **1** | `ALLOW` + a high-fidelity detection | **Got through — possible breach** | A correlation rule fired *and* the request got past your defenses. The attack may have reached your system — highest priority. | `allowed` | Yes — loudest |
+| **2** | `ALERT` or `LOG` (with or without a detection) | **Unconfirmed — may have gotten in** | Something suspicious was flagged, but nothing confirms whether it was actually stopped. Treat it as unresolved. | `unknown` | Yes |
+| **3** | `BLOCK` / `DROP`, persistent (3 or more events) | **Blocked — kept trying** | Your defenses stopped every attempt, but this attacker keeps coming back. Consider a longer-term IP block. | `blocked` | No — informational |
+| **4** | `BLOCK` / `DROP`, one-off | **Blocked — single attempt** | Your defenses stopped this attempt. A single try only — informational, no action needed. | `blocked` | No — informational |
+
+The wording in the "Dashboard label" column is defined in exactly one place in code —
+`frontend/src/lib/escalationCopy.ts` — so a future rewording is a one-file edit, not a hunt across
+components. The underlying tier number, `disposition` key, and `block_status` key never change
+(ADR-0058): only the human-readable label layered on top does.
 
 **Only Tier 1 and Tier 2 actors enter the triage banner.** The banner is the escalation surface;
 Tiers 3 and 4 are visible in the threat table for situational awareness but do not demand immediate
@@ -105,18 +111,12 @@ carries `severity_id` and `disposition_id` as distinct fields (see
 Each escalation verdict carries a `block_status` field that answers the most immediate analyst
 question: **did the perimeter stop this?**
 
-| Value | Meaning |
-|---|---|
-| `allowed` | The request passed through. Corresponds to `ALLOW` events. |
-| `blocked` | The perimeter terminated the connection (`BLOCK` or `DROP`). |
-| `unknown` | An IDS or WAF detection-mode alert fired, but no terminating verdict was asserted. The request may or may not have been stopped. This is the honest answer for `ALERT` / `LOG` events. |
-
-**Note — forthcoming `partial` value:** The current model assigns a single `block_status` to the
-actor based on the dominant action type. A known refinement (an amendment to ADR-0058) will
-introduce a `partial` value for actors whose event window spans *both* blocked and alert-only events
-— for example, "9 BLOCK · 298 ALERT-only". Until that lands, a mixed actor reads `unknown`, which
-is conservative but can misrepresent the actor's full picture. The `partial` value is the deliberate
-fix for this case.
+| Value | Dashboard label | Meaning |
+|---|---|---|
+| `allowed` | **Got through** | The request passed through. Corresponds to `ALLOW` events. |
+| `blocked` | **Blocked** | The perimeter terminated the connection (`BLOCK` or `DROP`). |
+| `unknown` | **Unconfirmed** | An IDS or WAF detection-mode alert fired, but no terminating verdict was asserted. The request may or may not have been stopped. This is the honest answer for `ALERT` / `LOG` events. |
+| `partial` | e.g. "9 blocked · 298 unconfirmed" | The actor's events span more than one terminal disposition class (ADR-0058 Amendment 1) — some confirmed blocked, some unconfirmed. The dashboard formats a counts-derived label instead of a single word. |
 
 ---
 
@@ -154,8 +154,8 @@ Each actor chip on the banner displays:
 - A **disposition label** — one of the four human-readable strings from the tier table above.
 - A **popover** on the disposition label with the full `justification` string. The justification is
   a `[RULE]`-tagged sentence produced by the deterministic decider — never by an LLM at this stage.
-  Example: `[RULE] sql_injection matched on an ALLOW request — request passed the firewall; possible
-  success.`
+  Example: `[RULE] sql_injection matched, and the request got through — this may have reached your
+  system.`
 - A **dismiss** button to acknowledge the actor and remove it from the banner.
 
 ### What the analyst should do
@@ -237,7 +237,38 @@ Lives in: the **Escalation Policy** settings card.
 
 ---
 
-## 7. Further reading
+## 7. Why you don't need to tune this
+
+The three named thresholds above ([§6](#6-the-three-named-thresholds)) all gate the **severity-band**
+half of the banner predicate — they decide which score-based actors reach chat, the banner, or a
+score boost. None of them can silence a Tier 1 or Tier 2 actor.
+
+That is deliberate, not an oversight. ADR-0059 D2 defines banner-worthiness as:
+
+```
+is_alert_worthy(threat, threshold) :=
+    band_meets(threat.threat_level, threshold)   # tunable — the severity-band axis
+    OR
+    threat.escalation.tier <= 2                  # NOT tunable — the action-aware axis
+```
+
+The two axes are OR-combined, and the second one has **no threshold, no toggle, no config field**.
+A single allowed-through SQL injection attempt is Tier 1 regardless of its numeric score, regardless
+of the Triage threshold, the Notification threshold, or the AI confidence threshold — it always
+surfaces in the banner. There is no way to configure FireWatch into a state where a confirmed
+high-fidelity attack that got through, or an unconfirmed alert, is kept out of the banner.
+
+**This is the point, not a limitation.** Every other knob in FireWatch answers "how loud should the
+*noise* be" (which severity band reaches chat, which band enters the banner, how much you trust the
+AI). None of them answer "should a real breach be visible" — that answer is always yes, and it isn't
+a setting. For a home user or a small team with no dedicated SOC, this means the four escalation-tier
+labels ([§2](#2-the-4-tier-action-model)) require **zero tuning out of the box**: install a source,
+and the two highest-priority tiers surface automatically, with no threshold to discover, misconfigure,
+or accidentally silence.
+
+---
+
+## 8. Further reading
 
 | Document | What it covers |
 |---|---|

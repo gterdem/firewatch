@@ -397,9 +397,10 @@ class TestBuildJustificationPartial:
         jst = _build_justification_partial(9, 307, 0)
         assert "confirmed blocked" in jst
 
-    def test_allow_block_tail_mentions_allowed(self):
+    def test_allow_block_tail_mentions_got_through(self):
+        # Wording (issue #6): "got through" replaces "allowed" in plain-language copy.
         jst = _build_justification_partial(5, 0, 3)
-        assert "allowed" in jst
+        assert "got through" in jst
         assert "5" in jst
         assert "3" in jst
 

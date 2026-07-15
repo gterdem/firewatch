@@ -199,7 +199,8 @@ def decide(
         tier=4,
         disposition="allowed_through",
         justification=(
-            "[RULE] Traffic observed (ALLOW, no detection fired) — informational only."
+            "[RULE] Traffic passed through, but nothing was flagged"
+            " — informational only."
         ),
         block_status="allowed",
         disposition_counts=counts,
@@ -231,30 +232,35 @@ def _build_justification_tier1(detections: list[Detection]) -> str:
     # name), never attacker-influenceable event fields. Event `category` is NOT
     # embedded: at least one source (CEF) derives it from attacker-controlled header
     # fields — see #642. Keep this string rule-derived only.
+    # Wording (issue #6): plain language, no SOC dialect — "got through" instead
+    # of "passed the firewall"; "may have reached your system" instead of
+    # "possible success".
     rule = _top_rule_name(detections)
     ae = _auto_escalate_wording(detections)
     return (
-        f"[RULE] {rule}{ae} matched on an ALLOW request"
-        " — request passed the firewall; possible success."
+        f"[RULE] {rule}{ae} matched, and the request got through"
+        " — this may have reached your system."
     )
 
 
 def _build_justification_tier2_detected(detections: list[Detection]) -> str:
     # SECURITY (issue #648): rule-derived text only — no attacker-influenceable
     # event `category` (see _build_justification_tier1 + #642).
+    # Wording (issue #6): "flagged" / "nothing confirms it was stopped" replaces
+    # the SOC-dialect "block status unknown; defence termination not confirmed".
     rule = _top_rule_name(detections)
     ae = _auto_escalate_wording(detections)
     return (
-        f"[RULE] {rule}{ae} fired on an ALERT/LOG event"
-        " — block status unknown; defence termination not confirmed."
+        f"[RULE] {rule}{ae} flagged this traffic"
+        " — nothing confirms whether it was actually stopped."
     )
 
 
 def _build_justification_tier2_bare() -> str:
     # SECURITY (issue #648): static, rule-derived text only (no attacker `category`).
     return (
-        "[RULE] ALERT/LOG event observed"
-        " — detection fired but block status is unknown."
+        "[RULE] Suspicious traffic was flagged"
+        " — nothing confirms whether it was actually stopped."
     )
 
 
@@ -262,20 +268,24 @@ def _build_justification_tier3(
     events: list[SecurityEvent],
     detections: list[Detection],
 ) -> str:
+    # Wording (issue #6): "blocked N times" / "keeps coming back" replaces the
+    # SOC-dialect "adversary persisting; consider persistent IP-level enforcement".
     n = len(events)
     rule = _top_rule_name(detections) if detections else "volume rule"
     ae = _auto_escalate_wording(detections)
     return (
-        f"[RULE] {rule}{ae}: {n} BLOCK/DROP events — adversary persisting;"
-        " consider persistent IP-level enforcement."
+        f"[RULE] {rule}{ae}: blocked {n} times"
+        " — this attacker keeps coming back; consider a longer-term IP block."
     )
 
 
 def _build_justification_tier4(events: list[SecurityEvent]) -> str:
+    # Wording (issue #6): plain "blocked N attempt(s)" replaces "N BLOCK/DROP
+    # event(s) — firewall held".
     n = len(events)
     return (
-        f"[RULE] {n} BLOCK/DROP event(s) — firewall held; one-off or low-volume;"
-        " informational."
+        f"[RULE] Blocked {n} attempt(s)"
+        " — a single try; informational only, no action needed."
     )
 
 
@@ -290,27 +300,28 @@ def _build_justification_partial(
     No attacker-controlled event fields (category, rule_name, payload) are
     embedded.  The counts are internal engine numerics — always safe to render.
 
+    Wording (issue #6): plain language — "unconfirmed" replaces "ALERT/LOG
+    (block unknown)"; "confirmed blocked" / "got through" replace SOC dialect.
+
     Example output:
-        "[RULE] 307 ALERT/LOG (block unknown) + 9 BLOCK/DROP — most traffic not
-        terminally blocked; 9 confirmed blocked."
+        "[RULE] 307 unconfirmed + 9 blocked — most traffic unconfirmed;
+        9 confirmed blocked."
     """
     parts: list[str] = []
     if n_alert_log > 0:
-        parts.append(f"{n_alert_log} ALERT/LOG (block unknown)")
+        parts.append(f"{n_alert_log} unconfirmed")
     if n_block_drop > 0:
-        parts.append(f"{n_block_drop} BLOCK/DROP")
+        parts.append(f"{n_block_drop} blocked")
     if n_allow > 0:
-        parts.append(f"{n_allow} ALLOW")
+        parts.append(f"{n_allow} got through")
 
     summary = " + ".join(parts)
 
     # Determine the dominant non-terminal class for the tail sentence.
     if n_block_drop > 0 and n_alert_log > 0:
-        tail = (
-            f"most traffic not terminally blocked; {n_block_drop} confirmed blocked."
-        )
+        tail = f"most traffic unconfirmed; {n_block_drop} confirmed blocked."
     elif n_block_drop > 0 and n_allow > 0:
-        tail = f"{n_block_drop} confirmed blocked; {n_allow} allowed through."
+        tail = f"{n_block_drop} confirmed blocked; {n_allow} got through."
     else:
         tail = "mixed disposition — review individual events."
 

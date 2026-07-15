@@ -896,7 +896,9 @@ describe('DashboardRoute — #649 escalation-axis banner-worthiness (ADR-0058)',
     await waitFor(() => {
       expect(screen.getByTestId('triage-banner-active')).toBeInTheDocument()
     })
-    expect(screen.getByTestId('triage-chip-disposition')).toHaveTextContent('Block status unknown')
+    expect(screen.getByTestId('triage-chip-disposition')).toHaveTextContent(
+      'Unconfirmed — may have gotten in',
+    )
   })
 
   // EARS: Tier 3+ actor without HIGH/CRITICAL → still shows calm banner (no banner-worthiness)

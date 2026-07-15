@@ -13,8 +13,14 @@
  *   - Shows top-N (TOP_ACTORS_DEFAULT = 10) loudest actors by default.
  *   - When more than TOP_N actors are pending, a "view all N" expander reveals
  *     the remaining actors WITHOUT introducing an inner scrollbar (house rule).
- *   - Actors grouped under tier-group headers ("Tier 2 — block unknown (84)").
+ *   - Actors grouped under tier-group headers ("Tier 2 — Unconfirmed (84)").
  *   - Existing (tier asc, score desc) sort is preserved; top-N is the loudest slice.
+ *
+ * Issue #6 — self-explanatory tier copy: every label/description shown here
+ * (chip labels, tier-group headers, the legend) is looked up from
+ * `lib/escalationCopy.ts` — the single source of truth for tier wording. This
+ * component owns ZERO copy strings of its own; rewording the four tiers is a
+ * one-file edit in that module, not a hunt through this component.
  *
  * EARS:
  *   - WHILE one or more actors need a decision → show count + actor chips.
@@ -48,6 +54,13 @@
 import { useState } from 'react'
 import type { ThreatScore, EscalationVerdict } from '../../api/types'
 import type { OnAction } from '../../lib/triageActions'
+import {
+  TIER_COPY,
+  dispositionLabel,
+  dispositionColor,
+  blockStatusLabel,
+  tierGroupLabel,
+} from '../../lib/escalationCopy'
 import ClickableIp from '../entity/ClickableIp'
 import { Popover } from '../ds/Popover'
 
@@ -70,82 +83,6 @@ interface TriageBannerProps {
 }
 
 // ---------------------------------------------------------------------------
-// Disposition label helpers (ADR-0058 §4a)
-// ---------------------------------------------------------------------------
-
-/**
- * Convert the machine-readable disposition key to a human-readable label.
- * Labels mirror the ADR-0058 §4a tier table so analysts see the same language
- * documented in the architecture decision.
- */
-function dispositionLabel(disposition: string): string {
-  switch (disposition) {
-    case 'allowed_through':
-      return 'Allowed through — possible success'
-    case 'block_status_unknown':
-      return 'Block status unknown'
-    case 'blocked_persistent':
-      return 'Blocked — persistent attacker'
-    case 'blocked_one_off':
-      return 'Blocked — one-off probe'
-    default:
-      return disposition
-  }
-}
-
-/**
- * Per-class disposition count breakdown (ADR-0058 Amendment 1 A2).
- * Mirrors the disposition_counts field on EscalationVerdict.
- */
-interface DispositionCounts {
-  blocked: number
-  alert_unknown: number
-  allowed: number
-}
-
-/**
- * Convert the block_status key to a short human-readable label.
- *
- * When block_status === "partial", formats a counts-derived label
- * (e.g. "9 blocked · 298 alert-only") from the disposition_counts breakdown.
- * Gracefully degrades: if counts are absent, falls back to "Partial".
- *
- * Single-class statuses ("blocked"/"allowed"/"unknown") are unchanged (EARS-5).
- */
-function blockStatusLabel(
-  blockStatus: string,
-  counts?: DispositionCounts,
-): string {
-  switch (blockStatus) {
-    case 'allowed':
-      return 'Allowed'
-    case 'blocked':
-      return 'Blocked'
-    case 'unknown':
-      return 'Unknown'
-    case 'partial':
-      if (counts != null) {
-        return `${counts.blocked} blocked · ${counts.alert_unknown} alert-only`
-      }
-      return 'Partial'
-    default:
-      return blockStatus
-  }
-}
-
-/**
- * CSS color token for a disposition.
- * Tier 1 (allowed-through) uses --fw-red (highest urgency).
- * Tier 2 (block_status_unknown) uses --fw-amber.
- * Others use --fw-t2 (muted informational).
- */
-function dispositionColor(disposition: string): string {
-  if (disposition === 'allowed_through') return 'var(--fw-red)'
-  if (disposition === 'block_status_unknown') return 'var(--fw-amber)'
-  return 'var(--fw-t2)'
-}
-
-// ---------------------------------------------------------------------------
 // Tier-grouping helpers (issue #728)
 //
 // Actors arrive pre-sorted (tier asc, score desc) from deriveTriageActors.
@@ -160,26 +97,6 @@ interface TierBucket {
   label: string
   /** All actors that belong to this tier, in their original sort order. */
   actors: ThreatScore[]
-}
-
-/**
- * Returns a short label for the tier-group header.
- * Mirrors ADR-0058 §4a disposition names in abbreviated form.
- */
-function tierGroupLabel(tier: number | null, disposition: string | undefined): string {
-  if (tier == null) return 'No escalation verdict'
-  switch (disposition) {
-    case 'allowed_through':
-      return `Tier ${tier} — allowed through`
-    case 'block_status_unknown':
-      return `Tier ${tier} — block unknown`
-    case 'blocked_persistent':
-      return `Tier ${tier} — blocked persistent`
-    case 'blocked_one_off':
-      return `Tier ${tier} — blocked one-off`
-    default:
-      return `Tier ${tier}`
-  }
 }
 
 /**
@@ -402,51 +319,6 @@ function TierGroup({ bucket, onAction }: TierGroupProps) {
 // Colors via --fw-* tokens only (ADR-0028 D6).
 // ---------------------------------------------------------------------------
 
-const TIER_LEGEND: Array<{
-  tier: number
-  disposition: string
-  blockStatus: string
-  label: string
-  description: string
-  color: string
-}> = [
-  {
-    tier: 1,
-    disposition: 'allowed_through',
-    blockStatus: 'allowed',
-    label: 'Allowed through — possible success',
-    description:
-      'A high-fidelity detection fired and the request PASSED through. The attack may have succeeded.',
-    color: 'var(--fw-red)',
-  },
-  {
-    tier: 2,
-    disposition: 'block_status_unknown',
-    blockStatus: 'unknown',
-    label: 'Block status unknown',
-    description:
-      'A detection fired (IDS alert / WAF detection mode) but the final disposition is not asserted — neither confirmed blocked nor allowed.',
-    color: 'var(--fw-amber)',
-  },
-  {
-    tier: 3,
-    disposition: 'blocked_persistent',
-    blockStatus: 'blocked',
-    label: 'Blocked — persistent attacker',
-    description:
-      'Defence held, but the attacker is determined and high-volume. Consider an edge / IP block.',
-    color: 'var(--fw-t2)',
-  },
-  {
-    tier: 4,
-    disposition: 'blocked_one_off',
-    blockStatus: 'blocked',
-    label: 'Blocked — one-off probe',
-    description: 'The WAF/IDS did its job. Single or low-volume probe; informational only.',
-    color: 'var(--fw-t3)',
-  },
-]
-
 function EscalationLegend() {
   return (
     <div data-testid="escalation-legend" aria-label="Escalation tier legend">
@@ -469,7 +341,7 @@ function EscalationLegend() {
           gap: 6,
         }}
       >
-        {TIER_LEGEND.map((row) => (
+        {TIER_COPY.map((row) => (
           <div
             key={row.tier}
             data-testid={`legend-tier-${row.tier}`}
@@ -562,7 +434,22 @@ function EscalationLegend() {
         >
           {'An actor can be '}
           <em>partial</em>
-          {': some events blocked, some alert-only — it’s queued by its loudest events.'}
+          {': some events were blocked, some are unconfirmed — it’s queued by its loudest events.'}
+        </div>
+
+        {/* Why-you-don't-need-to-tune-this note — two-axis model, ADR-0059 D2 (issue #6).
+            Text node only — ADR-0029 D3. */}
+        <div
+          data-testid="legend-zero-tuning-note"
+          style={{
+            fontSize: 11,
+            color: 'var(--fw-t3)',
+            lineHeight: 1.5,
+            paddingTop: 4,
+          }}
+        >
+          {'These four labels apply automatically — there is no threshold to tune and no way to '}
+          {'silence a breach: Tier 1 and Tier 2 always surface here, regardless of score.'}
         </div>
       </div>
     </div>
@@ -696,9 +583,9 @@ function ActorChip({ actor, onAction }: ActorChipProps) {
                 <span>{esc.disposition_counts.blocked}</span>
                 {' blocked · '}
                 <span>{esc.disposition_counts.alert_unknown}</span>
-                {' alert-only · '}
+                {' unconfirmed · '}
                 <span>{esc.disposition_counts.allowed}</span>
-                {' allowed'}
+                {' got through'}
               </div>
             )}
 

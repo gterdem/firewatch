@@ -313,8 +313,9 @@ class EscalationVerdict(BaseModel):
                              values). Safe for programmatic routing (e.g. banner logic).
     ``justification``      — human-readable, ``RULE``-tagged sentence (ADR-0035) safe to render
                              as a plain text node (e.g.
-                             "SQLi signature matched on an ALLOWED request — possible success").
-                             Produced by the decider; never by an LLM at this stage.
+                             "sqli_rule matched, and the request got through — this may have
+                             reached your system"). Wording owned by the decider's justification
+                             builders (issue #6); produced by the decider, never by an LLM.
     ``block_status``       — honest, non-fabricated disposition state: ``"blocked"`` /
                              ``"allowed"`` / ``"unknown"`` / ``"partial"`` (A1).
                              ALERT/LOG → ``"unknown"`` (OCSF non-terminating disposition).

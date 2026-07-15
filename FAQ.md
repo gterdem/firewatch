@@ -40,17 +40,18 @@ Push sources  ──listen on a socket (sources send to FireWatch)────�
   never re-reads old events.
 - **Push** (Syslog, Syslog/CEF): FireWatch runs a listener; the source sends events to it.
 
-## What is the `T2 — Block status unknown` I see on the dashboard?
+## What is the `T2 — Unconfirmed — may have gotten in` I see on the dashboard?
 
 It is the **escalation tier** for an actor whose traffic only triggered detection-mode events
 (an IDS alert or a log entry) — a detection fired, but FireWatch cannot assert whether the traffic
 was blocked or allowed, so it needs an operator decision. FireWatch labels what got *through*, not
-just what was blocked. The full action-aware model ([ADR-0058](docs/adr/0058-action-aware-deterministic-escalation-axis.md)):
+just what was blocked. The full action-aware model ([ADR-0058](docs/adr/0058-action-aware-deterministic-escalation-axis.md);
+dashboard wording: [docs/escalation-and-triage-model.md](docs/escalation-and-triage-model.md)):
 
 | Tier | What happened | Block status |
 |------|---------------|--------------|
 | **T1** | Allowed through despite a high-fidelity detection | allowed |
-| **T2** | Alert / log only — detection fired, disposition not asserted | **unknown** |
+| **T2** | Alert / log only — detection fired, disposition not asserted | **unconfirmed** |
 | **T3** | Blocked/dropped, and the adversary kept trying (persistent) | blocked |
 | **T4** | Blocked/dropped, one-off | blocked |
 

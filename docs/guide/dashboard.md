@@ -66,10 +66,10 @@ just how high the score is. This is the escalation axis.
 
 | Tier badge | Disposition | Urgency |
 |------------|-------------|---------|
-| **T1** | Allowed through — possible success | Highest. The detection fired but the request passed. The attack may have reached your application. |
-| **T2** | Block status unknown | High. A detection fired (IDS alert or WAF detection-mode), but neither a block nor an allow is confirmed. |
-| **T3** | Blocked — persistent attacker | Moderate. Defence held, but the source is determined and high-volume; consider an IP-level block. |
-| **T4** | Blocked — one-off probe | Informational. The WAF or IDS did its job; single or low-volume probe. |
+| **T1** | Got through — possible breach | Highest. The detection fired but the request got past your defenses. The attack may have reached your application. |
+| **T2** | Unconfirmed — may have gotten in | High. A detection fired (IDS alert or WAF detection-mode), but nothing confirms whether it was actually stopped. |
+| **T3** | Blocked — kept trying | Moderate. Your defenses held, but the source is determined and high-volume; consider an IP-level block. |
+| **T4** | Blocked — single attempt | Informational. Your defenses stopped this; a single try only. |
 
 A T1 or T2 actor can surface in the Triage Banner even if their numeric score is LOW —
 because the outcome matters more than the score alone when traffic actually got through.

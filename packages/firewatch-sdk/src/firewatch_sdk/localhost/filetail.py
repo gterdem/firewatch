@@ -19,7 +19,8 @@ position, even on a zero-line cycle. Two-call idiom, enforced structurally
     if pos != stored:
         await ctx.kv.put(NS, "cursor", pos)               # persist the pivot BEFORE draining
     async for line, cursor in reader.read(pos):
-        yield raw_event(line)
+        if line is not None:                              # None: cursor-only advancement
+            yield raw_event(line)                          # (an oversized line was skipped)
         last = cursor
     await ctx.kv.put(NS, "cursor", last)                  # once per cycle, at drain end
 
@@ -29,6 +30,47 @@ appended lines into thousands of KV writes; end-of-cycle persistence gives
 at-least-once delivery, whose replays the core's ``(source_type, source_id)``
 dedup already absorbs. At-most-once is the wrong failure mode for a security
 tool.
+
+**Invariant — the ``(None, cursor)`` yield shape.** ``read()`` MAY yield a
+``None`` line paired with a cursor. This reuses ``JournaldReader``'s
+``(record | None, cursor)`` shape verbatim (the architect's ruling on PR #36 /
+issue #60: this state is fundamental to bounded cursor-streaming, not a
+journald quirk) — the SAME narrow, load-bearing exception to "every yield
+carries a record", governed by the SAME rule:
+
+  - Emitted **at most once per** ``read()`` **call**.
+  - Emitted **only as the final item** of that call.
+  - Emitted **only when the cycle yielded zero lines** — i.e. nothing else
+    was readable this cycle either.
+  - MUST NOT be extended to any other case — today, that is a complete
+    (newline-terminated) line over ``_MAX_LINE_BYTES``, which can be
+    *positioned* (this reader's own offset arithmetic advances past it) but
+    never *read* (it is never buffered whole), so without this sentinel the
+    stored cursor would never move and the same line would be re-served,
+    and re-skipped, forever — a correctness bug against the cursor-resume
+    guarantee, and a cheap DoS.
+
+Unlike ``JournaldReader`` (which must re-request the oversized entry via a
+subprocess peek to recover its cursor — see ``journald.py``'s
+``_peek_cursor_after``), this reader's skip cursor is pure offset arithmetic:
+``inode:<byte offset past the line's own newline>``, computed directly while
+scanning past it — no second read needed.
+
+**Bounded reads.** ``_MAX_LINE_BYTES`` (16 MiB, consistent with
+``JournaldReader``'s bound) caps each line the same way ``fh.readline()``
+used to be unbounded: a single arbitrarily long line (e.g. a compromised
+service account writing to its own watched log — the same threat model as
+``JournaldReader``'s Finding 2, and not theoretical: #2's ClamAV plugin
+points this reader at exactly such a directory) would otherwise be buffered
+whole into memory, OOMing the process. One deliberate difference from
+``JournaldReader``'s bound: this reader operates in TEXT mode
+(``TextIOWrapper``), so ``_MAX_LINE_BYTES`` here bounds DECODED CHARACTERS,
+not raw bytes — worst case (every character a 4-byte UTF-8 codepoint) admits
+up to ~64 MiB of underlying bytes for one line rather than a strict 16 MiB
+ceiling. This is still a fixed, generous, FINITE bound — the defect this
+closes is unbounded growth, not an exact byte ceiling — and switching to a
+byte-exact bound would require reopening the file in binary mode, a larger
+structural change than this fix warrants.
 
 **Drain contract:** ``read()`` is one-shot, like ``JournaldReader`` (no
 ``-f``/follow) — it drains whatever is currently available, handles at most
@@ -80,6 +122,11 @@ _NON_REGULAR_FILE_MSG = (
     "forever; a device or socket is never a plain log file)."
 )
 
+# See the module docstring's "Bounded reads" note: consistent with
+# JournaldReader._MAX_LINE_BYTES (16 MiB) by value, but bounds DECODED
+# CHARACTERS here (text-mode reader), not raw bytes.
+_MAX_LINE_BYTES = 16 * 1024 * 1024
+
 
 class FileTailReader:
     """Tails a single plain-text log file, surviving rename or truncate rotation.
@@ -102,7 +149,9 @@ class FileTailReader:
         self._encoding = encoding
         self._follow_symlinks = follow_symlinks
 
-    async def read(self, start: str) -> AsyncGenerator[tuple[str, str], None]:
+    async def read(
+        self, start: str
+    ) -> AsyncGenerator[tuple[str | None, str], None]:
         """Drain every line currently available after ``start``, then return.
 
         ``start`` MUST be one of (no default — the caller always states one):
@@ -121,6 +170,17 @@ class FileTailReader:
         exists to prevent: call ``resolve_start("tail")`` first, persist its
         result, then pass THAT to ``read()`` — see ``resolve_start()``'s
         docstring for the full scenario.
+
+        ``line`` MAY be ``None``: this signals a cursor advancement with no
+        corresponding line, governed by the module-level invariant above
+        (see "Invariant — the ``(None, cursor)`` yield shape") — a complete
+        line over ``_MAX_LINE_BYTES`` that could not be buffered whole, with
+        nothing else readable this cycle either. The caller MUST still
+        persist ``cursor`` in this case (that's the whole point — otherwise
+        the same oversized line is re-served, and re-skipped, forever), but
+        has no line to forward as an event. The documented caller idiom
+        (module docstring) already covers this: guard the forwarding call
+        with ``if line is not None``, and always track ``cursor``.
 
         One-shot drain, not a follow loop: yields every complete line
         currently available (across at most one rotation cascade — see
@@ -147,6 +207,8 @@ class FileTailReader:
                 "polls; see resolve_start()'s docstring."
             )
         fh, inode = self._open_at_start(start)
+        yielded_any = False
+        last_skip_cursor: str | None = None
         try:
             while True:
                 # Fully drain whatever is currently available BEFORE checking
@@ -155,6 +217,15 @@ class FileTailReader:
                 # our open file handle keeps reading it by inode regardless
                 # of what the path now points to.
                 async for line, cursor in self._yield_available(fh, inode):
+                    if line is None:
+                        # An oversized line was skipped — see
+                        # _yield_available. Deferred, not yielded here
+                        # directly: the sentinel invariant requires at most
+                        # one (None, cursor), as the FINAL item, only if
+                        # nothing else was readable this whole read() call.
+                        last_skip_cursor = cursor
+                        continue
+                    yielded_any = True
                     yield line, cursor
 
                 action, _ = self._check_rotation(fh, inode)
@@ -166,9 +237,12 @@ class FileTailReader:
                     continue  # drain the new file immediately
                 if action == "truncated":
                     continue  # already seeked to 0; drain immediately
-                return  # nothing more available and no rotation — drain complete
+                break  # nothing more available and no rotation — drain complete
         finally:
             fh.close()
+
+        if last_skip_cursor is not None and not yielded_any:
+            yield None, last_skip_cursor
 
     # ------------------------------------------------------------------ #
     # Start-position resolution — MUST be called (and its result persisted)
@@ -329,17 +403,80 @@ class FileTailReader:
 
     async def _yield_available(
         self, fh: TextIO, inode: int
-    ) -> AsyncIterator[tuple[str, str]]:
+    ) -> AsyncIterator[tuple[str | None, str]]:
         """Yield every complete line currently available, leaving a trailing
-        partial line (writer hasn't flushed its newline yet) unconsumed."""
+        partial line (writer hasn't flushed its newline yet) unconsumed.
+
+        ``line`` is ``None`` for a skipped oversized line (see
+        ``_read_bounded_line``) — paired with the cursor immediately past its
+        newline, so a caller aggregating this generator's output (``read()``)
+        can still track forward progress. This is a raw per-occurrence
+        signal, NOT yet the invariant-governed sentinel: ``read()`` decides
+        whether to actually surface a final ``(None, cursor)`` to ITS caller,
+        exactly mirroring how ``JournaldReader._iter_lines`` signals a raw
+        skip that ``JournaldReader._stream`` then aggregates.
+        """
         while True:
             pos = fh.tell()
-            line = fh.readline()
-            if not line or not line.endswith("\n"):
-                fh.seek(pos)
+            line, oversized = self._read_bounded_line(fh)
+            if line is None and not oversized:
+                fh.seek(pos)  # partial/incomplete — leave it for next poll
                 return
+            if oversized:
+                offset = fh.tell()
+                logger.warning(
+                    "FileTailReader: skipping oversized line in %s (exceeds "
+                    "%d characters) at offset %d — a compromised writer to "
+                    "this file could otherwise buffer it whole and OOM the "
+                    "process; investigate the source or raise "
+                    "_MAX_LINE_BYTES.",
+                    self._path, _MAX_LINE_BYTES, offset,
+                )
+                yield None, f"{inode}:{offset}"
+                continue
             offset = fh.tell()
+            assert line is not None  # narrowed above; for type-checking only
             yield line[:-1], f"{inode}:{offset}"
+
+    @staticmethod
+    def _read_bounded_line(fh: TextIO) -> tuple[str | None, bool]:
+        """Read one line without ever buffering more than ``_MAX_LINE_BYTES``
+        characters at a time.
+
+        Returns ``(text, oversized)``:
+          - ``(line_including_terminator, False)`` — an ordinary, in-bound
+            complete line, read and returned whole (the common case:
+            resolved in a single ``readline()`` call).
+          - ``(None, False)`` — no complete line available right now: either
+            true EOF, or a trailing partial line (no ``"\\n"`` yet — the
+            writer hasn't flushed it). This ALSO covers a line already past
+            the bound that is NOT yet newline-terminated: until its
+            terminator actually appears, it is indistinguishable from an
+            ordinary still-growing line, so it is deliberately NOT reported
+            as ``oversized`` here — see the module docstring's Bounded reads
+            note. The caller must leave the file position where it found it
+            and try again next poll.
+          - ``(None, True)`` — the terminating ``"\\n"`` WAS found, but
+            cumulative length up to and including it exceeded
+            ``_MAX_LINE_BYTES``: a genuine, complete oversized line. The file
+            position is left just past the terminator — this method never
+            re-scans bytes it has already read past.
+
+        Uses ``TextIO.readline(size)``'s documented cap (a maximum CHARACTER
+        count for a text-mode stream, per the io module) to bound each
+        individual read call at ``_MAX_LINE_BYTES`` — an ordinary in-bound
+        line always resolves on the FIRST call; only an oversized line loops.
+        """
+        exceeded_once = False
+        while True:
+            piece = fh.readline(_MAX_LINE_BYTES)
+            if not piece:
+                return None, False
+            if piece.endswith("\n"):
+                return (None, True) if exceeded_once else (piece, False)
+            if len(piece) < _MAX_LINE_BYTES:
+                return None, False  # true EOF mid-line -- ordinary partial
+            exceeded_once = True  # hit the cap with no terminator -- keep scanning
 
     def _check_rotation(self, fh: TextIO, inode: int) -> tuple[str, int]:
         """Detect rotation once the current file has been fully drained.

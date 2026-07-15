@@ -39,12 +39,54 @@ implements and an explicit "Out of scope" section. Keep milestones small.
 just behavior. Implementers default to a single monolithic class when handed only behavior; design of
 internal structure is *your* call, not theirs. Keep it a sketch (a few lines), not a straitjacket.
 
+## Specify what DIES, not only what ships
+
+**Implementations grep for what to add; nothing greps for what to retire.** This is your own
+finding (PR #38 ruling, 2026-07-15) and it is the mechanism behind every conformance gap found so
+far. Inside ONE ADR: D8 enumerated exact target values → conformed perfectly. RC3 falsified a
+premise but never enumerated the artifacts asserting it → every one survived, got pinned by tests,
+and was then **defended by mis-citation** — an implementer cited the very ADR that debunks the
+phrase as its authorization. Three ADR-vs-code gaps found in one session, all in your ADRs, all
+found only after they hit production. A conformance gap is invisible by construction: the code
+runs, the tests pass, and the ADR is quoted *in defence of the drift*. Nothing fails.
+
+1. **Retire list — mandatory on any ADR that supersedes a premise, label, or decision.** The ADR
+   (or its implementing issue) carries a **grep-derived enumeration** of the code/doc artifacts
+   embodying the superseded thing, each with an explicit disposition:
+   - *replace-with-X in this PR*
+   - *stands until #N, because Y*
+   - *stands permanently, boundary Z*
+
+   Produce it mechanically at ADR-writing time (run the greps — don't recall them). It is verified
+   mechanically at review time: only listed survivals may remain. This is what turns your
+   conformance check below from re-reading prose into **running a command**.
+
+2. **Negative acceptance criteria are first-class.** Every gate or exclusion in a D-section gets an
+   explicit **must-NOT** criterion in the implementing issue, with the same exact-value rigor a
+   target-value table gets. Your own assessment: this single rule would have caught all three gaps.
+   (ADR-0058's D2 gate lived in a table header and prose with no "an unqualified ALERT must NOT
+   reach Tier 2" — so the positive cases were tested and the gate was never wired. That is the bug
+   that produced the ~100%-Tier-2 flood.)
+
+3. **A deferred correction states its interim.** If an ADR falsifies something but defers the fix a
+   milestone, say what the affected artifact reads **in between** — even if the answer is
+   "unchanged until #N, and here is why that is honest." ADR-0067 falsified a label and deferred
+   the fix to M3 without stating the interim; that silence is what made the falsified phrase look
+   *sanctioned* to two implementers in a row.
+
+The general form: **search for what refutes you, not what confirms you.** A search that can only
+confirm your belief returns a null result that looks like clean evidence — because nothing is on
+screen to argue with. (Same root cause as CLAUDE.md's "Evidence discipline", added the same day
+after the coordinator's grep missed `### D6` and it accused a correct agent of fabricating a
+citation.)
+
 ## Two checks nothing else catches
 - **Conformance — does the code still do what the ADR says?** At pickup, don't only ask "is there an
   ADR?" — compare the implementation to it. Drift is silent, gets pinned into tests, and then the
   oracle defends the bug. Report drift as a defect against the ADR, and say whether the fix is
   conformance (cheap) or real design change (not). (ADR-0058 specified a gate; the code wired it to a
-  justification string; nothing compared them for months.)
+  justification string; nothing compared them for months.) **Run the retire lists' greps** — that is
+  what makes this check mechanical rather than a re-read.
 - **Distribution — what will the data actually be?** Before writing acceptance criteria for anything
   user-facing, trace the normalizers and state the numbers a real deployment produces. Mechanical, not
   taste. If a design only works when some case is rare, say what makes it rare and check that it is.
@@ -66,6 +108,9 @@ Issues are a public surface — contributors and evaluators read them. Keep the 
 - **Modes-in-acceptance-criteria:** every source-plugin issue states WHICH collection modes
   (local / push / SSH-pull / cloud API) make it done; other modes go in Out-of-scope with a pointer
   to the follow-up issue.
+- **Must-NOT criteria wherever the ADR states a gate or exclusion** (see "Specify what DIES"). An
+  issue with only positive criteria gets its positive cases tested and its gate silently unwired.
+  If the ADR supersedes something, the issue also carries that ADR's retire list.
 - **Walkthrough triage rule:** a defect against an issue's acceptance criteria files into that
   feature's milestone; a UX improvement gets the `walkthrough` label and joins the current milestone
   only if it blocks that milestone's DoD sentence — otherwise it parks in the backlog milestone.

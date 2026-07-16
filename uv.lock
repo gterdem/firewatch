@@ -8,6 +8,7 @@ members = [
     "firewatch-api",
     "firewatch-aws-nfw",
     "firewatch-azure-waf",
+    "firewatch-clamav",
     "firewatch-cli",
     "firewatch-core",
     "firewatch-linux-auth",
@@ -397,6 +398,7 @@ source = { virtual = "." }
 dev = [
     { name = "firewatch-api" },
     { name = "firewatch-azure-waf" },
+    { name = "firewatch-clamav" },
     { name = "firewatch-cli" },
     { name = "firewatch-core" },
     { name = "firewatch-linux-auth" },
@@ -420,6 +422,7 @@ dev = [
 dev = [
     { name = "firewatch-api", editable = "packages/firewatch-api" },
     { name = "firewatch-azure-waf", editable = "packages/sources/azure-waf" },
+    { name = "firewatch-clamav", editable = "packages/sources/clamav" },
     { name = "firewatch-cli", editable = "packages/firewatch-cli" },
     { name = "firewatch-core", editable = "packages/firewatch-core" },
     { name = "firewatch-linux-auth", editable = "packages/sources/linux_auth" },
@@ -490,6 +493,21 @@ dependencies = [
 requires-dist = [
     { name = "azure-identity", specifier = ">=1.15" },
     { name = "azure-monitor-query", specifier = ">=1.2" },
+    { name = "firewatch-sdk", editable = "packages/firewatch-sdk" },
+    { name = "pydantic", specifier = ">=2.0" },
+]
+
+[[package]]
+name = "firewatch-clamav"
+version = "0.1.0"
+source = { editable = "packages/sources/clamav" }
+dependencies = [
+    { name = "firewatch-sdk" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
     { name = "firewatch-sdk", editable = "packages/firewatch-sdk" },
     { name = "pydantic", specifier = ">=2.0" },
 ]

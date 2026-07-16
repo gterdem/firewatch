@@ -19,6 +19,7 @@ firewatch-cli = { workspace = true }
 firewatch-azure-waf = { workspace = true }
 firewatch-syslog-cef = { workspace = true }
 firewatch-linux-auth = { workspace = true }
+firewatch-clamav = { workspace = true }
 
 [tool.ruff]
 target-version = "py312"
@@ -63,6 +64,7 @@ dev = [
     "firewatch-azure-waf",
     "firewatch-syslog-cef",
     "firewatch-linux-auth",
+    "firewatch-clamav",
     "httpx>=0.27",
     "jsonschema>=4.0",
     "pyright>=1.1.410",

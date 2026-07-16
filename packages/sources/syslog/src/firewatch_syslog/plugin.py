@@ -59,7 +59,9 @@ class SyslogSource:
       - ``source_type`` is the constant ``"syslog"`` — never branches on ``source_id``.
       - SSH brute-force → ALERT; SSH login → LOG; generic → LOG (ADR-0012 Flag A).
       - MITRE T1110/TA0006 for SSH brute-force (ADR-0014).
-      - OCSF class_uid=4001 for auth events (ADR-0020).
+      - OCSF class_uid=3002 (Authentication) for auth events; class_uid=0 (Base
+        Event) for the unclassified fallback (OCSF 1.8.0, issue #76 — see
+        ``normalize.py`` module docstring for citations).
     """
 
     def __init__(self) -> None:

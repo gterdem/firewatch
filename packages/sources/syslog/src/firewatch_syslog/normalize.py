@@ -22,10 +22,22 @@ MITRE ATT&CK references (ATT&CK v15):
   - TA0006 kill-chain phase: credential-access
     https://attack.mitre.org/tactics/TA0006/
 
-OCSF references (https://schema.ocsf.io):
-  - class_uid 4001 = Authentication Activity (category_uid 4 = Identity & Access Mgmt)
-  - class_uid 6002 = File System Activity (category_uid 6 = Application Activity)
-    used as a general-purpose fallback for system-level syslog events.
+OCSF references (OCSF 1.8.0, https://schema.ocsf.io/api/1.8.0/classes, verified live
+2026-07-16 — issue #76 conformance correction; corrects an earlier version of this
+docstring which mislabeled both classes below):
+  - class_uid 3002 = Authentication (category_uid 3 = Identity & Access Management).
+    https://schema.ocsf.io/api/1.8.0/classes/authentication: "Authentication events
+    report authentication session activities, including user attempts to log on or
+    log off, regardless of success". Applies to every auth-shaped category this
+    module emits (SSH Brute Force, SSH Login, Sudo Failure) — 4001 is Network
+    Activity, not Authentication, and does not apply here.
+  - class_uid 0 = Base Event (category_uid 0 = Uncategorized), used as the honest
+    fallback for a syslog line this module could not classify.
+    https://schema.ocsf.io/api/1.8.0/categories: category_uid 0 "Uncategorized" —
+    "a generic event that does not belong to any event category". 6002 is
+    Application Lifecycle (category 6) and 1001 is File System Activity (category
+    1); neither describes an unclassified line, and the earlier docstring's claim
+    that 6002 means "File System Activity" was also wrong on its own terms.
 """
 import re
 
@@ -68,25 +80,34 @@ _FROM_IP_RE = re.compile(r"\bfrom\s+(\d{1,3}(?:\.\d{1,3}){3})", re.IGNORECASE)
 
 # Maps category name → (action, severity, attack_technique, attack_tactic,
 #                        kill_chain_phase, capec_id, ocsf_class, ocsf_category)
-# OCSF class_uid 4001 = Authentication Activity, category_uid 4 = Identity & Access Mgmt.
-# OCSF class_uid 6002 = File System Activity (used as fallback for general system events).
-#   Source: https://schema.ocsf.io/categories
+#
+# OCSF 1.8.0 (https://schema.ocsf.io/api/1.8.0/classes, verified live 2026-07-16,
+# issue #76 conformance correction):
+#   class_uid 3002 = Authentication, category_uid 3 = Identity & Access Management
+#     — https://schema.ocsf.io/api/1.8.0/classes/authentication: "regardless of
+#     success" — every auth-shaped row below (brute force, login, sudo failure).
+#   class_uid 0 = Base Event, category_uid 0 = Uncategorized
+#     — https://schema.ocsf.io/api/1.8.0/categories: "a generic event that does
+#     not belong to any event category" — the unclassified fallback row.
+# (Previously this table used 4001/4, which is OCSF Network Activity, and 6002/6,
+# which is OCSF Application Lifecycle — both wrong; neither pair describes a
+# syslog auth line or an unclassified line. See ADR-0071 D5.)
 _CATEGORY_MAP: dict[
     str,
     tuple[str, str, str | None, str | None, str | None, str | None, int, int],
 ] = {
     # category        action   severity  technique  tactic    kc-phase              capec  ocsf_cls  ocsf_cat
     "SSH Brute Force": (
-        "ALERT", "high",   "T1110",   "TA0006", "credential-access", None,  4001,    4,
+        "ALERT", "high",   "T1110",   "TA0006", "credential-access", None,  3002,    3,
     ),
     "SSH Login": (
-        "LOG",   "info",   None,      None,     None,                None,  4001,    4,
+        "LOG",   "info",   None,      None,     None,                None,  3002,    3,
     ),
     "Sudo Failure": (
-        "ALERT", "medium", "T1078",   "TA0004", "privilege-escalation", None, 4001,  4,
+        "ALERT", "medium", "T1078",   "TA0004", "privilege-escalation", None, 3002,  3,
     ),
     "Syslog Event": (
-        "LOG",   "info",   None,      None,     None,                None,  6002,    6,
+        "LOG",   "info",   None,      None,     None,                None,  0,       0,
     ),
 }
 
@@ -129,9 +150,11 @@ def normalize(raw: RawEvent, source_id: str) -> SecurityEvent:
       - SSH brute-force → T1110 / TA0006 / credential-access
       - Sudo failure    → T1078 / TA0004 / privilege-escalation
 
-    OCSF (ADR-0020):
-      - Auth events → class_uid=4001 (Authentication Activity), category_uid=4
-      - Generic     → class_uid=6002 (File System/System Activity), category_uid=6
+    OCSF (1.8.0, ADR-0040 pin; see module docstring for citations — issue #76):
+      - Auth events (SSH Brute Force / SSH Login / Sudo Failure) →
+        class_uid=3002 (Authentication), category_uid=3
+      - Generic ("Syslog Event", unclassified) →
+        class_uid=0 (Base Event), category_uid=0
     """
     d = raw.data
     line: str = d.get("line") or ""

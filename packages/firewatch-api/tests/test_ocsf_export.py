@@ -552,6 +552,47 @@ class TestEventToOcsfSerializer:
         result = serializer.event_to_ocsf(ev)
         assert result["severity_id"] == 0
 
+    def test_ocsf_class_zero_survives_export(self) -> None:
+        """Issue #76 falsy-zero fix: a legitimate class_uid=0 (Base Event) MUST NOT be
+        silently rewritten to the 4001 Network Activity fallback.
+
+        Source: https://schema.ocsf.io/api/1.8.0/categories — category_uid 0
+        "Uncategorized" is a real, honestly-emitted class (e.g. syslog's and
+        linux_auth's unclassified-line fallback rows), and Python's `0 or x`
+        idiom previously discarded it because `0` is falsy.
+        """
+        ev = SecurityEvent(
+            source_type="linux_auth",
+            source_id="host-01",
+            timestamp=_TS_UTC,
+            source_ip=_WAF_IP,
+            action="LOG",  # type: ignore[arg-type]
+            severity="low",  # type: ignore[arg-type]
+            ocsf_class=0,
+            ocsf_category=0,
+        )
+        result = serializer.event_to_ocsf(ev)
+        assert result["class_uid"] == 0
+        assert result["category_uid"] == 0
+
+    def test_ocsf_class_none_still_falls_back_to_network_activity(self) -> None:
+        """When ocsf_class/ocsf_category are genuinely unset (None), the 4001/4
+        Network Activity fallback still applies — the fix narrows the falsy
+        check to `None` only; it does not remove the fallback."""
+        ev = SecurityEvent(
+            source_type="suricata",
+            source_id="sensor-01",
+            timestamp=_TS_UTC,
+            source_ip=_SURICATA_IP,
+            action="ALERT",  # type: ignore[arg-type]
+            severity="medium",  # type: ignore[arg-type]
+            ocsf_class=None,
+            ocsf_category=None,
+        )
+        result = serializer.event_to_ocsf(ev)
+        assert result["class_uid"] == mapping.SURICATA_NET_CLASS_UID
+        assert result["category_uid"] == mapping.SURICATA_NET_CATEGORY_UID
+
 
 class TestThreatToDetectionFinding:
     """Unit tests for threat_to_detection_finding() pure function."""

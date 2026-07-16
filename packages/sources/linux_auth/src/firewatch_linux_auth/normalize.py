@@ -154,18 +154,15 @@ _CATEGORY_META: dict[
     ),
 }
 
-# KNOWN LANDMINE (not fixed here — scoped to issue #76): firewatch_api's OCSF
-# serializer (`firewatch_api/ocsf/serializer.py:57-58`) does
+# RESOLVED (issue #76): firewatch_api's OCSF serializer used to do
 # `event.ocsf_class or mapping.SURICATA_NET_CLASS_UID` — a falsy-zero bug.
-# Because `0` is falsy in Python, the Base Event `(0, 0)` row above is
+# Because `0` is falsy in Python, the Base Event `(0, 0)` row above was
 # silently REWRITTEN to `4001/4` on OCSF *export*, even though normalize()
-# itself emits the honest `(0, 0)` pair. Verified: no existing OCSF-export
-# test currently exercises linux_auth's unclassified row, so nothing breaks
-# today — but any future export-level test for this row will observe 4001/4,
-# not 0/0, until #76 lands the `is not None` fix. Tests in this package pin
-# the *normalize-level* value (what this module actually emits), not the
-# serialized output, precisely to avoid encoding that bug as if it were this
-# plugin's intent.
+# always emitted the honest `(0, 0)` pair. Fixed in
+# `firewatch_api/ocsf/serializer.py::_resolve_class_uid` (`is not None` checks,
+# issue #76) — class `0` now survives to the wire. Tests in this package still
+# pin the *normalize-level* value (what this module actually emits), not the
+# serialized output; that boundary stands regardless of the export-side fix.
 
 _PAYLOAD_MAX_LEN = 500
 

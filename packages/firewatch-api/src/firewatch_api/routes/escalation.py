@@ -81,8 +81,16 @@ async def _count_rule_hits_24h(store: Any) -> dict[str, int]:
 
     Returns an empty dict when the store has no events — callers apply the
     zero-default for registered rules that did not fire.
+
+    ``now`` is read exactly once and threaded through to both the store's
+    cutoff and ``detect()``'s internal window checks (mirrors
+    ``pipeline.py``'s single-anchor pattern, issue #53/ADR-0070 Revision 1).
+    Reading it twice — once here, once inside ``detect()`` — would let the two
+    anchors drift apart under load and make the hit-count non-deterministic
+    for the same stored events.
     """
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=_WINDOW_HOURS)
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=_WINDOW_HOURS)
     hits: dict[str, int] = defaultdict(int)
 
     try:
@@ -97,7 +105,7 @@ async def _count_rule_hits_24h(store: Any) -> dict[str, int]:
         except Exception:
             logger.exception("escalation/policy: get_by_ip_since failed for ip=%s", ip)
             continue
-        for detection in detect(events):
+        for detection in detect(events, now=now):
             hits[detection.rule_name] += 1
 
     return dict(hits)

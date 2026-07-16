@@ -104,6 +104,7 @@ import logging
 import os
 import stat as stat_module
 from collections.abc import AsyncGenerator, AsyncIterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
@@ -133,6 +134,30 @@ _NON_REGULAR_FILE_MSG = (
 # seeing an accurate distinction, not a typo.
 _MAX_LINE_CHARS = 16 * 1024 * 1024
 
+# The one character that can appear in decoded text solely as a byte-level
+# decode substitution under errors="replace" (see _safe_open) -- U+FFFD is
+# not otherwise a normal character a well-formed log line would contain.
+# Used to detect undecodable input for the operator-visible warning (#65);
+# never used to reject/alter the line itself.
+_REPLACEMENT_CHAR = "\ufffd"
+
+
+@dataclass(frozen=True, slots=True)
+class _UnterminatedOverBoundProgress:
+    """Remembers how far a not-yet-terminated, already over-bound line has
+    been confirmed newline-free, so a later poll — even against a freshly
+    reopened file handle at the same start offset, since callers persist
+    only ``(inode, offset)`` cursors, not reader instances — does not
+    re-decode that prefix (issue #64). Only ever created once a line has
+    exceeded ``_MAX_LINE_CHARS`` at least once without a terminator; an
+    ordinary (in-bound) partial line needs no such memory, since re-scanning
+    up to one bounded chunk of it each poll is already cheap.
+    """
+
+    inode: int
+    line_start: int  # absolute file offset where this still-open line begins
+    scanned_to: int  # absolute offset up to which content is confirmed newline-free
+
 
 class FileTailReader:
     """Tails a single plain-text log file, surviving rename or truncate rotation.
@@ -154,6 +179,15 @@ class FileTailReader:
         self._path = Path(path)
         self._encoding = encoding
         self._follow_symlinks = follow_symlinks
+        # Issue #64 — cross-poll memory of an over-bound, not-yet-terminated
+        # line's scan progress. Instance-scoped (not persisted via the
+        # caller's cursor): a caller that keeps reusing this reader across
+        # polls gets the amortization; one that rebuilds a fresh reader each
+        # cycle simply gets today's behavior (no regression either way).
+        self._pending_partial: _UnterminatedOverBoundProgress | None = None
+        # Issue #65 — rate limit the undecodable-content warning to at most
+        # once per read() call rather than once per affected line.
+        self._warned_undecodable_this_call = False
 
     async def read(
         self, start: str
@@ -215,6 +249,10 @@ class FileTailReader:
         fh, inode = self._open_at_start(start)
         yielded_any = False
         last_skip_cursor: str | None = None
+        # Issue #65 — reset the per-call rate limit for the undecodable-
+        # content warning; it must fire at most once per read() call, not
+        # once per affected line.
+        self._warned_undecodable_this_call = False
         try:
             while True:
                 # Fully drain whatever is currently available BEFORE checking
@@ -240,8 +278,15 @@ class FileTailReader:
                     # _safe_open, not a bare open() — refuses a symlink/
                     # non-regular file atomically (see module docstring).
                     fh, inode = self._safe_open(self._path)
+                    # A new file at this path starts fresh — any remembered
+                    # over-bound-scan progress (#64) referred to the OLD
+                    # inode's content and is no longer meaningful.
+                    self._pending_partial = None
                     continue  # drain the new file immediately
                 if action == "truncated":
+                    # In-place truncate invalidates prior byte offsets the
+                    # same way — see above.
+                    self._pending_partial = None
                     continue  # already seeked to 0; drain immediately
                 break  # nothing more available and no rotation — drain complete
         finally:
@@ -356,6 +401,22 @@ class FileTailReader:
         additionally prevents the open() call itself from hanging forever if
         ``path`` is a FIFO with no writer yet; the FIFO is then rejected by
         the ``S_ISREG`` check below rather than blocking the caller.
+
+        **Decode errors never raise (issue #65).** Opened with
+        ``errors="replace"`` — the same strategy ``JournaldReader`` already
+        uses for its own decode boundary (``journald.py``, three call sites)
+        — so a single invalid byte anywhere in the file (a compromised
+        writer's own encoding, a truncated multi-byte sequence at a rotation
+        boundary, or plain binary garbage appended to a text log) becomes a
+        U+FFFD replacement character instead of an uncaught
+        ``UnicodeDecodeError`` that would kill the whole read. ``"replace"``
+        was chosen over ``"surrogateescape"`` (lossless/round-trippable, but
+        leaks lone surrogates into ``str`` that can then raise at ANY later
+        re-encode boundary — JSON, the KV store, log emission) precisely
+        because those boundaries are exactly where this reader's output
+        goes next (normalization, ``ctx.kv``, the UI). A mangled-but-safe
+        ``str`` that downstream code can already handle beats a lossless one
+        that can still blow up two calls later.
         """
         flags = os.O_RDONLY | os.O_NONBLOCK
         if not self._follow_symlinks:
@@ -376,7 +437,10 @@ class FileTailReader:
             st = os.fstat(fd)
             if not stat_module.S_ISREG(st.st_mode):
                 raise FileTailUnavailableError(_NON_REGULAR_FILE_MSG.format(path=path))
-            return os.fdopen(fd, "r", encoding=self._encoding), st.st_ino
+            return (
+                os.fdopen(fd, "r", encoding=self._encoding, errors="replace"),
+                st.st_ino,
+            )
         except BaseException:
             os.close(fd)
             raise
@@ -424,7 +488,7 @@ class FileTailReader:
         """
         while True:
             pos = fh.tell()
-            line, oversized = self._read_bounded_line(fh)
+            line, oversized = self._read_bounded_line(fh, inode, pos)
             if line is None and not oversized:
                 fh.seek(pos)  # partial/incomplete — leave it for next poll
                 return
@@ -444,8 +508,9 @@ class FileTailReader:
             assert line is not None  # narrowed above; for type-checking only
             yield line[:-1], f"{inode}:{offset}"
 
-    @staticmethod
-    def _read_bounded_line(fh: TextIO) -> tuple[str | None, bool]:
+    def _read_bounded_line(
+        self, fh: TextIO, inode: int, line_start: int
+    ) -> tuple[str | None, bool]:
         """Read one line without ever buffering more than ``_MAX_LINE_CHARS``
         characters at a time.
 
@@ -472,17 +537,109 @@ class FileTailReader:
         count for a text-mode stream, per the io module) to bound each
         individual read call at ``_MAX_LINE_CHARS`` — an ordinary in-bound
         line always resolves on the FIRST call; only an oversized line loops.
+
+        **Issue #64.** ``line_start`` identifies the current not-yet-
+        terminated line; if it matches ``self._pending_partial`` (see that
+        dataclass's docstring), this seeks straight past the already-scanned
+        prefix instead of re-reading it, so a resumed over-bound line costs
+        only what has been appended since the last poll.
         """
-        exceeded_once = False
+        pending = self._pending_partial
+        if (
+            pending is not None
+            and pending.inode == inode
+            and pending.line_start == line_start
+        ):
+            fh.seek(pending.scanned_to)
+            exceeded_once = True
+        else:
+            exceeded_once = False
+
         while True:
             piece = fh.readline(_MAX_LINE_CHARS)
             if not piece:
+                self._remember_partial_progress(
+                    inode, line_start, fh.tell(), exceeded_once
+                )
                 return None, False
+            if not piece.endswith("\n") and len(piece) < _MAX_LINE_CHARS:
+                # True EOF mid-line -- ordinary partial. Deliberately NOT
+                # checked for undecodable content (issue #65): a truncated
+                # multi-byte sequence at EOF also decodes to a short,
+                # unterminated U+FFFD fragment via errors="replace" (see
+                # _safe_open), and MUST be retried once the writer finishes
+                # flushing it, not flagged as corruption -- indistinguishable
+                # from an ordinary still-growing partial until it resolves
+                # one way or the other.
+                self._remember_partial_progress(
+                    inode, line_start, fh.tell(), exceeded_once
+                )
+                return None, False
+            # From here, ``piece`` is DEFINITELY resolved this call: either a
+            # complete (newline-terminated) line, or a full-cap chunk that is
+            # not the file's current trailing edge. Either way any decode
+            # substitution in it is genuine undecodable content, not a
+            # still-in-flight multi-byte sequence (issue #65).
+            if _REPLACEMENT_CHAR in piece:
+                self._warn_undecodable_content(fh.tell())
             if piece.endswith("\n"):
+                self._pending_partial = None  # resolved -- nothing left to remember
                 return (None, True) if exceeded_once else (piece, False)
-            if len(piece) < _MAX_LINE_CHARS:
-                return None, False  # true EOF mid-line -- ordinary partial
+            if not exceeded_once:
+                self._warn_still_growing_exceeds_bound(line_start)
             exceeded_once = True  # hit the cap with no terminator -- keep scanning
+
+    def _remember_partial_progress(
+        self, inode: int, line_start: int, scanned_to: int, exceeded_once: bool
+    ) -> None:
+        """Persist (or clear) issue #64's cross-poll scan-progress memory.
+
+        Only a line that has already exceeded the bound is worth
+        remembering — see ``_read_bounded_line``'s docstring.
+        """
+        self._pending_partial = (
+            _UnterminatedOverBoundProgress(
+                inode=inode, line_start=line_start, scanned_to=scanned_to
+            )
+            if exceeded_once
+            else None
+        )
+
+    def _warn_still_growing_exceeds_bound(self, line_start: int) -> None:
+        """Issue #64 — an operator-visible signal that a line is ALREADY
+        over-bound while still growing, emitted exactly once per occurrence
+        (guarded by the caller's ``not exceeded_once`` check, and never
+        repeated for the same occurrence since ``self._pending_partial``
+        already reflects ``exceeded_once=True`` on every later poll) —
+        rather than staying silent until (if ever) the line is eventually
+        terminated and the separate confirmed-oversized warning fires.
+        """
+        logger.warning(
+            "FileTailReader: a still-growing line in %s has exceeded %d "
+            "characters without a terminator yet (started at offset %d) — "
+            "a compromised writer to this file could grow this line "
+            "indefinitely; investigate the source or raise "
+            "_MAX_LINE_CHARS. Logged once for this occurrence, not per poll.",
+            self._path, _MAX_LINE_CHARS, line_start,
+        )
+
+    def _warn_undecodable_content(self, offset: int) -> None:
+        """Issue #65 — an operator-visible signal that this file contains
+        bytes that are not valid ``self._encoding`` (decoded as U+FFFD via
+        ``errors="replace"`` — see ``_safe_open``), rate-limited to at most
+        once per ``read()`` call rather than once per affected line.
+        """
+        if self._warned_undecodable_this_call:
+            return
+        self._warned_undecodable_this_call = True
+        logger.warning(
+            "FileTailReader: %s contains one or more bytes that are not "
+            "valid %s (decoded as U+FFFD replacement characters) at or "
+            "before offset %d — a compromised or misbehaving writer, or "
+            "corruption at a rotation boundary; further occurrences this "
+            "read() call are suppressed.",
+            self._path, self._encoding, offset,
+        )
 
     def _check_rotation(self, fh: TextIO, inode: int) -> tuple[str, int]:
         """Detect rotation once the current file has been fully drained.

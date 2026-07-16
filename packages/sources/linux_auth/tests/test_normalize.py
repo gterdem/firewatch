@@ -45,8 +45,10 @@ class TestSshLoginFailureGolden:
         assert event.attack_technique == "T1110"
         assert event.attack_tactic == "TA0006"
         assert event.kill_chain_phase == "credential-access"
-        assert event.ocsf_class == 4001
-        assert event.ocsf_category == 4
+        # Authentication (OCSF 1.8.0), not Network Activity — PR #73 held
+        # batch correction (was wrongly 4001/4).
+        assert event.ocsf_class == 3002
+        assert event.ocsf_category == 3
 
     def test_journald_json_style(self):
         raw = _raw(
@@ -73,6 +75,8 @@ class TestSshLoginSuccessGolden:
         assert event.rule_id == "sshd_login_success"
         assert event.severity == "info"
         assert event.attack_technique is None
+        assert event.ocsf_class == 3002
+        assert event.ocsf_category == 3
 
 
 class TestSudoAuthFailureGolden:
@@ -88,6 +92,8 @@ class TestSudoAuthFailureGolden:
         assert event.severity == "medium"
         assert event.attack_technique == "T1548.003"
         assert event.attack_tactic == "TA0004"
+        assert event.ocsf_class == 3002
+        assert event.ocsf_category == 3
         # No network origin recorded in the line → local-host sentinel.
         assert event.source_ip == "127.0.0.1"
 
@@ -111,6 +117,8 @@ class TestPamAuthFailureGolden:
         assert event.rule_id == "pam_auth_failure"
         assert event.severity == "medium"
         assert event.attack_technique == "T1110"
+        assert event.ocsf_class == 3002
+        assert event.ocsf_category == 3
         assert event.source_ip == "127.0.0.1"
 
 
@@ -147,6 +155,13 @@ class TestUnclassifiedFallback:
         # Fail-quiet (ADR-0069 D3 rule 4): missing/unparseable classification
         # maps to low (telemetry-grade), never a gate-qualifying level.
         assert event.severity == "low"
+        # Base Event (OCSF 1.8.0), not Network Activity — PR #73 held batch
+        # correction (was wrongly 4001/4). This asserts the *normalize-level*
+        # value; a known serializer landmine (firewatch_api/ocsf/serializer.py,
+        # `event.ocsf_class or ...` — falsy-zero bug) rewrites this to 4001/4
+        # on export until issue #76 lands, deliberately out of scope here.
+        assert event.ocsf_class == 0
+        assert event.ocsf_category == 0
         assert event.source_ip == "127.0.0.1"
 
     def test_missing_timestamp_falls_back_to_received_at(self):
@@ -187,3 +202,64 @@ class TestSeverityNeverExceedsMedium:
                 f"qualify the ADR-0067 D1(b) gate directly — auth-failure "
                 f"escalation must ride the correlation rule alone"
             )
+
+
+class TestOcsfClassCategoryCorrection:
+    """PR #73 held batch (architect ruling, 2026-07-16): the four authentication
+    categories were wrongly mapped to class_uid 4001 (Network Activity,
+    category_uid 4) — an inherited copy-paste error from syslog's own wrong
+    comment. Verified against the published OCSF schema (schema.ocsf.io,
+    v1.8.0): Authentication is class_uid 3002, category_uid 3 (Identity &
+    Access Management); 4001/4 is Network Activity, which no event this
+    plugin emits actually is."""
+
+    def test_no_auth_event_emits_network_activity(self):
+        """Must-NOT: no category this plugin emits maps to 4001/4 — that
+        class_uid belongs to Suricata's network-layer telemetry alone."""
+        from firewatch_linux_auth.normalize import _CATEGORY_META
+
+        for category, meta in _CATEGORY_META.items():
+            ocsf_class, ocsf_category = meta[6], meta[7]
+            assert (ocsf_class, ocsf_category) != (4001, 4), (
+                f"{category!r} maps to (4001, 4) — Network Activity — which "
+                f"this plugin (host auth logs) never genuinely is"
+            )
+
+    def test_classified_auth_categories_map_to_authentication(self):
+        """The four classified authentication categories (SSH login
+        failure/success, sudo failure, PAM failure) all map to Authentication
+        (3002, 3)."""
+        from firewatch_linux_auth import parsers
+        from firewatch_linux_auth.normalize import _CATEGORY_META
+
+        auth_categories = (
+            parsers.CAT_SSH_LOGIN_FAILURE,
+            parsers.CAT_SSH_LOGIN_SUCCESS,
+            parsers.CAT_SUDO_AUTH_FAILURE,
+            parsers.CAT_PAM_AUTH_FAILURE,
+        )
+        for category in auth_categories:
+            ocsf_class, ocsf_category = _CATEGORY_META[category][6:8]
+            assert (ocsf_class, ocsf_category) == (3002, 3), (
+                f"{category!r} maps to ({ocsf_class}, {ocsf_category}), "
+                f"expected Authentication (3002, 3)"
+            )
+
+    def test_account_created_stays_account_change(self):
+        """Regression pin: this row was already correct — must NOT be
+        touched by the auth-categories correction above."""
+        from firewatch_linux_auth import parsers
+        from firewatch_linux_auth.normalize import _CATEGORY_META
+
+        ocsf_class, ocsf_category = _CATEGORY_META[parsers.CAT_USER_ACCOUNT_CREATED][6:8]
+        assert (ocsf_class, ocsf_category) == (3001, 3)
+
+    def test_unclassified_fallback_maps_to_base_event(self):
+        """The fallback row honestly reports Base Event (0, 0), not a
+        borrowed Network Activity identity — normalize-level value; see the
+        serializer-landmine note beside ``_CATEGORY_META`` for why this is
+        NOT the same as the OCSF-exported value until issue #76 lands."""
+        from firewatch_linux_auth.normalize import _CAT_UNCLASSIFIED, _CATEGORY_META
+
+        ocsf_class, ocsf_category = _CATEGORY_META[_CAT_UNCLASSIFIED][6:8]
+        assert (ocsf_class, ocsf_category) == (0, 0)

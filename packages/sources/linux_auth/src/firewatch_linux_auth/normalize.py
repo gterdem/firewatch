@@ -78,11 +78,23 @@ MITRE ATT&CK references (ATT&CK v15, https://attack.mitre.org/):
   - T1136 / TA0003 (Persistence — Create Account): new local user account
     creation — named explicitly in issue #3's own acceptance criteria.
 
-OCSF references (https://schema.ocsf.io, lightweight ADR-0020 alignment):
-  - class_uid 4001 = Authentication Activity (category_uid 4 = Identity &
-    Access Management) — SSH/sudo/PAM authentication outcomes.
-  - class_uid 3001 = Account Change (category_uid 3 = Identity & Access
-    Management) — new user account creation.
+OCSF references (https://schema.ocsf.io, v1.8.0, verified live — lightweight
+ADR-0020 alignment; corrected 2026-07-16, PR #73 held batch — the previous
+text claimed class_uid 4001 for authentication AND put it under category_uid
+4, self-contradicting the account-change row's own category_uid 3 for the
+same "Identity & Access Management" name):
+  - category_uid 3 = Identity & Access Management; category_uid 4 = Network
+    Activity — two different categories, not interchangeable names.
+  - class_uid 3002 = Authentication (category_uid 3, IAM) — SSH/sudo/PAM
+    authentication outcomes (all four classified auth categories below).
+  - class_uid 3001 = Account Change (category_uid 3, IAM) — new user account
+    creation.
+  - class_uid 0 = Base Event (category_uid 0) — the fallback row for a line
+    this plugin could not classify; OCSF's own "uncategorized" class, not a
+    borrowed Network Activity identity.
+  - class_uid 4001 (Network Activity, category_uid 4) does NOT apply to any
+    event this plugin emits — that class belongs to Suricata's network-layer
+    telemetry (`firewatch_suricata.normalize`), which correctly keeps it.
 """
 from __future__ import annotations
 
@@ -110,30 +122,50 @@ _CAT_UNCLASSIFIED = "Auth Activity"
 # category → (rule_id, action, severity, attack_technique, attack_tactic,
 #             kill_chain_phase, ocsf_class, ocsf_category).
 # See the module docstring's severity table (ADR-0069 D4(e)) for the Sigma
-# justification behind every action/severity pair below.
+# justification behind every action/severity pair below, and the module
+# docstring's "OCSF references" section (schema.ocsf.io v1.8.0) for the
+# ocsf_class/ocsf_category pair on each row.
 _CATEGORY_META: dict[
     str,
     tuple[str | None, str, str | None, str | None, str | None, str | None, int, int],
 ] = {
     parsers.CAT_SSH_LOGIN_FAILURE: (
-        "sshd_login_failure", "ALERT", "low", "T1110", "TA0006", "credential-access", 4001, 4,
+        "sshd_login_failure", "ALERT", "low", "T1110", "TA0006", "credential-access", 3002, 3,
     ),
     parsers.CAT_SSH_LOGIN_SUCCESS: (
-        "sshd_login_success", "LOG", "info", None, None, None, 4001, 4,
+        "sshd_login_success", "LOG", "info", None, None, None, 3002, 3,
     ),
     parsers.CAT_SUDO_AUTH_FAILURE: (
-        "sudo_auth_failure", "ALERT", "medium", "T1548.003", "TA0004", "privilege-escalation", 4001, 4,
+        "sudo_auth_failure", "ALERT", "medium", "T1548.003", "TA0004", "privilege-escalation", 3002, 3,
     ),
     parsers.CAT_PAM_AUTH_FAILURE: (
-        "pam_auth_failure", "ALERT", "medium", "T1110", "TA0006", "credential-access", 4001, 4,
+        "pam_auth_failure", "ALERT", "medium", "T1110", "TA0006", "credential-access", 3002, 3,
     ),
     parsers.CAT_USER_ACCOUNT_CREATED: (
         "useradd_new_user", "LOG", "medium", "T1136", "TA0003", "persistence", 3001, 3,
     ),
+    # Base Event (0, 0) — not 4001/4 (Network Activity): a line we could not
+    # classify carries no honest claim to any specific OCSF class, and
+    # Network Activity in particular would be actively wrong (this plugin
+    # never observes network-layer telemetry). See the serializer note below
+    # before touching this row.
     _CAT_UNCLASSIFIED: (
-        None, "LOG", "low", None, None, None, 4001, 4,
+        None, "LOG", "low", None, None, None, 0, 0,
     ),
 }
+
+# KNOWN LANDMINE (not fixed here — scoped to issue #76): firewatch_api's OCSF
+# serializer (`firewatch_api/ocsf/serializer.py:57-58`) does
+# `event.ocsf_class or mapping.SURICATA_NET_CLASS_UID` — a falsy-zero bug.
+# Because `0` is falsy in Python, the Base Event `(0, 0)` row above is
+# silently REWRITTEN to `4001/4` on OCSF *export*, even though normalize()
+# itself emits the honest `(0, 0)` pair. Verified: no existing OCSF-export
+# test currently exercises linux_auth's unclassified row, so nothing breaks
+# today — but any future export-level test for this row will observe 4001/4,
+# not 0/0, until #76 lands the `is not None` fix. Tests in this package pin
+# the *normalize-level* value (what this module actually emits), not the
+# serialized output, precisely to avoid encoding that bug as if it were this
+# plugin's intent.
 
 _PAYLOAD_MAX_LEN = 500
 

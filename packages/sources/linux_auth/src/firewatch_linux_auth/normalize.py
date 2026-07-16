@@ -19,12 +19,12 @@ Reconciled with the canonical schema (canonical-schema skill) and the accepted A
     mapping below is justified against the Sigma definitions verbatim
     (SigmaHQ/sigma-specification) in the severity table, and the ambient-mass
     corollary (an event class that is ambient at volume on a healthy
-    deployment maps to at most `medium`) is checked per category. **Escalation
-    for the brute-force story rides the declared correlation
-    (``firewatch_core.detector._ssh_login_failure_burst``, ADR-0058 D1/ADR-0067
-    D1(a)), never a per-event severity bump** — this is what keeps a lone
-    failed SSH login from ever qualifying the ADR-0067 D1(b) severity gate at
-    any volume (issue #3's own Must-NOT criterion).
+    deployment maps to at most `medium`) is checked per category. **No
+    category here ever qualifies the ADR-0067 D1(a)/D1(b) severity gate on
+    its own** — escalation, if any, is a decision for a core correlation rule
+    (``firewatch_core.detector``), never a per-event severity bump. This is
+    what keeps a lone failed SSH login (or any ambient volume of them) from
+    self-qualifying at any volume.
   - ``attack_technique`` / ``attack_tactic`` / ``kill_chain_phase`` (ADR-0014):
     MITRE ATT&CK v15 techniques, cited per-category below.
   - ``ocsf_class`` / ``ocsf_category`` (ADR-0020) — lightweight alignment only.
@@ -38,7 +38,7 @@ SigmaHQ/sigma-specification, ``specification/sigma-rules-specification.md``):
 
 | Category                     | action | severity | Sigma justification |
 |-------------------------------|--------|----------|----------------------|
-| SSH Login Failure             | ALERT  | low      | Sigma `low`: "Notable event but rarely an incident. Low rated events can be relevant in high numbers or combination with others" — a lone failed SSH attempt, letter for letter. Ambient mass: an internet-exposed sshd sees many distinct scanner IPs a night, each a `low` ALERT — never queues alone (ADR-0067 D1(b) requires high/critical); the "high numbers... combination" path is owned entirely by `ssh_login_failure_burst` (D1(a)). |
+| SSH Login Failure             | ALERT  | low      | Sigma `low`: "Notable event but rarely an incident. Low rated events can be relevant in high numbers or combination with others" — a lone failed SSH attempt, letter for letter. Ambient mass: an internet-exposed sshd sees many distinct scanner IPs a night, each a `low` ALERT — never queues alone (ADR-0067 D1(b) requires high/critical). Any "high numbers... combination" handling is a core correlation-rule decision (`firewatch_core.detector`), not this mapping. |
 | SSH Login Success             | LOG    | info     | Sigma `informational`: "intended for enrichment... no case or alerting... expected that a huge amount of events will match" — every legitimate login, the ambient case by definition. Not an assertion of anything hostile (ECS `event.kind:event`). |
 | Sudo Authentication Failure   | ALERT  | medium   | Sigma `medium`: "Relevant event that should be reviewed manually on a more frequent basis." Unlike SSH (internet-exposed), a sudo prompt is local-only and near-zero ambient on a healthy box (ADR-0069 D4(b) states this explicitly for the same event) — escalating above `low` does not breach the D1 ambient-mass corollary. |
 | PAM Authentication Failure    | ALERT  | medium   | Same `pam_unix` mechanism as sudo (this plugin's `_parse_pam_generic` classifies every OTHER PAM-aware caller — `su`, `login`, …), same local-only/near-zero-ambient profile — the sudo justification above extends by analogy (ADR-0069 D3 rule 2: justify against the D1 definitions). |
@@ -50,10 +50,10 @@ the ambient mass is SSH Login Failure (low, from internet-wide scanner noise)
 and SSH Login Success (info, the owner's own logins) — both non-queuing at
 any volume. Sudo/PAM failures and new-user creation are near-zero-ambient
 local events; `medium` for them does not flood (there is essentially nothing
-there to flood with). Genuine assertions — a sustained SSH brute-force burst —
-reach Tier-2 exclusively through ``ssh_login_failure_burst`` (D1(a)), never
-through the per-event severity gate (D1(b)), which is exactly issue #3's
-Must-NOT criterion.
+there to flood with). Whether and how a burst of failures ever reaches Tier-2
+is entirely a core correlation-rule decision (``firewatch_core.detector`` —
+see that module for the current, still-evolving answer); it is never decided
+by this per-event severity mapping.
 
 Local-host IP fallback: ``sudo``/PAM/``useradd`` events usually have no network
 origin (a local terminal session) — ``SecurityEvent.source_ip`` is a required

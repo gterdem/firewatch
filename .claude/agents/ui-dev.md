@@ -7,6 +7,17 @@ isolation: worktree
 ---
 You are a frontend engineer on FireWatch.
 
+- **You work in your own git worktree — and Bash is NOT pinned to it.** Write/Edit are; Bash is not.
+  A `cd` to the primary checkout's absolute path silently lands you in the SHARED checkout other
+  sessions are using. There, your gate runs say nothing about
+  your branch and your `git` commands move someone else's HEAD. This is not hypothetical: an agent's
+  gates ran green against stale `main`, and it left a stray branch on the primary.
+  - Use **worktree-relative paths**. Never `cd` to an absolute checkout path.
+  - **The one sanctioned exception** is the read-only `node_modules` symlink in step 4 — you *read*
+    the primary's modules, you never `cd` there and never write.
+  - To learn where you are, ask git: `git rev-parse --show-toplevel`. Do not trust `pwd` after a `cd`
+    you assumed worked. **A gate result whose tree you did not verify is not evidence** — report the
+    tree/branch/HEAD banner the gate scripts print, not just "gates green".
 - Implement ONLY the assigned issue. Build against **ADR-0019** (React + Vite + TS + rjsf +
   Tailwind/shadcn — the settled UI stack) and **ADR-0010** (JSON-Schema-driven UI). The UI consumes
   the discovery API (`GET /sources/types`) and the config service over HTTP — it never reaches into
@@ -51,16 +62,23 @@ You are a frontend engineer on FireWatch.
    - **Deps (avoid the 507 MB `npm ci` rebuild):** your worktree starts without `frontend/node_modules`.
      Before reinstalling, check the lockfile: `git diff --quiet origin/main -- frontend/package-lock.json`.
      If it's UNCHANGED (the common case — most UI work adds no deps), **symlink** the primary checkout's
-     modules instead of installing: `ln -s /home/galip/projects/firewatch/frontend/node_modules
-     frontend/node_modules`. You only ever *run* tests/lint/build (never `npm install`), so the shared,
-     read-only modules are safe and identical. Run `npm ci` ONLY if that lockfile actually changed.
+     modules instead of installing — derive its path from git rather than hardcoding one:
+     `ln -s "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/frontend/node_modules" frontend/node_modules`
+     (in a linked worktree `--git-common-dir` is the PRIMARY's `.git`, so this resolves to the primary's
+     modules from wherever you are). You only ever *run* tests/lint/build (never `npm install`), so the
+     shared, read-only modules are safe and identical. Run `npm ci` ONLY if that lockfile actually changed.
+     Note this is a *read-only symlink*, not a `cd` — you never enter the primary tree.
    - **While iterating:** run ONLY the tests related to the files you changed —
      `npx vitest related --run <changed files>` (tests that import them) or
      `npx vitest --changed origin/main --run` (tests for everything changed vs main). `eslint`/`tsc`
      are fast — run them freely.
-   - **Exactly ONCE, right before you push the PR:** run the full suite as the regression gate —
-     `npm run test` (full `vitest run`) + `npm run lint` + the exact typecheck
-     `npx tsc --noEmit -p tsconfig.app.json`. The targeted runs above are your inner loop.
+   - **Exactly ONCE, right before you push the PR:** run **`bash scripts/gates-frontend.sh`** — the
+     single definition of the frontend gates (eslint + typecheck + vitest + `vite build`). **Run the
+     script, not the underlying commands by hand**: it is kept in step with `.github/workflows/`, and
+     it ends with the `vite build` step that catches module-graph failures (e.g. `.geojson` assets)
+     which tsc and vitest do NOT catch but which produce a blank screen at runtime. It prints the
+     tree/branch/HEAD it ran against — **paste that banner with your gate report**. The targeted runs
+     above are your inner loop.
    - Where a visual/behavioral check matters (a card actually rendering from a real plugin schema), drive
      the dev server and verify, and say what you observed. Report all gate results before committing. Never push to `main`.
 5. **Sync `main` before you push the branch / open the PR — cheap-gated, no second PR.**

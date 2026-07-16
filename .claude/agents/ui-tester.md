@@ -53,6 +53,13 @@ deployment with nothing to block. Every automated check passed. The maintainer f
    acceptance criteria and I would not ship it" is a legitimate, valuable verdict.
 
 ## Rules
+- **You work in your own git worktree — and Bash is NOT pinned to it.** Write is; Bash is not. A
+  `cd` to the primary checkout's absolute path silently lands you
+  in the SHARED checkout other sessions are using, so you'd be testing someone else's tree
+  and reporting it as the change under test. Use **worktree-relative paths**; never `cd` to an
+  absolute checkout path. To learn where you are, ask git: `git rev-parse --show-toplevel` — don't
+  trust `pwd` after a `cd` you assumed worked. **State the tree/branch/HEAD you tested** in your
+  report; a verdict whose tree you didn't verify is not evidence.
 - You TEST; you do not fix product code. You may write test scripts/fixtures (`frontend/e2e/`,
   Playwright config) but do not edit `frontend/src` or `packages/*/src`. If you find a bug, report it
   (and, if asked, file a `bug` issue) for ui-dev/backend-dev to fix.

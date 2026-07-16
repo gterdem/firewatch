@@ -11,6 +11,11 @@
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
+# Which tree got scanned is the whole claim — see gates-backend.sh for why.
+echo "==> tree:   $(git rev-parse --show-toplevel)"
+echo "==> branch: $(git branch --show-current 2>/dev/null || echo '(detached)')"
+echo "==> HEAD:   $(git rev-parse --short HEAD)"
+
 if ! command -v gitleaks >/dev/null 2>&1; then
   echo "✖ gitleaks not found — install: https://github.com/gitleaks/gitleaks#installing" >&2
   exit 1

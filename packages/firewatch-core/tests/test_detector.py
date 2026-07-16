@@ -1,4 +1,9 @@
-"""Correlation detector tests (EARS-3 — 6 rules, verbatim thresholds, source_type keyed)."""
+"""Correlation detector tests (EARS-3 — 5 rules, verbatim thresholds, source_type keyed).
+
+`_sustained_attack` and `_ssh_login_failure_burst` retired in issue #53 (ADR-0070
+Revision 1 R1 `attempt_pressure` subsumes both) — see test_issue_53_attempt_pressure.py
+for R1's own tests and the retirement pins.
+"""
 from datetime import datetime, timedelta, timezone
 
 import firewatch_core.detector as detector_mod
@@ -176,23 +181,6 @@ def test_multi_source_attack_single_type_no_fire():
     assert _by_name(detect(events), "multi_source_attack") is None
 
 
-def test_sustained_attack():
-    events = [
-        make_event(action="BLOCK", timestamp=T0 + timedelta(minutes=4 * i))
-        for i in range(10)  # spans 36 min ≥ 30
-    ]
-    d = _by_name(detect(events), "sustained_attack")
-    assert d is not None and d.score_delta == 15
-
-
-def test_sustained_attack_too_short_span():
-    events = [
-        make_event(action="BLOCK", timestamp=T0 + timedelta(minutes=i))
-        for i in range(10)  # spans only 9 min
-    ]
-    assert _by_name(detect(events), "sustained_attack") is None
-
-
 def _ssh_failure_events(count: int, *, span_minutes: float = 0.0):
     """N 'SSH Login Failure' ALERT/low events, one IP, spread across
     ``span_minutes`` (default: all at the same instant — the tightest
@@ -205,95 +193,6 @@ def _ssh_failure_events(count: int, *, span_minutes: float = 0.0):
         )
         for i in range(count)
     ]
-
-
-class TestSshLoginFailureBurst:
-    """issue #3 amendment (post-architect-ruling, 2026-07-15): the ambient
-    (INFORM-level) rule. >=5 ALERT 'SSH Login Failure' events, one IP,
-    <=10 min — fail2ban's own default cadence (maxretry=5/findtime=10m),
-    i.e. ordinary internet-exposed background, NOT an active attack. Must
-    contribute to score/band only — never reach Tier 2 on its own."""
-
-    def test_fires_at_five(self):
-        events = _ssh_failure_events(5)
-        d = _by_name(detect(events), "ssh_login_failure_burst")
-        assert d is not None and d.score_delta == 20
-
-    def test_registered_medium_no_escalate(self):
-        events = _ssh_failure_events(5)
-        d = _by_name(detect(events), "ssh_login_failure_burst")
-        assert d is not None
-        assert d.severity == "medium"
-        assert d.auto_escalate is False
-
-    def test_below_threshold_at_four(self):
-        events = _ssh_failure_events(4)  # boundary: 4 < 5
-        assert _by_name(detect(events), "ssh_login_failure_burst") is None
-
-    def test_too_long_span_no_fire(self):
-        events = [
-            make_event(
-                source_type="linux_auth", category="SSH Login Failure", action="ALERT",
-                severity="low", timestamp=T0 + timedelta(minutes=15 * i),
-            )
-            for i in range(5)  # spans 60 min > 10
-        ]
-        assert _by_name(detect(events), "ssh_login_failure_burst") is None
-
-    def test_requires_alert_action_not_log(self):
-        """A LOG-action population with the same category must NOT fire this
-        rule — the source's own normalize() never emits LOG for this category
-        (it's ALERT/low); this guards the rule's own condition."""
-        events = [
-            make_event(
-                source_type="linux_auth", category="SSH Login Failure", action="LOG",
-                timestamp=T0 + timedelta(minutes=i),
-            )
-            for i in range(5)
-        ]
-        assert _by_name(detect(events), "ssh_login_failure_burst") is None
-
-    def test_wrong_category_no_fire(self):
-        events = [
-            make_event(
-                source_type="linux_auth", category="SSH Login Success", action="LOG",
-                timestamp=T0 + timedelta(minutes=i),
-            )
-            for i in range(5)
-        ]
-        assert _by_name(detect(events), "ssh_login_failure_burst") is None
-
-    def test_burst_alone_does_not_reach_tier_2(self):
-        """The property that actually matters: an actor whose ONLY detection
-        is the ambient burst rule must NOT pass the real ADR-0067 D1(a)
-        qualify gate — asserted through qualify(), not just the rule's own
-        fields (medium/no-escalate could be right for the wrong reason)."""
-        from firewatch_core.escalation.qualify import qualify
-
-        events = _ssh_failure_events(12)  # well over 5, still one burst
-        detections = detect(events)
-        assert any(d.rule_name == "ssh_login_failure_burst" for d in detections)
-        assert not any(d.rule_name == "ssh_login_failure_intense" for d in detections)
-        result = qualify(events, detections)
-        assert result.qualified is False
-
-    def test_alert_low_never_qualifies_at_any_volume(self):
-        """A large population spread beyond the window (no correlation fires
-        at all) must also never qualify via the D1(b) per-event severity
-        gate — severity='low' structurally cannot satisfy it."""
-        from firewatch_core.escalation.qualify import qualify
-
-        events = [
-            make_event(
-                source_type="linux_auth", category="SSH Login Failure", action="ALERT",
-                severity="low", timestamp=T0 + timedelta(hours=i),  # 1h apart — no burst
-            )
-            for i in range(50)
-        ]
-        detections = detect(events)
-        assert not any(d.rule_name.startswith("ssh_login_failure") for d in detections)
-        result = qualify(events, detections)
-        assert result.qualified is False
 
 
 class TestSshLoginFailureIntense:
@@ -324,8 +223,9 @@ class TestSshLoginFailureIntense:
     def test_below_threshold_at_forty_four(self):
         events = _ssh_failure_events(44)  # boundary: 44 < 45
         assert _by_name(detect(events), "ssh_login_failure_intense") is None
-        # Still ambient (burst still fires — 44 >= 5).
-        assert _by_name(detect(events), "ssh_login_failure_burst") is not None
+        # Still ambient pressure (attempt_pressure, R1's replacement for the
+        # retired ssh_login_failure_burst — 44 simultaneous attempts >> θ_press).
+        assert _by_name(detect(events, now=T0), "attempt_pressure") is not None
 
     def test_too_long_span_no_fire(self):
         events = [
@@ -358,14 +258,14 @@ class TestSshLoginFailureIntense:
         result = qualify(events, detections)
         assert result.qualified is True
 
-    def test_both_burst_and_intense_fire_together(self):
-        """>=45 events also satisfies the burst rule's own >=5 condition —
-        both detections are expected (not mutually exclusive; the intense
-        Detection is what carries the qualifying severity)."""
+    def test_both_attempt_pressure_and_intense_fire_together(self):
+        """>=45 events also satisfies R1 attempt_pressure's own theta_press
+        condition — both detections are expected (not mutually exclusive;
+        the intense Detection is what carries the qualifying severity)."""
         events = _ssh_failure_events(45)
-        detections = detect(events)
+        detections = detect(events, now=T0)
         names = {d.rule_name for d in detections}
-        assert "ssh_login_failure_burst" in names
+        assert "attempt_pressure" in names
         assert "ssh_login_failure_intense" in names
 
 

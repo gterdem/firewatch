@@ -325,7 +325,9 @@ class TestAllRegisteredRulesPresent:
             "brute_force_then_login",
             "ids_then_brute_force",
             "multi_source_attack",
-            "sustained_attack",
+            # issue #53 (ADR-0070 Revision 1): attempt_pressure replaces the
+            # retired sustained_attack in the registry.
+            "attempt_pressure",
         }
         assert expected.issubset(returned_names), (
             f"Missing rules: {expected - returned_names}. Got: {returned_names}"

@@ -636,13 +636,19 @@ def test_corrupt_file_ioerror_propagates(tmp_path: Path, monkeypatch: pytest.Mon
 
 
 def test_ollama_base_url_rejects_public_endpoint():
-    """A public cloud endpoint is rejected by the RuntimeConfig validator (F5).
+    """A literal non-local IP endpoint is rejected by the RuntimeConfig validator (F5).
 
-    Uses api.openai.com as the public example (RFC 5737 IPs are for doc use only;
-    public hostname keeps gitleaks clean while exercising DNS-lookup path).
+    ADR-0066 (issues #39/#40): the validator became pure/syntactic — no DNS
+    resolution — so a HOSTNAME like api.openai.com can no longer be rejected
+    here (see test_ollama_base_url_accepts_unresolvable_hostname_via_store);
+    only an IP-LITERAL host can be classified without resolution. Uses a
+    multicast address (224.0.0.0/4, RFC 5771 — never a real source/endpoint
+    address) because Python's ipaddress module classifies the RFC 5737
+    documentation ranges as is_private=True (they would not exercise this
+    rejection path).
     """
     with pytest.raises(ValidationError, match="local-first|loopback|RFC 1918|ADR-0022"):
-        RuntimeConfig(ollama_base_url="https://api.openai.com/v1")
+        RuntimeConfig(ollama_base_url="https://224.0.0.1/v1")
 
 
 def test_ollama_base_url_accepts_local_endpoints():
@@ -660,11 +666,24 @@ def test_ollama_base_url_accepts_local_endpoints():
     assert cfg3.ollama_base_url == "http://192.168.1.10:11434"
 
 
+def test_ollama_base_url_accepts_unresolvable_hostname_via_store(cfg_path: Path):
+    """set_runtime with an unresolvable hostname base_url succeeds (issue #40 AC1).
+
+    The Compose ``rules-only`` scenario: the shared default
+    ``http://ollama:11434`` never resolves when the ``ollama`` service does
+    not start, but config load must still succeed — the validator is pure
+    (no DNS); locality is enforced at the dial boundary instead.
+    """
+    store = make_store(cfg_path)
+    store.set_runtime({"ollama_base_url": "http://ollama:11434"})
+    assert store.get_runtime().ollama_base_url == "http://ollama:11434"
+
+
 def test_ollama_base_url_rejects_via_store(cfg_path: Path):
-    """set_runtime with a public ollama_base_url is rejected by ValidationError (F5)."""
+    """set_runtime with a literal non-local IP ollama_base_url is rejected (F5)."""
     store = make_store(cfg_path)
     with pytest.raises(ValidationError):
-        store.set_runtime({"ollama_base_url": "https://api.openai.com/v1"})
+        store.set_runtime({"ollama_base_url": "https://224.0.0.1/v1"})
     # State unchanged — default is still intact.
     assert "localhost" in store.get_runtime().ollama_base_url
 

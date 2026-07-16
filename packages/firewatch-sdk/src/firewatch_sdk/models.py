@@ -20,7 +20,14 @@ ActionLiteral = Literal["ALLOW", "BLOCK", "DROP", "ALERT", "LOG"]
 # `info` retained — maps cleanly to OCSF severity_id=1 Informational (ADR-0020).
 SeverityLiteral = Literal["info", "low", "medium", "high", "critical"]
 ThreatLevelLiteral = Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
-AIStatusLiteral = Literal["active", "degraded", "unavailable", "disabled"]
+# ADR-0066: the ONE closed ai_status vocabulary — exactly these five values.
+# "degraded" was dead (never produced) and has been removed.
+#   active      — the AI engine analyzed this and produced a verdict (success).
+#   disabled    — AI is off in config; rules scored this (operator choice).
+#   skipped     — this request asked for rules-only (caller choice).
+#   no_input    — nothing to send to the AI; rules scored this (non-event).
+#   unavailable — AI was wanted but unreachable/errored (the ONLY fault state).
+AIStatusLiteral = Literal["active", "disabled", "skipped", "no_input", "unavailable"]
 
 
 class RawEvent(BaseModel):

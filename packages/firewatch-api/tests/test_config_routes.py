@@ -934,7 +934,7 @@ def test_put_runtime_invalid_ollama_base_url_returns_422_not_500() -> None:
     # A public/cloud URL — rejected by the ADR-0022 local-first validator.
     resp = client.put(
         "/config/runtime",
-        json={"updates": {"ollama_base_url": "https://api.openai.com/v1"}},
+        json={"updates": {"ollama_base_url": "https://224.0.0.1/v1"}},
     )
 
     assert resp.status_code == 422, (
@@ -964,7 +964,7 @@ def test_put_runtime_invalid_ollama_base_url_no_ctx_or_input_in_response() -> No
 
     resp = client.put(
         "/config/runtime",
-        json={"updates": {"ollama_base_url": "https://api.openai.com/v1"}},
+        json={"updates": {"ollama_base_url": "https://224.0.0.1/v1"}},
     )
 
     assert resp.status_code == 422, (

@@ -18,7 +18,7 @@ Ingest shapes (ADR-0029 D7 — MC.3):
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -157,12 +157,20 @@ class HealthResponse(BaseModel):
     dropped in the MB.1 refactor (issue #135).  Field names are kept as
     ``ollama_*`` — the backend rename to ``ai_*`` is explicitly DEFERRED per
     #135; only the user-facing label changes (handled by the frontend).
+
+    ``ai`` (ADR-0066, issue #39): additive engine-state field — Layer 1 of the
+    two-layer state model (RFC 2863 ``ifAdminStatus``/``ifOperStatus`` pattern).
+    One of ``"active"`` (AI on, engine answered the probe), ``"disabled"``
+    (AI off by config — nothing is wrong), or ``"unreachable"`` (AI on but the
+    engine cannot be reached — go fix something).  ``ollama_connected`` is
+    retained for compatibility, deprecated: ``true`` iff ``ai == "active"``.
     """
 
     status: str
     store: str
     ollama_connected: bool = False
     ollama_model: str | None = None
+    ai: Literal["active", "disabled", "unreachable"] = "disabled"
 
 
 class ErrorDetail(BaseModel):

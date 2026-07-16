@@ -99,12 +99,18 @@ async def test_analyze_ip_detection_boost_flows():
 
 
 async def test_use_ai_false_skips_ai():
+    """use_ai=False is a per-request CALLER opt-out, not an admin/config choice.
+
+    ADR-0066: caller_opted_out -> 'skipped' (never 'disabled', which is
+    reserved for ai_enabled=false at the config layer — see
+    test_issue_39_40_ai_status_stamping.py for the admin-disabled case).
+    """
     fake_ai = FakeAIEngine()
     store: EventStore = FakeStore(_sqli_events(3))
     ai: AIEngine = fake_ai
     score = await _pipeline(store, ai).analyze_ip(IP, use_ai=False)
     assert fake_ai.concise_calls == 0
-    assert score.ai_status == "disabled"
+    assert score.ai_status == "skipped"
 
 
 async def test_ingest_returns_inserted_count():

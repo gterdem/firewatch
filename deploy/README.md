@@ -187,36 +187,32 @@ Full detection, scoring, escalation, and dashboard — no AI narrative, and **no
 inference container at all**. This is the floor of the hardware story: a
 ~1 GB-class box (an old laptop, a Raspberry Pi) with a one-line install.
 
-The engine work for this profile shipped earlier: `_DisabledAIEngine`
-(`packages/firewatch-cli/src/firewatch_cli/commands/_pipeline_factory.py`)
-reports `ai_status="disabled"` and never contacts an inference endpoint when
-`FIREWATCH_AI_ENABLED=false`. This profile is the deploy-time way to make that
-optionality visible and installable — compose brings up only `firewatch` +
-`nginx`; `ollama` and `llama` are never started.
+The engine work for this profile shipped earlier: `DisabledAIEngine`
+(`firewatch_core/adapters/ai_disabled.py` — core-owned; relocated from
+firewatch-cli by issue #39) reports `ai_status="disabled"` and never contacts
+an inference endpoint when `FIREWATCH_AI_ENABLED=false`. This profile is the
+deploy-time way to make that optionality visible and installable — compose
+brings up only `firewatch` + `nginx`; `ollama` and `llama` are never started.
 
 ### Start
 
-`rules-only` requires **two** env vars on the invocation (or in `.env`):
-`FIREWATCH_AI_ENABLED=false` (turns AI scoring off) and
-`FIREWATCH_OLLAMA_BASE_URL=http://127.0.0.1:11434` (a loopback placeholder —
-see the note below on *why* this second var is required).
+`rules-only` requires only **one** env var on the invocation (or in `.env`):
+`FIREWATCH_AI_ENABLED=false` (turns AI scoring off).
 
 ```bash
 # From the repo root:
 FIREWATCH_AI_ENABLED=false \
-FIREWATCH_OLLAMA_BASE_URL=http://127.0.0.1:11434 \
 docker compose -f deploy/docker-compose.yml --profile rules-only up -d
 ```
 
-> **Why `FIREWATCH_OLLAMA_BASE_URL` must be overridden too:** the shared
-> default (`http://ollama:11434`) names the `ollama` service's DNS entry on
-> the `fwnet` bridge network. Under `rules-only` that service never starts, so
-> the hostname `ollama` does not resolve at all, and FireWatch's local-first
-> validator (ADR-0022, fail-closed on DNS failure) refuses to start with an
-> unresolvable `ollama_base_url` — regardless of `FIREWATCH_AI_ENABLED`. Any
-> loopback or RFC 1918 literal works as the placeholder (e.g.
-> `http://127.0.0.1:11434`); it is never dialed because `FIREWATCH_AI_ENABLED=false`
-> means the pipeline uses `_DisabledAIEngine` and skips the AI path entirely.
+The shared `FIREWATCH_OLLAMA_BASE_URL` default (`http://ollama:11434`, the
+`ollama` service's DNS entry on the `fwnet` bridge network) does **not** need
+to be overridden: under `rules-only` that service never starts, so the
+hostname never resolves — but FireWatch's config validator is pure/syntactic
+(ADR-0066, issue #40) and performs no DNS resolution, so an unresolvable
+hostname no longer crashes the container at startup. It is never dialed
+either way, since `FIREWATCH_AI_ENABLED=false` selects `DisabledAIEngine` and
+skips the AI path entirely.
 
 ### Check the stack
 
@@ -287,14 +283,12 @@ score → query) to check what the AI surface reports, not just asserted:
   **`"ai_status": "disabled"`** — verified live against a running
   `rules-only` stack.
 - `GET /threats/{ip}/detailed?ai=true` (the deep-analysis / narration path)
-  currently reports **`"ai_status": "unavailable"`**, not `"disabled"`, when
-  AI is switched off this way. This is a **pre-existing gap in
-  `firewatch_core/pipeline.py`'s `analyze_ip_detailed`** — it does not
-  distinguish "AI engine deliberately disabled" from "AI engine enabled but
-  unreachable" (both make `self.ai_engine.is_available()` return `False`, and
-  both get stamped `"unavailable"`). It is **not** introduced by this profile
-  and is out of scope for a compose/docs-only change — see the note in the
-  issue-#4 PR for the follow-up.
+  **also reports `"ai_status": "disabled"`**, never `"unavailable"`, when AI
+  is switched off this way (fixed by ADR-0066 / issue #39: one closed
+  `ai_status` vocabulary, one stamping authority
+  `firewatch_core.ai_status.resolve_ai_status`, used by both the concise and
+  detailed pipeline paths). `"unavailable"` is now reserved exclusively for
+  the fault case — AI enabled but the engine unreachable or erroring.
 
 ### Upgrade path: point at a LAN inference endpoint later (ADR-0022)
 
@@ -316,7 +310,7 @@ docker compose -f deploy/docker-compose.yml --profile rules-only up -d
 `FIREWATCH_OLLAMA_BASE_URL` must still resolve to a loopback / RFC 1918 / LAN
 address (ADR-0022's local-first validator; no cloud endpoints). Once the box
 restarts, `_build_pipeline` selects the real `OpenAIEngine` instead of
-`_DisabledAIEngine` (`FIREWATCH_AI_ENABLED=true`), and narration starts as
+`DisabledAIEngine` (`FIREWATCH_AI_ENABLED=true`), and narration starts as
 soon as the LAN endpoint answers `/v1` requests — the `firewatch`/`nginx`
 images and the FireWatch source code are unchanged either way (ADR-0042).
 
@@ -385,4 +379,3 @@ adapter, prompts, and scoring logic are identical in both profiles.
 | llama-server OOM-killed | GGUF too large for available RAM | Use a smaller quantization (Q4 vs Q8) or a 3B model |
 | Config not applied | Env var typo or stale container | `docker compose ... down && up -d` after editing `.env` |
 | `Refusing to bind non-loopback` | `--host 0.0.0.0` passed without API key | Do not override `--host`; keep the loopback default |
-| `rules-only` container fails to start (`ValidationError` on `ollama_base_url`) | `FIREWATCH_OLLAMA_BASE_URL` still defaults to `http://ollama:11434`, which cannot resolve DNS when the `ollama` service never starts | Also set `FIREWATCH_OLLAMA_BASE_URL=http://127.0.0.1:11434` (or any loopback/RFC-1918 literal) alongside `FIREWATCH_AI_ENABLED=false` |

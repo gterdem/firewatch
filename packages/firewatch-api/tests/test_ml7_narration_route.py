@@ -78,7 +78,11 @@ _RULE_ONLY_DETAIL: dict[str, Any] = {
 
 _AI_DETAIL: dict[str, Any] = {
     **_RULE_ONLY_DETAIL,
-    "ai_status": "ok",
+    # ADR-0066: analyze_ip_detailed's ONE stamping authority always writes
+    # "active" (never the AIEngine port's internal "ok" discriminator) when
+    # the engine ran and produced a verdict — the route branches positively
+    # on "active" (issues #39/#40).
+    "ai_status": "active",
     "score_derivation": "ai+rule",
     "executive_summary": "This IP probes the /api endpoint with SQL injection payloads.",
     "intent": "Credential harvesting via SQLi",

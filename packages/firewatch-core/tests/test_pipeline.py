@@ -86,6 +86,23 @@ async def test_analyze_ip_detection_boost_flows():
     # 10 BLOCK spanning 36 min → brute-force(+30)+10 blocked = 40 rule;
     # attempt_pressure(+15) boost (ADR-0070 Revision 1 R1 — retired
     # sustained_attack's replacement; same score_delta, issue #53).
+    #
+    # issue #54 (R3 `campaign`, +20) also fires for this EXACT fixture: the
+    # closed-form decayed intensity climbs through theta_press=5 gradually
+    # (event 6 of 10, at t=24min, lambda_hat=5.396) and — because the 4-min
+    # gap to event 7 is just wide enough for decay to dip fractionally BELOW
+    # 5 for ~42 seconds before event 7's own jump pushes it back above —
+    # `episodes()` (the exact, closed-form, no-grace-period segmentation
+    # ADR-0070 D3/#53 already ships) reports 2 episodes rather than 1,
+    # satisfying R3's recidivism clause (>=2 episodes). Verified numerically
+    # (not assumed): intensity_at dips to ~4.95 at 12:27:45 then jumps to
+    # ~5.92 at the next event (12:28:00). This is a genuine, if narrow,
+    # consequence of the ADR's exact-crossing episode definition applied to
+    # a fixture that happens to hover at the theta_press boundary while
+    # still ramping — flagged in issue #54's PR description for the
+    # ADR-0068 D3 live-calibration pass, not silently absorbed here.
+    # detection_boost = 15 (attempt_pressure) + 20 (campaign) = 35, capped
+    # at +30 (ADR-0036 D4) → 40 (rule) + 30 (capped boost) = 70.
     events = [
         make_event(action="BLOCK", rule_id="900001",
                    timestamp=T0 + timedelta(minutes=4 * i))
@@ -95,7 +112,8 @@ async def test_analyze_ip_detection_boost_flows():
     ai: AIEngine = FakeAIEngine()
     score = await _pipeline(store, ai).analyze_ip(IP)
     assert any(d.rule_name == "attempt_pressure" for d in score.detections)
-    assert score.score == 55  # 40 + 15
+    assert any(d.rule_name == "campaign" for d in score.detections)
+    assert score.score == 70  # 40 (rule) + min(15+20, 30) (capped boost) = 70
 
 
 async def test_use_ai_false_skips_ai():

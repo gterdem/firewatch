@@ -29,14 +29,20 @@ Severity anchoring (Sigma ``level`` vocabulary):
   not satisfy the ADR-0067 D1(a) Tier-2 gate); it contributes score/band visibility and the
   pressure-strip signal, same "on the record, keep watching" posture the two retired rules
   had.
-- ``ssh_login_failure_intense`` — ``high`` / auto_escalate=True (issue #3 — **INTERIM**, see the
-  function's own docstring): ≥45 events within the same 10-minute window — a genuinely active,
-  high-intensity SSH brute force, not ambient noise. Declaring a qualifying severity here routes
-  it to Tier-2 through ADR-0067 D1(a)'s existing mechanism (unchanged: a Detection with
-  ``severity∈{high,critical}`` or ``auto_escalate=True`` reaches Tier 2). This rule is a stopgap
-  pending the redrafted campaign (#54) work, which will supersede and retire it; 45 is chosen
-  to *agree* with that end-state model's queue bar (ADR-0070 Rev-1 / issue #54, ``θ_high=40``),
-  not as an independently-tuned constant — see the function's own docstring for the derivation.
+- ``attack_in_progress``    — ``high``     / auto_escalate=True (issue #54, ADR-0070
+  Revision 1 D3): the actor's CURRENT decayed intensity ``lambda_hat(now)`` reaches
+  ``θ_high`` — a high-rate attack is happening right now (the Maintainer's 50/min case
+  queues in under a minute). Retires ``_ssh_login_failure_intense`` (issue #3's INTERIM
+  stopgap, whose ≥45-in-10-min threshold was derived to agree with ``θ_high`` — the
+  handover is value-preserving, not a behavior loss). Fades by decay alone: no manual
+  expiry, nothing persisted.
+- ``campaign``              — ``high``     / auto_escalate=True (issue #54, ADR-0070
+  Revision 1 D3): fires when the actor's pressure episodes within the campaign horizon show
+  recidivism (≥2 episodes — rose, collapsed to quiet, rose again), endurance (one episode
+  spanning ≥ ``D_endure`` — the moderate-rate grinder that never spikes but never stops), or
+  breadth (≥1 episode **and** ≥2 attack categories or ≥5 destination ports — pressure that is
+  also exploring). Below ``attack_in_progress``'s ``score_delta`` so the decider's headline
+  names the *current* attack over the historical pattern when both fire.
 
 Skill gate: ai-engine-invariants loaded before editing this file.
 """
@@ -45,10 +51,23 @@ from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 
 from firewatch_sdk import Detection, SecurityEvent
-from firewatch_core.attempts import HALF_LIFE, PRESSURE_THRESHOLD, is_attempt, peak_intensity
+from firewatch_core.attempts import (
+    HALF_LIFE,
+    PRESSURE_THRESHOLD,
+    episodes,
+    intensity_at,
+    is_attempt,
+    peak_intensity,
+)
 from firewatch_core.escalation.policy import ESCALATION_POLICY
 
 CorrelationRule = Callable[[list[SecurityEvent]], list[Detection]]
+TimeAnchoredRule = Callable[[list[SecurityEvent], datetime], list[Detection]]
+"""A correlation rule that additionally needs the pipeline's anchored ``now``
+(ADR-0070 D2/D3) — R1/R2/R3, all built on `firewatch_core.attempts`. Kept
+distinct from ``CorrelationRule`` (``BUILTIN_RULES``) rather than widening that
+type, so a rule with no time dependency cannot accidentally acquire a second,
+un-anchored wall-clock read."""
 
 logger = logging.getLogger("firewatch.detector")
 
@@ -80,7 +99,12 @@ ESCALATION_POLICY.register(
     auto_escalate=False,
 )
 ESCALATION_POLICY.register(
-    "ssh_login_failure_intense",
+    "attack_in_progress",
+    severity="high",
+    auto_escalate=True,
+)
+ESCALATION_POLICY.register(
+    "campaign",
     severity="high",
     auto_escalate=True,
 )
@@ -282,68 +306,138 @@ def _attempt_pressure(events: list[SecurityEvent], now: datetime) -> list[Detect
     )]
 
 
-def _ssh_login_failure_events(events: list[SecurityEvent]) -> list[SecurityEvent]:
-    """Sorted "SSH Login Failure" ALERT events from one actor's event list.
+THETA_HIGH = 40
+"""theta_high — the R2 ``attack_in_progress`` firing threshold (ADR-0070 D5):
+``lambda_hat(now) >= THETA_HIGH`` means a high-rate attack is happening right
+now. Crossed in <1 min at 50 attempts/min (the Maintainer's case); unreachable
+below ~55 attempts/hour sustained."""
 
-    Shared helper — stands until #54 (ADR-0070 Revision-1 retire list); used
-    below by ``_ssh_login_failure_intense`` only (its ``_burst`` sibling
-    retired in #53/ADR-0070 Revision 1, R1 subsumes it).
+D_ENDURE = timedelta(hours=24)
+"""D_endure — the R3 ``campaign`` endurance-clause span (ADR-0070 D5): a
+single pressure episode spanning >= D_ENDURE queues the moderate-rate grinder
+that never spikes to THETA_HIGH but never stops."""
+
+CAMPAIGN_MIN_EPISODES = 2
+"""Recidivism clause (ADR-0070 D3/D5): >=2 pressure episodes within the
+campaign horizon — the actor's intensity rose, collapsed to quiet, and rose
+again (fail2ban's ``recidive`` shape)."""
+
+CAMPAIGN_MIN_CATEGORIES = 2
+"""Breadth clause (ADR-0070 D5): >=1 pressure episode AND >=2 distinct attack
+categories — pressure that is also exploring is not commodity spray."""
+
+CAMPAIGN_MIN_PORTS = 5
+"""Breadth clause (ADR-0070 D5): >=1 pressure episode AND >=5 distinct
+destination ports — matches ``port_scan``'s own breadth bar."""
+
+_CAMPAIGN_WINDOW = timedelta(days=7)
+"""R3's reporting horizon ("the trailing W_CAMPAIGN", ADR-0070 D4). MUST equal
+``pipeline.W_CAMPAIGN`` (7d) — duplicated here (not imported) for the same
+detector<->pipeline circular-import reason as ``_PRESSURE_WINDOW`` above; used
+only to phrase R3's reason string in engine integers (ADR-0035), never to
+filter events (the pipeline's fetch/slice seam already bounds what ``detect()``
+sees — ADR-0070 D4). Pinned equal by
+``test_issue_54_attack_in_progress_campaign.py::test_campaign_window_matches_pipeline_w_campaign``."""
+
+
+def _attack_in_progress(events: list[SecurityEvent], now: datetime) -> list[Detection]:
+    """R2 ``attack_in_progress`` (ADR-0070 Revision 1 D3): fires iff the
+    actor's CURRENT decayed attempt intensity ``lambda_hat(now)`` reaches
+    ``THETA_HIGH`` — a high-rate attack is happening right now, not merely
+    accumulating (contrast R1, which checks the *peak* over a trailing
+    window; R2 checks the instant).
+
+    Retires ``_ssh_login_failure_intense`` (issue #3's INTERIM stopgap,
+    ≥45-in-10-min — chosen to agree with ``THETA_HIGH`` so the handover is
+    value-preserving). Fades by decay alone: as the actor's attempts stop,
+    ``lambda_hat(now)`` on the next analysis falls below ``THETA_HIGH`` and
+    this rule simply stops firing — no persisted state, no manual expiry.
+    The reason string carries engine integers only (ADR-0035) — the
+    qualifying attempt count in the trailing window, never the raw λ̂ value.
     """
-    return sorted(
-        (
-            e for e in events
-            if e.category == "SSH Login Failure" and e.action == "ALERT"
-        ),
-        key=lambda e: e.timestamp,
+    if not events:
+        return []
+    current = intensity_at(events, now, half_life=HALF_LIFE)
+    if current < THETA_HIGH:
+        return []
+    attempt_count = sum(
+        1 for e in events
+        if is_attempt(e) and now - _PRESSURE_WINDOW <= e.timestamp <= now
     )
-
-
-def _ssh_login_failure_intense(events: list[SecurityEvent]) -> list[Detection]:
-    """**INTERIM rule — see below before touching this.**
-
-    >=45 "SSH Login Failure" ALERT events from one IP within a 10-minute
-    window — a genuinely active, high-intensity brute force, not ambient
-    scanner background (the ambient case is R1 ``attempt_pressure``'s job
-    now — ADR-0070 Revision 1; its own sibling ``_ssh_login_failure_burst``
-    was retired in #53). Registered at ``severity="high"``/
-    ``auto_escalate=True``, so a Detection from this rule satisfies the
-    ADR-0067 D1(a) Tier-2 gate — that gate mechanism (a Detection with a
-    qualifying severity reaches Tier 2) is Accepted and unchanged; only this
-    rule's OWN existence is new.
-
-    **This is a stopgap, not settled design.** It exists only because the
-    real owner of "distinguish ambient volume from an active attack" — the
-    rewritten campaign (#54) correlation work — has not landed yet. Once it
-    does, it supersedes and retires this function; do not extend or
-    generalize this rule in the meantime.
-
-    **Why 45, not a round number:** the end-state model (ADR-0070 Rev-1 /
-    issue #54) scores an actor by a decaying intensity λ̂ with a 30-minute
-    half-life and queues once λ̂ reaches θ_high=40. A uniform 30-events/
-    10-minutes burst peaks at λ̂ ≈ 26.8 — below θ_high — so a ≥30 interim rule
-    would queue actors the end state deliberately excludes, and they would
-    un-queue the moment #53/#54 land (a regression manufactured by this very
-    stopgap). At ≥45 the worst case (all 45 events packed into the 10-minute
-    window) peaks at λ̂ ≈ 40.2 ≥ 40, so interim and end-state agree at the
-    boundary. 45 is picked to match θ_high under that model, not as an
-    independently-tuned constant — the live capture that #53/#54 are built
-    against still sets the real end-state numbers.
-    """
-    failures = _ssh_login_failure_events(events)
-    if len(failures) < 45:
-        return []
-    span = failures[-1].timestamp - failures[0].timestamp
-    if span > timedelta(minutes=10):
-        return []
+    hours = int(_PRESSURE_WINDOW.total_seconds() // 3600)
     return [_emit(
         source_ip=events[0].source_ip,
-        rule_name="ssh_login_failure_intense",
-        score_delta=20,
+        rule_name="attack_in_progress",
+        score_delta=25,
         reason=(
-            f"{len(failures)} failed SSH login attempts within "
-            f"{int(span.total_seconds() / 60)} min — active high-intensity brute force"
+            f"{attempt_count} hostile attempts within the trailing {hours}h "
+            "— high-intensity attack in progress"
         ),
-        matched_event_ids=[e.event_id for e in failures if e.event_id][:20],
+        matched_event_ids=[
+            e.event_id for e in events
+            if e.event_id and is_attempt(e) and now - _PRESSURE_WINDOW <= e.timestamp <= now
+        ][:20],
+    )]
+
+
+def _campaign(events: list[SecurityEvent], now: datetime) -> list[Detection]:
+    """R3 ``campaign`` (ADR-0070 Revision 1 D3): fires when the actor's
+    pressure episodes within the campaign horizon satisfy any of three
+    clauses — recidivism (>=``CAMPAIGN_MIN_EPISODES`` episodes), endurance
+    (one episode spanning >=``D_ENDURE``), or breadth (>=1 episode AND
+    >=``CAMPAIGN_MIN_CATEGORIES`` attack categories or
+    >=``CAMPAIGN_MIN_PORTS`` distinct destination ports).
+
+    ``now`` bounds nothing here directly — ``episodes()`` is itself
+    time-agnostic (closed-form crossings over whatever attempts are in
+    ``events``); the campaign horizon is applied at the pipeline's fetch/slice
+    seam (ADR-0070 D4), so a campaign stops deriving on its own once the
+    qualifying episodes age out of that slice — no manual expiry. ``now`` is
+    accepted for signature symmetry with the other time-anchored rules
+    (``TimeAnchoredRule``) and is unused by design.
+
+    The clause-seam boundary (ADR-0070 D3): filling the quiet gap between two
+    episodes merges them (recidivism stops deriving), but the filler must
+    hold λ̂ >= θ_press continuously, which fires endurance at ``D_ENDURE`` —
+    no addition of events can move an actor to calm.
+    """
+    del now  # unused by design — see docstring
+    eps = episodes(events, PRESSURE_THRESHOLD, half_life=HALF_LIFE)
+    if not eps:
+        return []
+
+    recidivism = len(eps) >= CAMPAIGN_MIN_EPISODES
+    longest_span = max((ep.end - ep.start for ep in eps), default=timedelta(0))
+    endurance = longest_span >= D_ENDURE
+
+    attempts = [e for e in events if is_attempt(e)]
+    categories = {e.category for e in attempts if e.category}
+    ports = {e.destination_port for e in attempts if e.destination_port is not None}
+    breadth = len(categories) >= CAMPAIGN_MIN_CATEGORIES or len(ports) >= CAMPAIGN_MIN_PORTS
+
+    if not (recidivism or endurance or breadth):
+        return []
+
+    clauses: list[str] = []
+    if recidivism:
+        clauses.append(f"{len(eps)} pressure episodes")
+    if endurance:
+        span_hours = int(longest_span.total_seconds() // 3600)
+        clauses.append(f"one episode spanning {span_hours}h")
+    if breadth:
+        clauses.append(f"{len(categories)} categories, {len(ports)} distinct ports")
+
+    days = int(_CAMPAIGN_WINDOW.total_seconds() // 86400)
+    reason = (
+        ", ".join(clauses)
+        + f" within the trailing {days}d — sustained campaign"
+    )
+    return [_emit(
+        source_ip=events[0].source_ip,
+        rule_name="campaign",
+        score_delta=20,
+        reason=reason,
+        matched_event_ids=[e.event_id for e in attempts if e.event_id][:20],
     )]
 
 
@@ -354,21 +448,32 @@ BUILTIN_RULES: list[CorrelationRule] = [
     _ids_then_brute_force,
     _brute_force_then_login,
     _multi_source_attack,
-    _ssh_login_failure_intense,
 ]
+
+TIME_ANCHORED_RULES: list[TimeAnchoredRule] = [
+    _attempt_pressure,
+    _attack_in_progress,
+    _campaign,
+]
+"""R1/R2/R3 (ADR-0070) — the rules built on ``firewatch_core.attempts`` that
+need the pipeline's anchored ``now``. Run separately from ``BUILTIN_RULES``
+(different call signature); ``detect()`` loops both, one try/except per rule
+so a single misbehaving rule never aborts the others."""
 
 
 def detect(events: list[SecurityEvent], now: datetime | None = None) -> list[Detection]:
     """Run all built-in correlation rules against a per-IP event list.
 
-    ``now`` (ADR-0070 Revision 1 D2/"Module shape") is the pipeline's anchored
-    evaluation instant, consumed by R1 ``attempt_pressure`` to compute peak
-    decayed intensity. Optional, defaulting to the real wall clock, mirroring
-    ``Pipeline.__init__``'s own ``clock`` parameter (issue #52) — this keeps
-    every existing ``detect(events)`` call site (golden/e2e tests included)
-    working unchanged, since none of their fixture timestamps are recent
-    enough for R1 to fire under a real-wall-clock default; the pipeline always
-    passes its own anchored ``now`` explicitly in production.
+    ``now`` (ADR-0070 Revision 1 D2/D3, "Module shape") is the pipeline's
+    anchored evaluation instant, consumed by ``TIME_ANCHORED_RULES``
+    (R1 ``attempt_pressure``, R2 ``attack_in_progress``, R3 ``campaign``) to
+    compute decayed intensity. Optional, defaulting to the real wall clock,
+    mirroring ``Pipeline.__init__``'s own ``clock`` parameter (issue #52) —
+    this keeps every existing ``detect(events)`` call site (golden/e2e tests
+    included) working unchanged, since none of their fixture timestamps are
+    recent enough for R1/R2/R3 to fire under a real-wall-clock default; the
+    pipeline always passes its own anchored ``now`` explicitly in production,
+    and no rule below ever reads the wall clock a second time on its own.
 
     Failed rules are logged and skipped — they never abort the pipeline. Returns a flat
     list of all detections produced.
@@ -381,8 +486,9 @@ def detect(events: list[SecurityEvent], now: datetime | None = None) -> list[Det
             out.extend(rule(events))
         except Exception:
             logger.exception("correlation rule %s failed", rule.__name__)
-    try:
-        out.extend(_attempt_pressure(events, now))
-    except Exception:
-        logger.exception("correlation rule %s failed", "_attempt_pressure")
+    for time_rule in TIME_ANCHORED_RULES:
+        try:
+            out.extend(time_rule(events, now))
+        except Exception:
+            logger.exception("correlation rule %s failed", time_rule.__name__)
     return out

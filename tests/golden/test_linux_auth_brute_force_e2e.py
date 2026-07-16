@@ -18,24 +18,34 @@ halves of that split, not just the flood-safe one.
 **Re-amended 2026-07-16 (issue #53, ADR-0070 Revision 1):** the ambient half
 of the split, ``ssh_login_failure_burst``, is retired — R1 ``attempt_pressure``
 (the decayed-intensity estimator) subsumes it at the same posture (score/band
-visibility only, never queues). ``ssh_login_failure_intense`` stands until #54.
+visibility only, never queues). ``ssh_login_failure_intense`` stood until #54.
 
-EARS-criteria coverage (issue #3, as amended)
-──────────────────────────────────────────────
+**Re-amended again 2026-07-16 (issue #54, ADR-0070 Revision 1 D3):** the
+INTERIM rule is now retired too — R2 ``attack_in_progress`` (the actor's
+CURRENT decayed intensity reaching ``θ_high``) subsumes it, value-preserving
+(the retired rule's ≥45-in-10-min threshold was derived to agree with
+``θ_high``). ``detect()`` now needs an explicit anchored ``now`` near the
+burst to exercise R1/R2 at all (both are decayed-intensity rules; the
+default real-wall-clock fallback would decay these 2026-dated fixtures to
+~0) — every call below passes ``now`` explicitly rather than relying on a
+second, un-anchored wall-clock read.
+
+EARS-criteria coverage (issue #3, as amended by #53/#54)
+──────────────────────────────────────────────────────────
 AC4  WHEN a genuinely intense burst of failed SSH logins from one IP arrives
-     (>=45 in 10 min — an active attack, not ambient scanner noise), the
-     interim ``ssh_login_failure_intense`` correlation SHALL fire with
-     declared severity=high/auto_escalate=True, so the actor passes the
-     ADR-0067 Tier-2 gate. (Threshold raised 30→45, PR #73 held batch: 45 is
-     chosen to agree with the end-state intensity model's θ_high=40 —
-     see ``detector.py``'s ``_ssh_login_failure_intense`` docstring.)
+     (an active attack, not ambient scanner noise), R2 ``attack_in_progress``
+     SHALL fire with declared severity=high/auto_escalate=True, so the actor
+     passes the ADR-0067 Tier-2 gate. (The retired interim rule's ≥45-in-
+     10-min threshold was derived to agree with the end-state model's
+     θ_high=40 — see ``detector.py``'s ``_attack_in_progress`` docstring —
+     so the same 46-event/90-second burst still queues, now via R2.)
      → TestIntenseBruteForceDemo.test_intense_burst_reaches_tier_2
 
-AC4'  WHEN only an AMBIENT burst arrives (5-44 in 10 min — fail2ban's own
-     default cadence, ordinary internet-exposed background), the actor
-     SHALL NOT reach Tier 2 — this is the flood the milestone exists to drain.
-     Fires R1 ``attempt_pressure`` (issue #53), never ``ssh_login_failure_burst``
-     (retired).
+AC4'  WHEN only an AMBIENT burst arrives (fail2ban's own default cadence,
+     ordinary internet-exposed background), the actor SHALL NOT reach Tier 2
+     — this is the flood the milestone exists to drain. Fires R1
+     ``attempt_pressure`` (issue #53), never ``ssh_login_failure_burst``
+     (retired) nor R2/R3.
      → TestAmbientBurstStaysOffQueue.test_ambient_burst_stays_observed
 
 AC5  WHEN isolated/low-volume failed logins arrive (no correlation fires), the
@@ -81,8 +91,13 @@ def _failed_login_raw(offset_seconds: float) -> RawEvent:
 
 class TestIntenseBruteForceDemo:
     """A scripted, genuinely active brute force: 46 failed logins in ~90
-    seconds, well over the interim 45-in-10-min threshold — Galip's
-    motivating case (50/min) trips this even faster."""
+    seconds — Galip's motivating case (50/min) trips this even faster.
+
+    Regression pin (issue #54, ADR-0070 Consequences): this is the EXACT
+    shape that used to fire the retired ``ssh_login_failure_intense`` interim
+    rule (>=45-in-10-min) — the value-preserving handover means it must
+    STILL queue, now via R2 ``attack_in_progress``.
+    """
 
     def test_intense_burst_reaches_tier_2(self):
         raws = [_failed_login_raw(offset_seconds=2 * i) for i in range(46)]
@@ -95,16 +110,20 @@ class TestIntenseBruteForceDemo:
         assert all(e.severity == "low" for e in events)
         assert all(e.category == "SSH Login Failure" for e in events)
 
-        detections = detect(events)
+        # Anchored `now` right at the end of the burst (issue #54 — R2 is a
+        # decayed-intensity rule; no second, un-anchored wall-clock read).
+        now = events[-1].timestamp
+        detections = detect(events, now=now)
         detection = next(
-            (d for d in detections if d.rule_name == "ssh_login_failure_intense"), None
+            (d for d in detections if d.rule_name == "attack_in_progress"), None
         )
         assert detection is not None, (
-            "ssh_login_failure_intense did not fire for a 46-event burst in "
+            "attack_in_progress did not fire for a 46-event burst in "
             "90 seconds — an active brute force would not surface"
         )
         assert detection.severity == "high"
         assert detection.auto_escalate is True
+        assert not any(d.rule_name == "ssh_login_failure_intense" for d in detections)
 
         verdict = decide(events, detections)
         assert verdict.tier is not None and verdict.tier <= 2, (

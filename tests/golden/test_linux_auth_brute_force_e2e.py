@@ -15,6 +15,11 @@ never queues) and ``ssh_login_failure_intense`` (**INTERIM** — an active,
 high-intensity brute force, which DOES queue). This file now proves BOTH
 halves of that split, not just the flood-safe one.
 
+**Re-amended 2026-07-16 (issue #53, ADR-0070 Revision 1):** the ambient half
+of the split, ``ssh_login_failure_burst``, is retired — R1 ``attempt_pressure``
+(the decayed-intensity estimator) subsumes it at the same posture (score/band
+visibility only, never queues). ``ssh_login_failure_intense`` stands until #54.
+
 EARS-criteria coverage (issue #3, as amended)
 ──────────────────────────────────────────────
 AC4  WHEN a genuinely intense burst of failed SSH logins from one IP arrives
@@ -29,6 +34,8 @@ AC4  WHEN a genuinely intense burst of failed SSH logins from one IP arrives
 AC4'  WHEN only an AMBIENT burst arrives (5-44 in 10 min — fail2ban's own
      default cadence, ordinary internet-exposed background), the actor
      SHALL NOT reach Tier 2 — this is the flood the milestone exists to drain.
+     Fires R1 ``attempt_pressure`` (issue #53), never ``ssh_login_failure_burst``
+     (retired).
      → TestAmbientBurstStaysOffQueue.test_ambient_burst_stays_observed
 
 AC5  WHEN isolated/low-volume failed logins arrive (no correlation fires), the
@@ -110,19 +117,28 @@ class TestIntenseBruteForceDemo:
 class TestAmbientBurstStaysOffQueue:
     """8 failed SSH logins in under 2 minutes — the exact fail2ban-cadence
     scenario (maxretry=5/findtime~10m) that used to flood the queue. Must
-    contribute to the record only, never reach Tier 2 — this is the fix."""
+    contribute to the record only, never reach Tier 2 — this is the fix.
+
+    Amended 2026-07-16 (issue #53, ADR-0070 Revision 1): the interim
+    `ssh_login_failure_burst` rule this test originally pinned is retired —
+    R1 `attempt_pressure` subsumes it at the same "score/band visibility,
+    never queues" posture. `now` is pinned close to the burst (rather than
+    left at the real wall clock) so the decayed intensity is actually
+    exercised, not decayed away by the time this suite runs.
+    """
 
     def test_ambient_burst_stays_observed(self):
         raws = [_failed_login_raw(offset_seconds=10 * i) for i in range(8)]
         events = [normalize(raw, _SOURCE_ID) for raw in raws]
+        now = _T0 + timedelta(seconds=10 * 7)
 
-        detections = detect(events)
-        burst = next(
-            (d for d in detections if d.rule_name == "ssh_login_failure_burst"), None
+        detections = detect(events, now=now)
+        pressure = next(
+            (d for d in detections if d.rule_name == "attempt_pressure"), None
         )
-        assert burst is not None
-        assert burst.severity == "medium"
-        assert burst.auto_escalate is False
+        assert pressure is not None
+        assert pressure.severity == "medium"
+        assert pressure.auto_escalate is False
         assert not any(d.rule_name == "ssh_login_failure_intense" for d in detections)
 
         verdict = decide(events, detections)

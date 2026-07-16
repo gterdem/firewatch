@@ -49,11 +49,15 @@ async def test_analyze_ip_score_parity():
     # 10 blocked SQLi events → brute_force(30) + sqli_BLOCK(20) + persistence(10) = 60 (#651)
     # Old math (removed): +30 brute-force + +40 sqli + +10 per-blocked = 80.
     # New (#651): sqli on BLOCK = round(40×0.5)=20; persistence floor +10 (10≥3).
+    # All 10 events share _sqli_events'/make_event's default (identical) timestamp,
+    # so they are 10 SIMULTANEOUS attempts — decayed intensity lambda_hat=10 >=
+    # theta_press=5 (issue #53, ADR-0070 Revision 1): +15 attempt_pressure boost.
     store: EventStore = FakeStore(_sqli_events(10))
     ai: AIEngine = FakeAIEngine()  # LOW / 0.0 → no AI boost
     score = await _pipeline(store, ai).analyze_ip(IP)
-    assert score.score == 60  # brute_force(30)+sqli_BLOCK(20)+persistence(10)=60 (#651)
-    assert score.threat_level == "HIGH"  # 60 >= 51 → HIGH (#651; was CRITICAL at 80)
+    assert score.score == 75  # 60 (#651) + 15 (attempt_pressure, #53) = 75
+    assert score.threat_level == "HIGH"  # HIGH <= 75 < CRITICAL
+    assert any(d.rule_name == "attempt_pressure" for d in score.detections)
     assert "brute_force" in score.attack_types
     assert "sql_injection" in score.attack_types
     assert score.source_types == ["suricata"]
@@ -79,7 +83,9 @@ async def test_analyze_ip_ai_boost_applied():
 
 
 async def test_analyze_ip_detection_boost_flows():
-    # 10 BLOCK spanning 36 min → brute-force(+30)+10 blocked = 40 rule; sustained(+15) boost.
+    # 10 BLOCK spanning 36 min → brute-force(+30)+10 blocked = 40 rule;
+    # attempt_pressure(+15) boost (ADR-0070 Revision 1 R1 — retired
+    # sustained_attack's replacement; same score_delta, issue #53).
     events = [
         make_event(action="BLOCK", rule_id="900001",
                    timestamp=T0 + timedelta(minutes=4 * i))
@@ -88,7 +94,7 @@ async def test_analyze_ip_detection_boost_flows():
     store: EventStore = FakeStore(events)
     ai: AIEngine = FakeAIEngine()
     score = await _pipeline(store, ai).analyze_ip(IP)
-    assert any(d.rule_name == "sustained_attack" for d in score.detections)
+    assert any(d.rule_name == "attempt_pressure" for d in score.detections)
     assert score.score == 55  # 40 + 15
 
 

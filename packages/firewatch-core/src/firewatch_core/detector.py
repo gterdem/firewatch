@@ -21,32 +21,31 @@ Severity anchoring (Sigma ``level`` vocabulary):
   attack; cross-source correlation raises signal fidelity (Sigma T1110; risk_score≈74).
 - ``multi_source_attack``   — ``medium``   / auto_escalate=False: multi-source diversity
   increases suspicion but lacks a confirmed outcome (risk_score≈48).
-- ``sustained_attack``      — ``medium``   / auto_escalate=False: persistence is notable
-  but the defence held; not yet a confirmed breach (risk_score≈48).
-- ``ssh_login_failure_burst``   — ``medium`` / auto_escalate=False (issue #3): ≥5 "SSH Login
-  Failure" ALERT events (severity=low) from one IP within 10 minutes — the same cadence as
-  fail2ban's own default trip point (maxretry=5/findtime=10m), i.e. ambient background on any
-  internet-exposed box. Contributes to score/band visibility only; ``medium`` does not satisfy
-  the ADR-0067 D1(a) Tier-2 gate (which requires ``high``/``critical`` or ``auto_escalate``), so
-  this alone never queues the actor — it is the low-intensity "on the record, keep watching"
-  signal.
+- ``attempt_pressure``      — ``medium``   / auto_escalate=False (issue #53, ADR-0070
+  Revision 1 D2): an actor's peak decayed attempt intensity (``firewatch_core.attempts``)
+  within the trailing state window reaches ``θ_press``. Retires ``_sustained_attack`` (the
+  span/count proxy) and ``_ssh_login_failure_burst`` (the ambient-cadence proxy) — R1
+  subsumes both under a single rate measure. Pressure alone never queues (``medium`` does
+  not satisfy the ADR-0067 D1(a) Tier-2 gate); it contributes score/band visibility and the
+  pressure-strip signal, same "on the record, keep watching" posture the two retired rules
+  had.
 - ``ssh_login_failure_intense`` — ``high`` / auto_escalate=True (issue #3 — **INTERIM**, see the
   function's own docstring): ≥45 events within the same 10-minute window — a genuinely active,
   high-intensity SSH brute force, not ambient noise. Declaring a qualifying severity here routes
   it to Tier-2 through ADR-0067 D1(a)'s existing mechanism (unchanged: a Detection with
   ``severity∈{high,critical}`` or ``auto_escalate=True`` reaches Tier 2). This rule is a stopgap
-  pending the redrafted attempt_pressure (#53) / campaign (#54) work, which will supersede and
-  retire it; 45 is chosen to *agree* with that end-state model's queue bar (ADR-0070 Rev-1 /
-  issue #54, ``θ_high=40``), not as an independently-tuned constant — see the function's own
-  docstring for the derivation.
+  pending the redrafted campaign (#54) work, which will supersede and retire it; 45 is chosen
+  to *agree* with that end-state model's queue bar (ADR-0070 Rev-1 / issue #54, ``θ_high=40``),
+  not as an independently-tuned constant — see the function's own docstring for the derivation.
 
 Skill gate: ai-engine-invariants loaded before editing this file.
 """
 import logging
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from firewatch_sdk import Detection, SecurityEvent
+from firewatch_core.attempts import HALF_LIFE, PRESSURE_THRESHOLD, is_attempt, peak_intensity
 from firewatch_core.escalation.policy import ESCALATION_POLICY
 
 CorrelationRule = Callable[[list[SecurityEvent]], list[Detection]]
@@ -76,12 +75,7 @@ ESCALATION_POLICY.register(
     auto_escalate=False,
 )
 ESCALATION_POLICY.register(
-    "sustained_attack",
-    severity="medium",
-    auto_escalate=False,
-)
-ESCALATION_POLICY.register(
-    "ssh_login_failure_burst",
+    "attempt_pressure",
     severity="medium",
     auto_escalate=False,
 )
@@ -242,32 +236,58 @@ def _multi_source_attack(events: list[SecurityEvent]) -> list[Detection]:
     )]
 
 
-def _sustained_attack(events: list[SecurityEvent]) -> list[Detection]:
-    """≥10 BLOCK/DROP events spanning ≥30 min from the same IP."""
-    blocked = [e for e in events if e.action in ("BLOCK", "DROP")]
-    if len(blocked) < 10:
+_PRESSURE_WINDOW = timedelta(hours=24)
+"""R1's peak-check window ("the trailing W_STATE", ADR-0070 D2). MUST equal
+``pipeline.W_STATE`` (24h) — duplicated here, not imported, solely to avoid a
+detector<->pipeline circular import (``pipeline.py`` imports ``detect`` from
+this module at module load time). Pinned equal by
+``test_detector.py::test_pressure_window_matches_pipeline_w_state`` so any
+future drift between the two fails CI immediately rather than silently."""
+
+
+def _attempt_pressure(events: list[SecurityEvent], now: datetime) -> list[Detection]:
+    """R1 ``attempt_pressure`` (ADR-0070 Revision 1 D2): fires iff the actor's
+    peak decayed attempt intensity within the trailing state window
+    (``_PRESSURE_WINDOW``) reaches ``PRESSURE_THRESHOLD`` (θ_press).
+
+    Retires ``_sustained_attack`` (the ≥10-blocked/≥30-min span+count proxy)
+    and ``_ssh_login_failure_burst`` (the ≥5-in-10-min ambient-cadence proxy):
+    both were crude proxies for the same underlying quantity — rate — that
+    ``firewatch_core.attempts`` now measures directly. The reason string
+    carries engine integers only (ADR-0035) — the qualifying attempt count and
+    the window's own span in hours — never the raw λ̂ value (D2).
+    """
+    if not events:
         return []
-    timestamps = sorted(e.timestamp for e in blocked)
-    span = timestamps[-1] - timestamps[0]
-    if span < timedelta(minutes=30):
+    peak = peak_intensity(events, _PRESSURE_WINDOW, now, half_life=HALF_LIFE)
+    if peak < PRESSURE_THRESHOLD:
         return []
+    attempt_count = sum(
+        1 for e in events
+        if is_attempt(e) and now - _PRESSURE_WINDOW <= e.timestamp <= now
+    )
+    hours = int(_PRESSURE_WINDOW.total_seconds() // 3600)
     return [_emit(
         source_ip=events[0].source_ip,
-        rule_name="sustained_attack",
+        rule_name="attempt_pressure",
         score_delta=15,
         reason=(
-            f"{len(blocked)} blocked events sustained over "
-            f"{int(span.total_seconds() / 60)} min"
+            f"{attempt_count} hostile attempts within the trailing {hours}h "
+            "— pressure threshold reached"
         ),
-        matched_event_ids=[e.event_id for e in blocked if e.event_id][:20],
+        matched_event_ids=[
+            e.event_id for e in events
+            if e.event_id and is_attempt(e) and now - _PRESSURE_WINDOW <= e.timestamp <= now
+        ][:20],
     )]
 
 
 def _ssh_login_failure_events(events: list[SecurityEvent]) -> list[SecurityEvent]:
     """Sorted "SSH Login Failure" ALERT events from one actor's event list.
 
-    Shared helper for the burst/intense pair below — both rules key on the
-    exact same population, differing only in the count threshold.
+    Shared helper — stands until #54 (ADR-0070 Revision-1 retire list); used
+    below by ``_ssh_login_failure_intense`` only (its ``_burst`` sibling
+    retired in #53/ADR-0070 Revision 1, R1 subsumes it).
     """
     return sorted(
         (
@@ -278,51 +298,14 @@ def _ssh_login_failure_events(events: list[SecurityEvent]) -> list[SecurityEvent
     )
 
 
-def _ssh_login_failure_burst(events: list[SecurityEvent]) -> list[Detection]:
-    """>=5 "SSH Login Failure" ALERT events from one IP within 10 minutes.
-
-    A single failed SSH login is ``action=ALERT``, ``severity=low`` (see
-    ``firewatch_linux_auth.normalize``'s severity table). This rule's
-    threshold — 5 events within 10 minutes — is the same cadence as
-    fail2ban's own default trip point (maxretry=5/findtime=600s): ordinary
-    ambient scanner background on any internet-exposed box, not an active
-    attack. Registered at ``severity="medium"`` (see ``ESCALATION_POLICY``
-    above), so this rule contributes to score/band visibility but does NOT
-    by itself satisfy the ADR-0067 D1(a) Tier-2 gate — a genuinely intense
-    burst is ``_ssh_login_failure_intense``'s job, below. Source-agnostic by
-    design: keyed on ``category``+``action``, not ``source_type`` — any
-    future source reusing the "SSH Login Failure" category joins this rule
-    for free, matching the existing rules' own category-keyed (not
-    source_type-keyed) convention.
-
-    Span check mirrors ``_sustained_attack``'s style (first-to-last span,
-    not a sliding window).
-    """
-    failures = _ssh_login_failure_events(events)
-    if len(failures) < 5:
-        return []
-    span = failures[-1].timestamp - failures[0].timestamp
-    if span > timedelta(minutes=10):
-        return []
-    return [_emit(
-        source_ip=events[0].source_ip,
-        rule_name="ssh_login_failure_burst",
-        score_delta=20,
-        reason=(
-            f"{len(failures)} failed SSH login attempts within "
-            f"{int(span.total_seconds() / 60)} min — ambient brute-force background"
-        ),
-        matched_event_ids=[e.event_id for e in failures if e.event_id][:20],
-    )]
-
-
 def _ssh_login_failure_intense(events: list[SecurityEvent]) -> list[Detection]:
     """**INTERIM rule — see below before touching this.**
 
-    >=45 "SSH Login Failure" ALERT events from one IP within the same
-    10-minute window as ``_ssh_login_failure_burst`` — a genuinely active,
-    high-intensity brute force, not the ambient scanner background
-    ``_ssh_login_failure_burst`` catches. Registered at ``severity="high"``/
+    >=45 "SSH Login Failure" ALERT events from one IP within a 10-minute
+    window — a genuinely active, high-intensity brute force, not ambient
+    scanner background (the ambient case is R1 ``attempt_pressure``'s job
+    now — ADR-0070 Revision 1; its own sibling ``_ssh_login_failure_burst``
+    was retired in #53). Registered at ``severity="high"``/
     ``auto_escalate=True``, so a Detection from this rule satisfies the
     ADR-0067 D1(a) Tier-2 gate — that gate mechanism (a Detection with a
     qualifying severity reaches Tier 2) is Accepted and unchanged; only this
@@ -330,9 +313,9 @@ def _ssh_login_failure_intense(events: list[SecurityEvent]) -> list[Detection]:
 
     **This is a stopgap, not settled design.** It exists only because the
     real owner of "distinguish ambient volume from an active attack" — the
-    redrafted attempt_pressure (#53) and campaign (#54) correlation work — has
-    not landed yet. Once it does, it supersedes and retires this function;
-    do not extend or generalize this rule in the meantime.
+    rewritten campaign (#54) correlation work — has not landed yet. Once it
+    does, it supersedes and retires this function; do not extend or
+    generalize this rule in the meantime.
 
     **Why 45, not a round number:** the end-state model (ADR-0070 Rev-1 /
     issue #54) scores an actor by a decaying intensity λ̂ with a 30-minute
@@ -371,22 +354,35 @@ BUILTIN_RULES: list[CorrelationRule] = [
     _ids_then_brute_force,
     _brute_force_then_login,
     _multi_source_attack,
-    _sustained_attack,
-    _ssh_login_failure_burst,
     _ssh_login_failure_intense,
 ]
 
 
-def detect(events: list[SecurityEvent]) -> list[Detection]:
+def detect(events: list[SecurityEvent], now: datetime | None = None) -> list[Detection]:
     """Run all built-in correlation rules against a per-IP event list.
+
+    ``now`` (ADR-0070 Revision 1 D2/"Module shape") is the pipeline's anchored
+    evaluation instant, consumed by R1 ``attempt_pressure`` to compute peak
+    decayed intensity. Optional, defaulting to the real wall clock, mirroring
+    ``Pipeline.__init__``'s own ``clock`` parameter (issue #52) — this keeps
+    every existing ``detect(events)`` call site (golden/e2e tests included)
+    working unchanged, since none of their fixture timestamps are recent
+    enough for R1 to fire under a real-wall-clock default; the pipeline always
+    passes its own anchored ``now`` explicitly in production.
 
     Failed rules are logged and skipped — they never abort the pipeline. Returns a flat
     list of all detections produced.
     """
+    if now is None:
+        now = datetime.now(timezone.utc)
     out: list[Detection] = []
     for rule in BUILTIN_RULES:
         try:
             out.extend(rule(events))
         except Exception:
             logger.exception("correlation rule %s failed", rule.__name__)
+    try:
+        out.extend(_attempt_pressure(events, now))
+    except Exception:
+        logger.exception("correlation rule %s failed", "_attempt_pressure")
     return out

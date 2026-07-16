@@ -17,6 +17,12 @@ E3  Empty store => all zeros, no error.
 E4  The response model is typed (Pydantic) and includes policy + hit-count fields.
     test_response_shape
 
+Determinism regression (PR #81 security review): GET /escalation/policy must
+anchor its store-cutoff and its detect() call to a SINGLE ``now`` so the same
+stored events always produce the same hit_count_24h.
+    test_attempt_pressure_fires_and_hit_count_is_deterministic
+    test_attempt_pressure_hit_count_via_route_is_stable
+
 SDK / config tests (triage_threshold):
 S1  triage_threshold defaults to HIGH.
     test_triage_threshold_default_is_high
@@ -31,6 +37,7 @@ Security: RFC 5737 TEST-NET IPs only (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0
 """
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -38,6 +45,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from firewatch_api.app import create_app
+from firewatch_api.routes import escalation
 from firewatch_sdk.config import RuntimeConfig
 from firewatch_sdk.models import ActionLiteral, SecurityEvent
 
@@ -157,6 +165,49 @@ def _brute_force_then_login_events(ip: str, ts: datetime) -> list[SecurityEvent]
         category="SSH Login",  # matches detector._brute_force_then_login category check
     )
     return [*bf_events, login_event]
+
+
+def _attempt_pressure_events(
+    ip: str, ts: datetime, count: int = 5
+) -> list[SecurityEvent]:
+    """*count* simultaneous BLOCK events at the same instant for *ip*.
+
+    ``firewatch_core.attempts`` D2: N simultaneous attempts (all ``dt=0``)
+    decay-fold to exactly ``lambda_hat == N``. With ``count=5`` this exactly
+    reaches ``PRESSURE_THRESHOLD`` (theta_press=5, ADR-0070 Revision 1 D5),
+    firing the detector's ``attempt_pressure`` rule for *ip* — verified
+    directly against ``peak_intensity``/``detect`` before writing this test.
+    """
+    return [
+        SecurityEvent(
+            source_type="suricata",
+            source_id="default",
+            timestamp=ts,
+            source_ip=ip,
+            action="BLOCK",
+            category="Attempt Flood",
+        )
+        for _ in range(count)
+    ]
+
+
+def _fixed_clock(fixed: datetime) -> type[datetime]:
+    """A ``datetime`` subclass whose ``.now()`` always returns *fixed*.
+
+    Used to pin ``firewatch_api.routes.escalation``'s wall-clock read to a
+    single, known instant so a test can assert exact/stable ``hit_count_24h``
+    values instead of merely ">= 1" (PR #81 security review: the route
+    previously read ``datetime.now()`` twice — once for the store cutoff,
+    once inside ``detect()`` — letting the two anchors drift apart under
+    load).
+    """
+
+    class _Clock(datetime):
+        @classmethod
+        def now(cls, tz: Any = None) -> datetime:  # noqa: ARG003 - matches datetime.now signature
+            return fixed
+
+    return _Clock
 
 
 def _ids_then_brute_force_events(ip: str, ts: datetime) -> list[SecurityEvent]:
@@ -325,7 +376,9 @@ class TestAllRegisteredRulesPresent:
             "brute_force_then_login",
             "ids_then_brute_force",
             "multi_source_attack",
-            "sustained_attack",
+            # issue #53 (ADR-0070 Revision 1): attempt_pressure replaces the
+            # retired sustained_attack in the registry.
+            "attempt_pressure",
         }
         assert expected.issubset(returned_names), (
             f"Missing rules: {expected - returned_names}. Got: {returned_names}"
@@ -446,3 +499,102 @@ class TestHitCounts24h:
         assert rows_by_name["brute_force_then_login"]["hit_count_24h"] >= 2, (
             "Expected 2 IPs triggering same rule to produce count >= 2"
         )
+
+
+# ---------------------------------------------------------------------------
+# Determinism regression: single `now` anchor for cutoff + detect() (PR #81
+# security review — attempt_pressure is the rule whose hit-count depends on
+# `now`, so it is the one that exposes the bug).
+# ---------------------------------------------------------------------------
+
+
+class TestAttemptPressureDeterminism:
+    """``_count_rule_hits_24h`` must read ``datetime.now()`` exactly once and
+    thread it through to both the store cutoff and ``detect(events, now=...)``.
+    Reading it twice (once here, once inside ``detect()`` when ``now`` is
+    omitted) lets the two anchors drift apart under load, making
+    ``hit_count_24h`` for ``attempt_pressure`` non-deterministic for the same
+    stored events.
+    """
+
+    def test_attempt_pressure_fires_and_hit_count_is_deterministic(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """5 simultaneous BLOCK events reach peak_intensity == PRESSURE_THRESHOLD,
+        firing attempt_pressure exactly once for that IP. Two direct calls to
+        ``_count_rule_hits_24h`` against the same fixed clock and the same
+        stored events must return the identical, exact count.
+        """
+        fixed_now = _NOW
+        monkeypatch.setattr(escalation, "datetime", _fixed_clock(fixed_now))
+
+        events = _attempt_pressure_events(_IP_A, fixed_now - timedelta(minutes=5))
+        store = _FakeStore(events)
+
+        hits_1 = asyncio.run(escalation._count_rule_hits_24h(store))
+        hits_2 = asyncio.run(escalation._count_rule_hits_24h(store))
+
+        assert hits_1 == {"attempt_pressure": 1}
+        assert hits_2 == {"attempt_pressure": 1}
+        assert hits_1 == hits_2, (
+            "hit_count_24h must be stable across repeated calls with the "
+            "same fixed inputs"
+        )
+
+    def test_attempt_pressure_hit_count_via_route_is_stable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Same scenario driven end-to-end through GET /escalation/policy: two
+        successive requests against the same fixed clock and stored events
+        return the identical hit_count_24h for attempt_pressure.
+        """
+        fixed_now = _NOW
+        monkeypatch.setattr(escalation, "datetime", _fixed_clock(fixed_now))
+
+        events = _attempt_pressure_events(_IP_B, fixed_now - timedelta(minutes=5))
+        client = _make_client(events=events)
+
+        resp_1 = client.get("/escalation/policy")
+        resp_2 = client.get("/escalation/policy")
+        assert resp_1.status_code == 200
+        assert resp_2.status_code == 200
+
+        rows_1 = {row["rule_name"]: row for row in resp_1.json()["policy"]}
+        rows_2 = {row["rule_name"]: row for row in resp_2.json()["policy"]}
+        assert rows_1["attempt_pressure"]["hit_count_24h"] == 1
+        assert rows_2["attempt_pressure"]["hit_count_24h"] == 1
+
+    def test_detect_is_never_given_a_second_independent_now(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Structural regression test for the two-anchor bug itself.
+
+        Patches ``firewatch_core.detector``'s own ``datetime`` to raise if
+        ``.now()`` is ever called from inside ``detect()``. That only happens
+        when ``detect()`` is invoked WITHOUT an explicit ``now`` (its
+        ``if now is None: now = datetime.now(...)`` fallback) — i.e. exactly
+        the shipped-bug shape where ``_count_rule_hits_24h`` read the wall
+        clock once for the store cutoff and let ``detect()`` read it again,
+        independently, for its own window checks. With ``now`` threaded
+        through explicitly (the fix), that fallback is never reached and this
+        raising clock is never called.
+        """
+        from firewatch_core import detector as detector_module
+
+        class _RaisingClock(datetime):
+            @classmethod
+            def now(cls, tz: Any = None) -> datetime:  # noqa: ARG003
+                raise AssertionError(
+                    "detect() read the wall clock independently instead of "
+                    "using the `now` anchored by _count_rule_hits_24h"
+                )
+
+        monkeypatch.setattr(escalation, "datetime", _fixed_clock(_NOW))
+        monkeypatch.setattr(detector_module, "datetime", _RaisingClock)
+
+        events = _attempt_pressure_events(_IP_C, _NOW - timedelta(minutes=5))
+        store = _FakeStore(events)
+
+        hits = asyncio.run(escalation._count_rule_hits_24h(store))
+
+        assert hits == {"attempt_pressure": 1}

@@ -132,7 +132,7 @@ _MAX_DETECTIONS = 50
 # Emitted every N seconds while Ollama is generating.
 _GENERATING_HEARTBEAT_INTERVAL_S = 2.0
 
-# ── Trailing analysis windows (issue #52, ADR-0070 D4) ───────────────────────
+# ── Trailing analysis windows (issue #52, ADR-0070 D4 — Revision 1 meaning) ──
 #
 # W_STATE / W_CAMPAIGN are PROVISIONAL engineering estimates (ADR-0070 D5) —
 # NOT settled/calibrated values. The #50 volume-oracle manifest is the ledger
@@ -141,14 +141,39 @@ _GENERATING_HEARTBEAT_INTERVAL_S = 2.0
 #
 # W_STATE  feeds run_rules / build_score_breakdown / decide() — "what is this
 #          actor's CURRENT threat state?" (score, band, tier reflect the
-#          trailing day, not the actor's lifetime).
-# W_CAMPAIGN feeds detect() — "is this actor WAGING A CAMPAIGN?" (recidivism
-#          needs memory longer than state).
+#          trailing day, not the actor's lifetime). Revision 1 (issue #53):
+#          also the window R1 `attempt_pressure` (detector.py) peak-checks its
+#          decayed attempt intensity against — duplicated there as
+#          `detector._PRESSURE_WINDOW` (not imported, to avoid a
+#          detector<->pipeline circular import) and pinned equal by a
+#          dedicated cross-file test.
+# W_CAMPAIGN feeds detect() — the correlation rules' own fetch horizon
+#          (`ids_then_brute_force`, `brute_force_then_login`,
+#          `multi_source_attack`, `ssh_login_failure_intense`, R1
+#          `attempt_pressure`). Revision 1 (ADR-0070): this is also the
+#          episode-counting memory the future R2/R3 campaign rules (#54) will
+#          use for recidivism — "is this actor WAGING A CAMPAIGN?", a longer
+#          memory than the state window's "current state" question. λ̂ itself
+#          needs no horizon (an event this old has already decayed to ~0 at
+#          H=30min); the horizon exists so recidivism has bounded, declared
+#          memory (ADR-0070 D4).
+#
+# H (the intensity half-life) and θ_press (the R1 firing threshold) are
+# code-declared in `firewatch_core.attempts` (ADR-0070 D5) — not here, since
+# `detector.py`/`attempts.py` cannot import this module (pipeline.py imports
+# `detect` from detector.py at module load time; the reverse import would be
+# circular). See `attempts.py`'s own named-constants block.
 #
 # The window is applied HERE, at the pipeline fetch/slice seam, and ONLY here:
 # run_rules/detect/decide stay pure functions with NO time-filtering logic of
-# their own. tests/golden calls them directly on in-memory lists — windowing
-# inside those functions would move the golden oracle (ADR-0070 D4).
+# their own — they never drop an event from consideration based on `now`.
+# tests/golden calls them directly on in-memory lists — windowing inside those
+# functions would move the golden oracle (ADR-0070 D4). R1's peak-intensity
+# check (issue #53) is not an exception to this: every attempt still
+# contributes to the decayed sum regardless of age (nothing is filtered out of
+# the input list); `now`/window only bound which time(s) the *maximum* is
+# evaluated over — the pipeline's `now` anchor is passed through to `detect()`
+# exactly as it already is to `run_rules`/`decide()` via the windowed slices.
 W_STATE = timedelta(hours=24)
 W_CAMPAIGN = timedelta(days=7)
 
@@ -666,8 +691,9 @@ class Pipeline:
 
         t_score_start = time.monotonic()
         rule_score, attack_types = run_rules(state_events)
-        # Cross-source correlation. Pure functions, fast.
-        detections = detect(campaign_events)
+        # Cross-source correlation. Pure functions, fast. `now` anchors R1
+        # attempt_pressure's peak-intensity check (ADR-0070 Revision 1, issue #53).
+        detections = detect(campaign_events, now=now)
         detection_boost = sum(d.score_delta for d in detections)
         t_score = _ms_since(t_score_start)
 

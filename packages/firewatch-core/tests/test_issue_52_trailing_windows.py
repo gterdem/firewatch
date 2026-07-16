@@ -100,7 +100,12 @@ def test_window_constants_values() -> None:
 
 async def test_recent_blocks_still_fire_brute_force_and_tier3() -> None:
     """Control: 10 blocked events 1h old (inside W_STATE) still score brute_force
-    and reach Tier 3 — proves the window doesn't merely zero everything out."""
+    and reach Tier 3 — proves the window doesn't merely zero everything out.
+
+    All 10 share one identical timestamp (simultaneous attempts), so decayed
+    intensity lambda_hat=10 >= theta_press=5 (issue #53, ADR-0070 Revision 1):
+    R1 attempt_pressure also fires, adding its own +15 detection_boost.
+    """
     events = [
         make_event(source_ip=IP, action="BLOCK", timestamp=NOW - timedelta(hours=1))
         for _ in range(10)
@@ -108,8 +113,9 @@ async def test_recent_blocks_still_fire_brute_force_and_tier3() -> None:
     store = FakeStore(events)
     score = await _pipeline(store).analyze_ip(IP)
 
-    assert score.score == 40, "brute_force(30) + persistence(10) = 40"
+    assert score.score == 55, "brute_force(30) + persistence(10) + attempt_pressure(15) = 55"
     assert "brute_force" in score.attack_types
+    assert any(d.rule_name == "attempt_pressure" for d in score.detections)
     assert score.escalation is not None
     assert score.escalation.tier == 3
     assert score.escalation.disposition == "blocked_persistent"
@@ -163,36 +169,44 @@ async def test_analyze_ip_detailed_windowed_to_state() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _sustained_attack_shape(base: datetime) -> list:  # type: ignore[no-untyped-def]
-    """10 BLOCK events spanning 36 minutes from *base* — the _sustained_attack shape."""
+def _multi_source_shape(base: datetime) -> list:  # type: ignore[no-untyped-def]
+    """2 events, 2 distinct source_types, 5 min apart from *base* — the
+    multi_source_attack shape. Used (rather than a `_sustained_attack`/R1
+    shape) because R1 `attempt_pressure` (issue #53, ADR-0070 Revision 1) is
+    itself anchored to a trailing 24h window measured from "now" — a burst
+    2+ days old falls OUTSIDE that window and would not demonstrate this
+    property. multi_source_attack has no such `now`-dependence, so it cleanly
+    demonstrates "detect() sees the full W_CAMPAIGN slice" independent of R1's
+    own additional time-anchoring.
+    """
     return [
-        make_event(source_ip=IP, action="BLOCK", timestamp=base + timedelta(minutes=4 * i))
-        for i in range(10)
+        make_event(source_ip=IP, source_type="suricata", timestamp=base),
+        make_event(source_ip=IP, source_type="syslog", timestamp=base + timedelta(minutes=5)),
     ]
 
 
 async def test_detect_sees_campaign_window_not_state_window() -> None:
     """AC2: events 2 days old are outside W_STATE (24h) but inside W_CAMPAIGN (7d) —
     run_rules sees nothing (state_events empty) while detect() still fires
-    sustained_attack from the campaign-window view. Proves the two windows are
-    applied independently, at their own respective call sites.
+    multi_source_attack from the campaign-window view. Proves the two windows
+    are applied independently, at their own respective call sites.
     """
-    events = _sustained_attack_shape(NOW - timedelta(days=2))
+    events = _multi_source_shape(NOW - timedelta(days=2))
     store = FakeStore(events)
     score = await _pipeline(store).analyze_ip(IP)
 
     assert score.attack_types == [], "run_rules must see an empty W_STATE slice"
-    assert any(d.rule_name == "sustained_attack" for d in score.detections), (
+    assert any(d.rule_name == "multi_source_attack" for d in score.detections), (
         "detect() must see the W_CAMPAIGN slice (2 days < 7 days) and fire "
-        "sustained_attack even though W_STATE excluded these events"
+        "multi_source_attack even though W_STATE excluded these events"
     )
-    assert score.score == 15, "rule_score(0) + detection_boost(15) = 15"
+    assert score.score == 10, "rule_score(0) + detection_boost(10) = 10"
 
 
 async def test_detect_excludes_events_older_than_campaign_horizon() -> None:
     """AC2: events 10 days old are outside BOTH W_STATE and W_CAMPAIGN — detect()
-    must not fire sustained_attack either."""
-    events = _sustained_attack_shape(NOW - timedelta(days=10))
+    must not fire multi_source_attack either."""
+    events = _multi_source_shape(NOW - timedelta(days=10))
     store = FakeStore(events)
     score = await _pipeline(store).analyze_ip(IP)
 
@@ -220,12 +234,19 @@ def test_run_rules_has_no_internal_time_filtering() -> None:
 
 
 def test_detect_has_no_internal_time_filtering() -> None:
+    """multi_source_attack (unlike R1 attempt_pressure, which is deliberately
+    anchored to `now` — issue #53) has no time-dependence at all, so it still
+    cleanly demonstrates that `detect()` never drops events by age on its own.
+    """
     events = [
-        make_event(source_ip=IP, action="BLOCK", timestamp=_ANCIENT + timedelta(minutes=4 * i))
-        for i in range(10)
+        make_event(source_ip=IP, source_type="suricata", timestamp=_ANCIENT),
+        make_event(
+            source_ip=IP, source_type="syslog",
+            timestamp=_ANCIENT + timedelta(minutes=5),
+        ),
     ]
     detections = detect(events)
-    assert any(d.rule_name == "sustained_attack" for d in detections), (
+    assert any(d.rule_name == "multi_source_attack" for d in detections), (
         "detect() must not filter by time — it is a pure function"
     )
 

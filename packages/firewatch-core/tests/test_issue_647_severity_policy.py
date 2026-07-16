@@ -227,10 +227,10 @@ class TestDetectorDeclaredSeverity:
             make_event(source_type="syslog", timestamp=T0 + timedelta(minutes=5), action="ALERT"),
         ]
 
-    def _make_sustained_attack_events(self):
+    def _make_attempt_pressure_events(self):
         return [
             make_event(action="BLOCK", timestamp=T0 + timedelta(minutes=4 * i))
-            for i in range(10)  # spans 36 min >= 30
+            for i in range(10)  # spans 36 min; decayed mass clears theta_press
         ]
 
     def _find(self, detections, rule_name):
@@ -266,9 +266,10 @@ class TestDetectorDeclaredSeverity:
         assert d is not None
         assert d.severity is not None
 
-    def test_sustained_attack_has_severity(self):
-        detections = detect(self._make_sustained_attack_events())
-        d = self._find(detections, "sustained_attack")
+    def test_attempt_pressure_has_severity(self):
+        events = self._make_attempt_pressure_events()
+        detections = detect(events, now=T0 + timedelta(minutes=36))
+        d = self._find(detections, "attempt_pressure")
         assert d is not None
         assert d.severity is not None
 

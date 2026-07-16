@@ -11,6 +11,7 @@ members = [
     "firewatch-clamav",
     "firewatch-cli",
     "firewatch-core",
+    "firewatch-linux-auth",
     "firewatch-sdk",
     "firewatch-suricata",
     "firewatch-syslog",
@@ -400,6 +401,7 @@ dev = [
     { name = "firewatch-clamav" },
     { name = "firewatch-cli" },
     { name = "firewatch-core" },
+    { name = "firewatch-linux-auth" },
     { name = "firewatch-sdk" },
     { name = "firewatch-suricata" },
     { name = "firewatch-syslog" },
@@ -423,6 +425,7 @@ dev = [
     { name = "firewatch-clamav", editable = "packages/sources/clamav" },
     { name = "firewatch-cli", editable = "packages/firewatch-cli" },
     { name = "firewatch-core", editable = "packages/firewatch-core" },
+    { name = "firewatch-linux-auth", editable = "packages/sources/linux_auth" },
     { name = "firewatch-sdk", editable = "packages/firewatch-sdk" },
     { name = "firewatch-suricata", editable = "packages/sources/suricata" },
     { name = "firewatch-syslog", editable = "packages/sources/syslog" },
@@ -544,6 +547,21 @@ requires-dist = [
     { name = "firewatch-sdk", editable = "packages/firewatch-sdk" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "maxminddb", specifier = ">=3.1.1" },
+    { name = "pydantic", specifier = ">=2.0" },
+]
+
+[[package]]
+name = "firewatch-linux-auth"
+version = "0.1.0"
+source = { editable = "packages/sources/linux_auth" }
+dependencies = [
+    { name = "firewatch-sdk" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "firewatch-sdk", editable = "packages/firewatch-sdk" },
     { name = "pydantic", specifier = ">=2.0" },
 ]
 

@@ -16,7 +16,12 @@ Oracle derivation (provenance):
   - ArcSight CEF Implementation Standard (field mapping)
   - RFC 5424 / RFC 3164 (framing)
   - ADR-0012 (action: WAF/IPS block->BLOCK/DROP, IDS->ALERT)
-  - OCSF schema https://schema.ocsf.io (class_uid 4001/4002, category_uid 4)
+  - OCSF 1.8.0 schema (https://schema.ocsf.io/api/1.8.0/classes, verified live
+    2026-07-16, issue #76): CEF network/HTTP paths -> class_uid 4001/4002,
+    category_uid 4 (Network Activity -- correct, untouched, Must-NOT per #76);
+    syslog fallback auth events -> class_uid 3002, category_uid 3
+    (Authentication / Identity & Access Management -- corrected by #76, was
+    wrongly 4001/4)
   - MITRE ATT&CK v15 T1110 / TA0006 (brute-force / credential-access)
 
 Test IPs: RFC 5737 documentation ranges ONLY (192.0.2.0/24, 198.51.100.0/24,
@@ -68,7 +73,8 @@ _FORTINET_LINE = (
 #   spt=54321 -> source_port (CEF Extension 'spt' key)
 #   dpt=443 -> destination_port (CEF Extension 'dpt' key)
 #   proto=TCP -> protocol (CEF Extension 'proto' key)
-#   OCSF 4001 = Network Activity, category 4 = Network Activity
+#   OCSF 4001 = Network Activity, category 4 = Network Activity -- CEF network path,
+#   correct and untouched by issue #76 (Must-NOT: pinned explicitly below).
 _ORACLE_FORTINET = {
     "action": "BLOCK",
     "severity": "high",
@@ -80,6 +86,7 @@ _ORACLE_FORTINET = {
     "rule_id": "1234",
     "rule_name": "traffic blocked",
     "source_type": "syslog_cef",
+    "ocsf_class": 4001,
     "ocsf_category": 4,
 }
 
@@ -120,6 +127,10 @@ class TestGoldenFortinetCEF:
     def test_source_type_constant(self) -> None:
         """source_type is always 'syslog_cef' (Flag B oracle)."""
         assert self.event.source_type == _ORACLE_FORTINET["source_type"]
+
+    def test_ocsf_class_network(self) -> None:
+        """Must-NOT (#76): CEF network events stay 4001 (Network Activity)."""
+        assert self.event.ocsf_class == _ORACLE_FORTINET["ocsf_class"]
 
     def test_ocsf_category(self) -> None:
         assert self.event.ocsf_category == _ORACLE_FORTINET["ocsf_category"]
@@ -286,7 +297,9 @@ _RFC5424_LINE = (
 #   -> severity=high (SSH brute-force is high severity)
 #   -> source_ip extracted from "from 198.51.100.5" in MSG
 #   -> MITRE T1110 / TA0006 / credential-access (ATT&CK v15)
-#   -> OCSF class_uid=4001 (Authentication Activity), category_uid=4
+#   -> OCSF class_uid=3002 (Authentication), category_uid=3 (Identity & Access
+#      Management) -- https://schema.ocsf.io/api/1.8.0/classes/authentication
+#      ("regardless of success"), corrected by issue #76 (was wrongly 4001/4).
 _ORACLE_RFC5424 = {
     "action": "ALERT",
     "severity": "high",
@@ -294,8 +307,8 @@ _ORACLE_RFC5424 = {
     "attack_technique": "T1110",
     "attack_tactic": "TA0006",
     "kill_chain_phase": "credential-access",
-    "ocsf_class": 4001,
-    "ocsf_category": 4,
+    "ocsf_class": 3002,
+    "ocsf_category": 3,
     "source_type": "syslog_cef",
 }
 
@@ -383,6 +396,53 @@ class TestGoldenRFC3164Fallback:
 
     def test_source_type_constant(self) -> None:
         assert self.event.source_type == _ORACLE_RFC3164["source_type"]
+
+
+# ---------------------------------------------------------------------------
+# Golden fixture 6: bare-line fallback -- unclassified -> Base Event (0/0)
+#
+# OCSF 1.8.0: category_uid 0 "Uncategorized" -- "a generic event that does not
+# belong to any event category". https://schema.ocsf.io/api/1.8.0/categories,
+# verified live 2026-07-16. Issue #76: previously hard-coded 6002/4, a
+# class/category pair no OCSF version defines (6002 is Application Lifecycle,
+# category 4 is Network Activity -- neither is 6's own category).
+# ---------------------------------------------------------------------------
+
+_UNCLASSIFIED_LINE = "gateway kernel: link status changed on eth0"
+
+_ORACLE_UNCLASSIFIED = {
+    "action": "LOG",
+    "severity": "info",
+    "category": "Syslog Event",
+    "ocsf_class": 0,
+    "ocsf_category": 0,
+    "source_type": "syslog_cef",
+}
+
+
+class TestGoldenUnclassifiedFallback:
+    """Golden oracle: bare-line fallback with no recognized pattern -> Base Event."""
+
+    def setup_method(self) -> None:
+        self.event = normalize(_raw(_UNCLASSIFIED_LINE), source_id=_SOURCE_ID)
+
+    def test_action(self) -> None:
+        assert self.event.action == _ORACLE_UNCLASSIFIED["action"]
+
+    def test_severity(self) -> None:
+        assert self.event.severity == _ORACLE_UNCLASSIFIED["severity"]
+
+    def test_category(self) -> None:
+        assert self.event.category == _ORACLE_UNCLASSIFIED["category"]
+
+    def test_ocsf_class(self) -> None:
+        assert self.event.ocsf_class == _ORACLE_UNCLASSIFIED["ocsf_class"]
+
+    def test_ocsf_category(self) -> None:
+        assert self.event.ocsf_category == _ORACLE_UNCLASSIFIED["ocsf_category"]
+
+    def test_source_type_constant(self) -> None:
+        assert self.event.source_type == _ORACLE_UNCLASSIFIED["source_type"]
 
 
 # ---------------------------------------------------------------------------

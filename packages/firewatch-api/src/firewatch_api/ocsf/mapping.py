@@ -137,6 +137,59 @@ DETECTION_FINDING_CATEGORY_UID: int = 2
 DETECTION_FINDING_TYPE_UID: int = 200401    # 2004 * 100 + 1
 
 # ---------------------------------------------------------------------------
+# Authentication (class_uid 3002) — activity_id (issue #80)
+# Source: live OCSF 1.8.0 schema, fetched 2026-07-16 via
+#   https://schema.ocsf.io/api/1.8.0/classes/authentication
+# Full activity_id enum: 0 Unknown, 1 Logon, 2 Logoff, 3 Authentication Ticket,
+#   4 Service Ticket Request, 5 Service Ticket Renew, 6 Preauth, 7 Account
+#   Switch, 99 Other.
+#
+# Every shipped 3002 emitter (linux_auth sshd/PAM/sudo, syslog, syslog_cef) is
+# an authentication attempt for a logon session — success/failure is encoded
+# in status_id (ADR-0071 D2 / issue #77), not activity_id. So the correct
+# activity_id is 1 "Logon" for all of them, not 6 "Preauth" (Preauth is a
+# Kerberos preauthentication stage — no shipped source emits that).
+# type_uid = 3002 * 100 + 1 = 300201.
+AUTHENTICATION_CLASS_UID: int = 3002
+AUTHENTICATION_ACTIVITY_ID: int = 1         # Logon
+AUTHENTICATION_TYPE_UID: int = 300201       # 3002 * 100 + 1
+
+# ---------------------------------------------------------------------------
+# Account Change (class_uid 3001) — activity_id (issue #80)
+# Source: live OCSF 1.8.0 schema, fetched 2026-07-16 via
+#   https://schema.ocsf.io/api/1.8.0/classes/account_change
+# Full activity_id enum: 0 Unknown, 1 Create, 2 Enable, 3 Password Change,
+#   4 Password Reset, 5 Disable, 6 Delete, 7 Attach Policy, 8 Detach Policy,
+#   9 Lock, 10 MFA Factor Enable, 11 MFA Factor Disable, 12 Unlock.
+#
+# The only shipped 3001 emitter (linux_auth's useradd_new_user) is an account
+# *creation* → activity_id 1 "Create" (not 6 "Delete").
+# type_uid = 3001 * 100 + 1 = 300101.
+ACCOUNT_CHANGE_CLASS_UID: int = 3001
+ACCOUNT_CHANGE_ACTIVITY_ID: int = 1         # Create
+ACCOUNT_CHANGE_TYPE_UID: int = 300101       # 3001 * 100 + 1
+
+# ---------------------------------------------------------------------------
+# Base Event (class_uid 0) and any class with no explicit branch — activity_id
+# Source: live OCSF 1.8.0 schema, fetched 2026-07-16 via
+#   https://schema.ocsf.io/api/1.8.0/classes/base_event
+# Full activity_id enum (Base Event only defines the two universal members):
+#   0 Unknown, 99 Other.
+#
+# 0 "Unknown" is valid in EVERY OCSF class's activity_id enum (all classes
+# derive it from Base Event), so it is also the correct fallback for any
+# ocsf_class the serializer has no explicit branch for — never a value
+# borrowed from another class's enum (e.g. Network Activity's 6 "Traffic").
+# type_uid for Base Event = 0 (not class_uid*100 + activity_id — 0*100+0 = 0
+# coincides, but Base Event's type_uid is defined as 0 "Base Event: Unknown").
+BASE_EVENT_CLASS_UID: int = 0
+BASE_EVENT_ACTIVITY_ID: int = 0             # Unknown
+BASE_EVENT_TYPE_UID: int = 0                # Base Event: Unknown
+
+# Generic "Unknown" fallback activity_id, valid in every OCSF class's enum.
+ACTIVITY_UNKNOWN: int = 0
+
+# ---------------------------------------------------------------------------
 # Class / category passthrough (per-event — read from SecurityEvent)
 # ---------------------------------------------------------------------------
 

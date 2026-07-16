@@ -31,13 +31,14 @@ Severity anchoring (Sigma ``level`` vocabulary):
   this alone never queues the actor — it is the low-intensity "on the record, keep watching"
   signal.
 - ``ssh_login_failure_intense`` — ``high`` / auto_escalate=True (issue #3 — **INTERIM**, see the
-  function's own docstring): ≥30 events within the same 10-minute window (≥3/min sustained) —
-  a genuinely active, high-intensity SSH brute force, not ambient noise. Declaring a qualifying
-  severity here routes it to Tier-2 through ADR-0067 D1(a)'s existing mechanism (unchanged: a
-  Detection with ``severity∈{high,critical}`` or ``auto_escalate=True`` reaches Tier 2). This
-  rule is a stopgap pending the redrafted attempt_pressure (#53) / campaign (#54) work, which
-  will supersede and retire it; its threshold is a provisional engineering estimate, not a
-  calibrated value.
+  function's own docstring): ≥45 events within the same 10-minute window — a genuinely active,
+  high-intensity SSH brute force, not ambient noise. Declaring a qualifying severity here routes
+  it to Tier-2 through ADR-0067 D1(a)'s existing mechanism (unchanged: a Detection with
+  ``severity∈{high,critical}`` or ``auto_escalate=True`` reaches Tier 2). This rule is a stopgap
+  pending the redrafted attempt_pressure (#53) / campaign (#54) work, which will supersede and
+  retire it; 45 is chosen to *agree* with that end-state model's queue bar (ADR-0070 Rev-1 /
+  issue #54, ``θ_high=40``), not as an independently-tuned constant — see the function's own
+  docstring for the derivation.
 
 Skill gate: ai-engine-invariants loaded before editing this file.
 """
@@ -125,18 +126,35 @@ def _emit(
 
 # ── Rule helpers ─────────────────────────────────────────────────────
 
+# INTERIM (issue #3 / PR #73 held batch, 2026-07-15): Tier-1 and IDS-corroboration
+# reachability, keyed on ``category`` string equality. PLUGIN_CONTRACT.md's
+# `category` field currently has NO enumerated vocabulary — each source plugin
+# invents its own strings — so a rule that matches on ONE source's spelling
+# (syslog's "SSH Brute Force"/"SSH Login") is unreachable from any other source
+# that expresses the same real-world event differently (linux_auth's "SSH Login
+# Failure"/"SSH Login Success"). These frozensets union the known spellings so
+# both rules below are reachable from every SSH-capable source, not just syslog.
+# The durable fix is ADR-0071 (an auth-outcome contract vocabulary), which
+# should retire this file-local synonym list entirely; this deliberately grows
+# the magic-string set in ONE core file so that ADR retires it in one place.
+_SSH_BRUTE_FORCE_CATEGORIES = frozenset({"SSH Brute Force", "SSH Login Failure"})
+_SSH_LOGIN_SUCCESS_CATEGORIES = frozenset({"SSH Login", "SSH Login Success"})
+
 
 def _ids_then_brute_force(events: list[SecurityEvent]) -> list[Detection]:
-    """≥1 Suricata IDS event coincides with ≥3 syslog SSH brute-force
-    events from the same IP within a 10-minute window.
+    """≥1 Suricata IDS event coincides with ≥3 SSH brute-force events from
+    the same IP within a 10-minute window.
+
+    The SSH leg keys on ``category`` alone (no ``source_type`` restriction):
+    "SSH Brute Force" (syslog/syslog_cef) and "SSH Login Failure" (linux_auth)
+    are each emitted by exactly one plugin family — verified no other source
+    emits either string — so dropping the source_type check does not widen
+    which events can match, only which *source* they may arrive from.
     """
     if not events:
         return []
     suricata = [e for e in events if e.source_type == "suricata"]
-    ssh_bf = [
-        e for e in events
-        if e.source_type == "syslog" and e.category == "SSH Brute Force"
-    ]
+    ssh_bf = [e for e in events if e.category in _SSH_BRUTE_FORCE_CATEGORIES]
     if not suricata or len(ssh_bf) < 3:
         return []
 
@@ -151,7 +169,7 @@ def _ids_then_brute_force(events: list[SecurityEvent]) -> list[Detection]:
                 score_delta=20,
                 reason=(
                     f"{len(suricata)} Suricata IDS alert(s) coincided with "
-                    f"{len(nearby)} syslog SSH brute-force events within 10 min"
+                    f"{len(nearby)} SSH brute-force events within 10 min"
                 ),
                 matched_event_ids=ids,
             )]
@@ -161,13 +179,18 @@ def _ids_then_brute_force(events: list[SecurityEvent]) -> list[Detection]:
 def _brute_force_then_login(events: list[SecurityEvent]) -> list[Detection]:
     """≥3 SSH brute-force events followed by ≥1 successful SSH login
     from the same IP within 30 minutes — possible credential compromise.
+
+    Both legs union the known category spellings across source families (see
+    ``_SSH_BRUTE_FORCE_CATEGORIES`` / ``_SSH_LOGIN_SUCCESS_CATEGORIES`` above)
+    so this — the product's flagship "you are already breached" Tier-1 path —
+    is reachable from linux_auth, not only syslog/syslog_cef.
     """
     bf = sorted(
-        [e for e in events if e.category == "SSH Brute Force"],
+        [e for e in events if e.category in _SSH_BRUTE_FORCE_CATEGORIES],
         key=lambda e: e.timestamp,
     )
     logins = sorted(
-        [e for e in events if e.category == "SSH Login"],
+        [e for e in events if e.category in _SSH_LOGIN_SUCCESS_CATEGORIES],
         key=lambda e: e.timestamp,
     )
     if len(bf) < 3 or not logins:
@@ -296,27 +319,35 @@ def _ssh_login_failure_burst(events: list[SecurityEvent]) -> list[Detection]:
 def _ssh_login_failure_intense(events: list[SecurityEvent]) -> list[Detection]:
     """**INTERIM rule — see below before touching this.**
 
-    >=30 "SSH Login Failure" ALERT events from one IP within the same
-    10-minute window as ``_ssh_login_failure_burst`` (≥3/min sustained) — a
-    genuinely active, high-intensity brute force, not the ambient scanner
-    background ``_ssh_login_failure_burst`` catches. Registered at
-    ``severity="high"``/``auto_escalate=True``, so a Detection from this rule
-    satisfies the ADR-0067 D1(a) Tier-2 gate — that gate mechanism (a
-    Detection with a qualifying severity reaches Tier 2) is Accepted and
-    unchanged; only this rule's OWN existence is new.
+    >=45 "SSH Login Failure" ALERT events from one IP within the same
+    10-minute window as ``_ssh_login_failure_burst`` — a genuinely active,
+    high-intensity brute force, not the ambient scanner background
+    ``_ssh_login_failure_burst`` catches. Registered at ``severity="high"``/
+    ``auto_escalate=True``, so a Detection from this rule satisfies the
+    ADR-0067 D1(a) Tier-2 gate — that gate mechanism (a Detection with a
+    qualifying severity reaches Tier 2) is Accepted and unchanged; only this
+    rule's OWN existence is new.
 
     **This is a stopgap, not settled design.** It exists only because the
     real owner of "distinguish ambient volume from an active attack" — the
     redrafted attempt_pressure (#53) and campaign (#54) correlation work — has
     not landed yet. Once it does, it supersedes and retires this function;
-    do not extend or generalize this rule in the meantime. The 30-events/
-    10-minutes threshold is a provisional engineering estimate (chosen only
-    to make a materially faster cadence than the 5/10min ambient case), NOT a
-    calibrated value — the live capture that #53/#54 are built against sets
-    the real one.
+    do not extend or generalize this rule in the meantime.
+
+    **Why 45, not a round number:** the end-state model (ADR-0070 Rev-1 /
+    issue #54) scores an actor by a decaying intensity λ̂ with a 30-minute
+    half-life and queues once λ̂ reaches θ_high=40. A uniform 30-events/
+    10-minutes burst peaks at λ̂ ≈ 26.8 — below θ_high — so a ≥30 interim rule
+    would queue actors the end state deliberately excludes, and they would
+    un-queue the moment #53/#54 land (a regression manufactured by this very
+    stopgap). At ≥45 the worst case (all 45 events packed into the 10-minute
+    window) peaks at λ̂ ≈ 40.2 ≥ 40, so interim and end-state agree at the
+    boundary. 45 is picked to match θ_high under that model, not as an
+    independently-tuned constant — the live capture that #53/#54 are built
+    against still sets the real end-state numbers.
     """
     failures = _ssh_login_failure_events(events)
-    if len(failures) < 30:
+    if len(failures) < 45:
         return []
     span = failures[-1].timestamp - failures[0].timestamp
     if span > timedelta(minutes=10):

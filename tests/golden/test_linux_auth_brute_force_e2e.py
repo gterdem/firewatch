@@ -18,13 +18,15 @@ halves of that split, not just the flood-safe one.
 EARS-criteria coverage (issue #3, as amended)
 ──────────────────────────────────────────────
 AC4  WHEN a genuinely intense burst of failed SSH logins from one IP arrives
-     (>=30 in 10 min — an active attack, not ambient scanner noise), the
+     (>=45 in 10 min — an active attack, not ambient scanner noise), the
      interim ``ssh_login_failure_intense`` correlation SHALL fire with
      declared severity=high/auto_escalate=True, so the actor passes the
-     ADR-0067 Tier-2 gate.
+     ADR-0067 Tier-2 gate. (Threshold raised 30→45, PR #73 held batch: 45 is
+     chosen to agree with the end-state intensity model's θ_high=40 —
+     see ``detector.py``'s ``_ssh_login_failure_intense`` docstring.)
      → TestIntenseBruteForceDemo.test_intense_burst_reaches_tier_2
 
-AC4'  WHEN only an AMBIENT burst arrives (5-29 in 10 min — fail2ban's own
+AC4'  WHEN only an AMBIENT burst arrives (5-44 in 10 min — fail2ban's own
      default cadence, ordinary internet-exposed background), the actor
      SHALL NOT reach Tier 2 — this is the flood the milestone exists to drain.
      → TestAmbientBurstStaysOffQueue.test_ambient_burst_stays_observed
@@ -71,12 +73,12 @@ def _failed_login_raw(offset_seconds: float) -> RawEvent:
 
 
 class TestIntenseBruteForceDemo:
-    """A scripted, genuinely active brute force: 32 failed logins in ~62
-    seconds (>=3/min sustained, well over the interim 30-in-10-min threshold)
-    — Galip's motivating case (50/min) trips this even faster."""
+    """A scripted, genuinely active brute force: 46 failed logins in ~90
+    seconds, well over the interim 45-in-10-min threshold — Galip's
+    motivating case (50/min) trips this even faster."""
 
     def test_intense_burst_reaches_tier_2(self):
-        raws = [_failed_login_raw(offset_seconds=2 * i) for i in range(32)]
+        raws = [_failed_login_raw(offset_seconds=2 * i) for i in range(46)]
         events = [normalize(raw, _SOURCE_ID) for raw in raws]
 
         # ADR-0069 D4(e): a failed SSH login is ALERT/low — never fabricated
@@ -91,8 +93,8 @@ class TestIntenseBruteForceDemo:
             (d for d in detections if d.rule_name == "ssh_login_failure_intense"), None
         )
         assert detection is not None, (
-            "ssh_login_failure_intense did not fire for a 32-event burst in "
-            "62 seconds — an active brute force would not surface"
+            "ssh_login_failure_intense did not fire for a 46-event burst in "
+            "90 seconds — an active brute force would not surface"
         )
         assert detection.severity == "high"
         assert detection.auto_escalate is True

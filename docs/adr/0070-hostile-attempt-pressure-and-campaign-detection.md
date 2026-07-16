@@ -1,9 +1,11 @@
 # ADR-0070: Hostile-Attempt Intensity — Pressure, Attack-in-Progress, and Campaign Detection
 
 **Date:** 2026-07-15 (Revision 1: 2026-07-16)
-**Status:** Proposed — Revision 1 approved in intent by the Maintainer (2026-07-15, verbatim:
-"Approve the ADR-0070 intensity revision"); this text awaits his final read before acceptance
-and commit.
+**Status:** Accepted (2026-07-16) — Revision 1 read and approved by the Maintainer (verbatim:
+"I read the ADR changes and I approve them"), superseding the first draft wholesale. Coupled
+with ADR-0069 (still Proposed): D8's fixed landing order stands — neither half ships alone.
+Amendable on evidence; the D5 falsifiers and the ADR-0068 D3 live calibration pass are the
+named mechanisms, and a live-testing finding is an amendment, not a reopening.
 
 **Revision 1** replaces the first draft's queue-entry machinery — D2's two-arm
 volume-in-window rule and D3's quiet-gap episode segmentation — with an **intensity (rate)

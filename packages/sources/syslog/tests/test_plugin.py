@@ -493,32 +493,57 @@ class TestNormalizeMitre:
 
 
 class TestNormalizeOCSF:
-    """EARS-4c — ocsf_class/ocsf_category populated per ADR-0020 / OCSF schema."""
+    """EARS-4c — ocsf_class/ocsf_category populated per OCSF 1.8.0 (issue #76).
+
+    Source: https://schema.ocsf.io/api/1.8.0/classes/authentication (class_uid
+    3002 "Authentication", category_uid 3 "Identity & Access Management",
+    "regardless of success"); https://schema.ocsf.io/api/1.8.0/categories
+    (category_uid 0 "Uncategorized" — "a generic event that does not belong to
+    any event category"), verified live 2026-07-16.
+    """
 
     def setup_method(self) -> None:
         from firewatch_syslog.plugin import SyslogSource
 
         self.plugin = SyslogSource()
 
-    def test_ssh_brute_force_ocsf_class_is_4001(self) -> None:
-        """SSH brute-force → ocsf_class=4001 (Authentication Activity, OCSF class_uid)."""
+    def test_ssh_brute_force_ocsf_class_is_3002(self) -> None:
+        """SSH brute-force → ocsf_class=3002 (Authentication)."""
         raw = _raw(_rfc3164_ssh_bruteforce())
         event = self.plugin.normalize(raw, source_id="pi-syslog")
-        assert event.ocsf_class == 4001
+        assert event.ocsf_class == 3002
 
-    def test_ssh_brute_force_ocsf_category_is_4(self) -> None:
-        """SSH brute-force → ocsf_category=4 (Identity & Access Management)."""
+    def test_ssh_brute_force_ocsf_category_is_3(self) -> None:
+        """SSH brute-force → ocsf_category=3 (Identity & Access Management)."""
         raw = _raw(_rfc3164_ssh_bruteforce())
         event = self.plugin.normalize(raw, source_id="pi-syslog")
-        assert event.ocsf_category == 4
+        assert event.ocsf_category == 3
 
-    def test_generic_syslog_ocsf_fields(self) -> None:
-        """Generic syslog → ocsf_class=6002 (File System Activity or System Activity)."""
+    def test_ssh_login_ocsf_class_is_3002(self) -> None:
+        """SSH accepted login → ocsf_class=3002 (Authentication) — "regardless of success"."""
+        raw = _raw(_rfc5424_ssh_login())
+        event = self.plugin.normalize(raw, source_id="pi-syslog")
+        assert event.ocsf_class == 3002
+        assert event.ocsf_category == 3
+
+    def test_sudo_failure_ocsf_class_is_3002(self) -> None:
+        """Sudo authentication failure → ocsf_class=3002 (Authentication)."""
+        raw = _raw(_rfc3164_sudo_failure())
+        event = self.plugin.normalize(raw, source_id="pi-syslog")
+        assert event.ocsf_class == 3002
+        assert event.ocsf_category == 3
+
+    def test_generic_syslog_ocsf_class_is_0(self) -> None:
+        """Unclassified 'Syslog Event' → ocsf_class=0 (Base Event), not 6002."""
         raw = _raw(_rfc3164_generic())
         event = self.plugin.normalize(raw, source_id="pi-syslog")
-        # Generic syslog falls into System Activity (6002) or None — just verify not crash
-        # OCSF 6002 = System Activity, category 6 = Application Activity
-        assert event.ocsf_class is not None or event.ocsf_class is None  # type-safe no-raise
+        assert event.ocsf_class == 0
+
+    def test_generic_syslog_ocsf_category_is_0(self) -> None:
+        """Unclassified 'Syslog Event' → ocsf_category=0 (Uncategorized), not 6."""
+        raw = _raw(_rfc3164_generic())
+        event = self.plugin.normalize(raw, source_id="pi-syslog")
+        assert event.ocsf_category == 0
 
 
 # ---------------------------------------------------------------------------

@@ -1,14 +1,14 @@
 # ADR-0071: The Auth-Outcome Contract Vocabulary — `SecurityEvent.outcome`, Outcome-Keyed Correlation, and the Demotion of `category` from Routing Surface
 
 **Date:** 2026-07-16
-**Status:** Proposed — **Revision 1 (2026-07-16)**: every file:line claim re-verified against
-merged main (PR #73 = `a935f33`); the draft's anti-registry reason (1) was falsified by an
-adversarial review and is retracted (see Provenance); D5 rescoped to what is actually left on
+**Status:** Accepted (2026-07-16) — **Revision 1** read and approved by the Maintainer
+(verbatim: "I read the ADR changes and I approve them"). Every file:line claim was re-verified
+against merged main (PR #73 = `a935f33`); the draft's anti-registry reason (1) was falsified by
+an adversarial review and is retracted (see Provenance); D5 rescoped to what is actually left on
 main and reconciled with issue #76. **The direction — D1/D3, the field — is unchanged**; this
-is a truth-and-evidence revision, not a reversal. Same review batch as ADR-0070 Revision 1 and
-the ADR-0059 A1 corrections; awaiting the Maintainer's read. One sub-decision (D5, the OCSF
-class correction) is already Maintainer-settled by direct ruling (2026-07-16) and is recorded
-here, not reopened.
+is a truth-and-evidence revision, not a reversal. D5 (the OCSF class correction) was separately
+Maintainer-settled by direct ruling (2026-07-16) and ships independently as #76.
+Implementing issues: #76 (M1) · #77 (M3, the field) · #78 (M3, rule generalization).
 
 **Corrects (conformance, not design):** the OCSF class assignments in `firewatch_syslog` and
 `firewatch_syslog_cef` (fallback path) — wrong against the OCSF 1.8.0 schema ADR-0040 pins

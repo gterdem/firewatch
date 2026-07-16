@@ -29,10 +29,20 @@ CEF field -> SecurityEvent mapping (ArcSight CEF standard dictionary):
   requestClientApp -> http_user_agent (ADR-0048)
   dhost / deviceDnsName -> http_host (ADR-0048)
 
-OCSF alignment (ADR-0020):
+OCSF alignment (OCSF 1.8.0, https://schema.ocsf.io/api/1.8.0/classes, verified live
+2026-07-16 -- issue #76 conformance correction):
   CEF network events -> class_uid=4001 (Network Activity), category_uid=4
+    -- correct and unchanged: these ARE network-layer telemetry (Must-NOT, #76).
   CEF with HTTP fields -> class_uid=4002 (HTTP Activity), category_uid=4
-  Syslog fallback auth events -> class_uid=4001, category_uid=4
+    -- correct and unchanged.
+  Syslog fallback auth events (SSH Brute Force / SSH Login / Sudo Failure) ->
+    class_uid=3002 (Authentication), category_uid=3
+    -- https://schema.ocsf.io/api/1.8.0/classes/authentication: "regardless of
+    success". Previously 4001/4 (Network Activity) -- wrong; corrected here.
+  Syslog fallback generic/unclassified event -> class_uid=0 (Base Event),
+    category_uid=0 (Uncategorized) -- previously hard-coded 6002 (Application
+    Lifecycle, not File System Activity as the old comment claimed) with a
+    hard-coded category_uid=4, a class/category pair no OCSF version defines.
 
 CEF severity banding (ArcSight CEF Implementation Standard, Severity field):
   0-3  -> low
@@ -64,10 +74,22 @@ logger = logging.getLogger("firewatch.syslog_cef.normalize")
 SOURCE_TYPE: str = "syslog_cef"
 
 # OCSF class/category for network flow events (class_uid 4001 = Network Activity).
-# Source: https://schema.ocsf.io/1.0.0/classes/network_activity
+# Source: https://schema.ocsf.io/api/1.8.0/classes/network_activity
+# CEF network/HTTP paths -- correct and untouched by issue #76 (Must-NOT).
 _OCSF_CLASS_NETWORK = 4001
 _OCSF_CLASS_HTTP = 4002      # HTTP Activity
 _OCSF_CATEGORY_NETWORK = 4  # Network Activity category
+
+# OCSF class/category for the syslog FALLBACK path (issue #76 conformance
+# correction -- these are auth/unclassified events, never network telemetry).
+# Source: https://schema.ocsf.io/api/1.8.0/classes/authentication ("regardless
+# of success") and https://schema.ocsf.io/api/1.8.0/categories (category_uid 0
+# "Uncategorized" -- "a generic event that does not belong to any event
+# category").
+_OCSF_CLASS_AUTH = 3002          # Authentication
+_OCSF_CATEGORY_AUTH = 3          # Identity & Access Management
+_OCSF_CLASS_BASE_EVENT = 0       # Base Event
+_OCSF_CATEGORY_UNCATEGORIZED = 0  # Uncategorized
 
 # Syslog fallback: SSH brute-force pattern (reuses logic from firewatch_syslog).
 # MITRE ATT&CK T1110 / TA0006 (Credential Access / Brute Force).
@@ -252,7 +274,8 @@ def _normalize_syslog_fallback(
         attack_technique = "T1110"
         attack_tactic = "TA0006"
         kill_chain_phase = "credential-access"
-        ocsf_class = 4001
+        ocsf_class = _OCSF_CLASS_AUTH
+        ocsf_category = _OCSF_CATEGORY_AUTH
     else:
         m2 = _SSH_LOGIN_RE.search(msg)
         if m2:
@@ -260,7 +283,8 @@ def _normalize_syslog_fallback(
             action = "LOG"
             severity = "info"
             category = "SSH Login"
-            ocsf_class = 4001
+            ocsf_class = _OCSF_CLASS_AUTH
+            ocsf_category = _OCSF_CATEGORY_AUTH
         elif _SUDO_FAIL_RE.search(msg):
             m3 = _FROM_IP_RE.search(msg)
             source_ip = m3.group(1) if m3 else client_ip
@@ -270,14 +294,16 @@ def _normalize_syslog_fallback(
             attack_technique = "T1078"
             attack_tactic = "TA0004"
             kill_chain_phase = "privilege-escalation"
-            ocsf_class = 4001
+            ocsf_class = _OCSF_CLASS_AUTH
+            ocsf_category = _OCSF_CATEGORY_AUTH
         else:
             m4 = _FROM_IP_RE.search(msg)
             source_ip = m4.group(1) if m4 else client_ip
             action = "LOG"
             severity = "info"
             category = "Syslog Event"
-            ocsf_class = 6002
+            ocsf_class = _OCSF_CLASS_BASE_EVENT
+            ocsf_category = _OCSF_CATEGORY_UNCATEGORIZED
 
     from datetime import datetime
     ts = received_at if isinstance(received_at, datetime) else None
@@ -294,7 +320,7 @@ def _normalize_syslog_fallback(
         attack_tactic=attack_tactic,
         kill_chain_phase=kill_chain_phase,
         ocsf_class=ocsf_class,
-        ocsf_category=4,
+        ocsf_category=ocsf_category,
         payload_snippet=line[:500] if line else None,
         raw_log=raw_data,
     )

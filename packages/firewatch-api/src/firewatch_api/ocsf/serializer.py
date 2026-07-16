@@ -51,11 +51,27 @@ def _metadata(
 def _resolve_class_uid(event: SecurityEvent) -> tuple[int, int]:
     """Return (class_uid, category_uid) from the event's ocsf_class/ocsf_category.
 
-    Falls back to OCSF Network Activity (4001/4) when the fields are not set.
-    Source: ADR-0020 — ocsf_class/ocsf_category are set at normalize time by each plugin.
+    Falls back to OCSF Network Activity (4001/4) only when the fields are UNSET
+    (``None``). Source: ADR-0020 — ocsf_class/ocsf_category are set at normalize
+    time by each plugin.
+
+    Deliberate ``is not None`` check (issue #76 — falsy-zero fix): OCSF class_uid
+    ``0`` (Base Event, https://schema.ocsf.io/api/1.8.0/categories — category_uid 0
+    "Uncategorized") is a legitimate, honestly-emitted value (e.g. syslog's and
+    syslog_cef's unclassified-line fallback, linux_auth's unclassified row). Python
+    truthiness treats ``0`` as falsy, so the previous ``event.ocsf_class or
+    mapping.SURICATA_NET_CLASS_UID`` silently rewrote every such event to 4001/4
+    (Network Activity) on export — live-firing today for linux_auth's merged 0/0
+    rows. ``is not None`` fixes this without changing the None-fallback behavior.
     """
-    class_uid = event.ocsf_class or mapping.SURICATA_NET_CLASS_UID    # 4001 fallback
-    category_uid = event.ocsf_category or mapping.SURICATA_NET_CATEGORY_UID  # 4 fallback
+    class_uid = (
+        event.ocsf_class if event.ocsf_class is not None else mapping.SURICATA_NET_CLASS_UID
+    )
+    category_uid = (
+        event.ocsf_category
+        if event.ocsf_category is not None
+        else mapping.SURICATA_NET_CATEGORY_UID
+    )
     return class_uid, category_uid
 
 

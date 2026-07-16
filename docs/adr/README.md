@@ -11,7 +11,7 @@ number. One decision per file. Keep them small.
 **Phase sequencing** (which ADRs land in which release phase) lives in
 [`../ROADMAP.md`](../ROADMAP.md). The ADRs here are the *decisions*; the ROADMAP is the *order*.
 
-**Next ADR number:** 0071
+**Next ADR number:** 0072
 
 | ADR | Title | Status | File |
 |-----|-------|--------|------|
@@ -81,7 +81,8 @@ number. One decision per file. Keep them small.
 | 0064 | App-Wide Live Refresh — One Shared Heartbeat, `dataVersion` Signal, Auto-Refresh-vs-Deferred-Pill by Page Type | Proposed | [0064-app-wide-live-refresh-shared-heartbeat.md](0064-app-wide-live-refresh-shared-heartbeat.md) |
 | 0065 | Local-First Endpoint Collection & Solo/Hub Topology — journald-First SDK Readers, Cursor-Based Resume | Accepted (complements ADR-0021) | [0065-local-first-endpoint-collection-solo-hub-topology.md](0065-local-first-endpoint-collection-solo-hub-topology.md) |
 | 0066 | Honest AI State Model — Administrative vs Operational State, One Closed `ai_status` Vocabulary | Proposed (refines ADR-0022, ADR-0035 §4) | [0066-honest-ai-state-model-admin-vs-operational.md](0066-honest-ai-state-model-admin-vs-operational.md) |
-| 0067 | Assertion-Gated Triage Entry + the `observed` Stratum — Tier 2 Requires a Qualifying Signal | Accepted (partially supersedes ADR-0058 D2; D5(1) corrected by ADR-0070 D7) | [0067-assertion-gated-triage-entry-observed-stratum.md](0067-assertion-gated-triage-entry-observed-stratum.md) |
+| 0067 | Assertion-Gated Triage Entry + the `observed` Stratum — Tier 2 Requires a Qualifying Signal | Accepted (partially supersedes ADR-0058 D2; D5(1) corrected by ADR-0070 D7; Amendment 1 proposed — `enforce`-cell label + "rare" correction) | [0067-assertion-gated-triage-entry-observed-stratum.md](0067-assertion-gated-triage-entry-observed-stratum.md) |
 | 0068 | The Volume Oracle — Usability Invariants at Realistic Event Volume as a Deterministic CI Gate | Proposed | [0068-volume-oracle-usability-invariants-at-realistic-volume.md](0068-volume-oracle-usability-invariants-at-realistic-volume.md) |
 | 0069 | Canonical Severity Semantics — Sigma-Anchored Behavioral Definitions for `SecurityEvent.severity` + the Per-Source Mapping Discipline | Proposed (coupled with ADR-0070) | [0069-canonical-severity-semantics-sigma-anchored.md](0069-canonical-severity-semantics-sigma-anchored.md) |
-| 0070 | Hostile-Attempt Pressure and Campaign Detection — Windowed, Disposition-Agnostic Persistence Scoring | Proposed (coupled with ADR-0069; corrects ADR-0067 D5(1)) | [0070-hostile-attempt-pressure-and-campaign-detection.md](0070-hostile-attempt-pressure-and-campaign-detection.md) |
+| 0070 | Hostile-Attempt Intensity — Pressure, Attack-in-Progress, and Campaign Detection (Revision 1) | Proposed (coupled with ADR-0069/0071; corrects ADR-0067 D5(1)) | [0070-hostile-attempt-pressure-and-campaign-detection.md](0070-hostile-attempt-pressure-and-campaign-detection.md) |
+| 0071 | The Auth-Outcome Contract Vocabulary — `SecurityEvent.outcome`, Outcome-Keyed Correlation, Category Demoted from Routing | Proposed (Revision 1, 2026-07-16 — re-verified against merged main; anti-registry reason (1) retracted, direction unchanged; same batch as ADR-0070 Rev 1; D5 Maintainer-settled → issue #76) | [0071-auth-outcome-contract-vocabulary.md](0071-auth-outcome-contract-vocabulary.md) |

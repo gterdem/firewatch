@@ -384,6 +384,26 @@ is needed. (A dedicated recidivism/campaign correlation rule that consumes this 
 horizon is a follow-up, not part of this window mechanism itself — see
 [ADR-0070](adr/0070-hostile-attempt-pressure-and-campaign-detection.md) §D2/§D3.)
 
+**Two interim brute-force rules (in place today, scheduled for replacement).** Until the
+intensity rules described in ADR-0070 ship (issues #53/#54), two stopgap correlation rules
+watch failed SSH logins from a single IP, as reported by the Linux auth log source:
+
+- `ssh_login_failure_burst` — **5 or more failed SSH logins within 10 minutes**. Raises the
+  actor's score so the pattern is visible on the dashboard, but never queues the actor by
+  itself: this is the same cadence as fail2ban's default trip point — ordinary internet
+  background noise on any exposed SSH port.
+- `ssh_login_failure_intense` — **45 or more failed SSH logins within 10 minutes**. This is an
+  active, high-intensity brute force, not background noise, so the actor **is queued in
+  [the Triage banner (§4)](#4-the-triage-banner) through
+  [the assertion gate (§2.1)](#21-the-assertion-gate-and-the-observed-stratum)**. If an actor
+  appeared in your queue citing this rule, that is what happened: something hammered your SSH
+  port at least 45 times inside ten minutes.
+
+Both rules are marked interim in the code and are retired when their replacements land —
+issue #53 (`attempt_pressure` replaces the burst rule) and issue #54 (`attack_in_progress`
+replaces the intense rule). The replacement thresholds were derived so the handover does not
+change who queues.
+
 ---
 
 ## 8. Why you don't need to tune this

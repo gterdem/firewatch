@@ -278,6 +278,163 @@ keeps chat quiet by default. Zero score movement, no contract break beyond one a
 - The `ai-engine-invariants` skill still governs any touch of the AI path; this ADR touches the
   notification gate, the confidence label/exposure, and IA — not score math.
 
+## Amendment 1 (2026-07-15, A1.2 revised 2026-07-16): escalation-aware notifications ON by default; notification model stays on/off + threat level, per-state preferences deferred; OS push deferred
+
+**Status:** Accepted — direct Maintainer decision (2026-07-15, verbatim intent recorded below).
+House rule honoured: D3's text above is never edited; this amendment supersedes its *default*
+(and only its default). Implementing issue: **#74**. Coupled with ADR-0070 Revision 1 (the
+intensity states this default serves).
+
+### The decision (Maintainer, verbatim intent)
+
+- **HIGH ALERT** (an actor in the escalation tiers — ADR-0070 R2/R3, and Tier 1): *"notification
+  should be done; by default, it can be discord/slack hook (or email in the future)."*
+- **INFORM** (observed-stratum activity): *"no notification by default — but it should be
+  customizable. If someone wants to get slack/discord notification on INFORM, they should be
+  able to."*
+- **OS/desktop push:** *"can be implemented in the future, not now."*
+
+### A1.1 — `notify_on_auto_escalate` defaults to `True`
+
+The D3 toggle's default flips OFF → ON: when a webhook is configured, the notifier uses the
+full `is_alert_worthy(threat, notification_threshold)` predicate (band OR tier ≤ 2) without
+opt-in. Existing persisted configs keep their stored value — only the default for absent
+values changes (no migration). The band half (`alert_threshold`, default CRITICAL) is
+unchanged.
+
+**Why the original default no longer holds (the premise moved, not the reasoning).** D3 chose
+OFF because *"auto-escalation fires on `tier ≤ 2` (every allowed-through and every alert/log-only
+detection)"* — true when written, and notifying that population would have flooded chat. The
+ADR-0067 assertion gate (merged in #42) changed the distribution the default was calibrated
+against: Tier 2 now requires a qualifying assertion, so **the set of actors eligible to notify
+equals the triage-queue population by construction**. The queue's flood controls (ADR-0067's
+gate, ADR-0070's queue bar, ADR-0068's tripwire) are now the notification path's flood controls
+too — one set of numbers, one oracle. A HIGH ALERT that reaches only a browser tab at 3am warns
+no one; post-gate, the quiet-chat property is preserved by the gate, not by the toggle.
+
+**Correction (2026-07-16 ruling, this batch): stock vs. flow — the gate bounds the SET, not the
+CADENCE.** An earlier draft of the paragraph above said "notification volume equals triage-queue
+volume"; that conflates a stock with a flow. The queue is a *population* (which actors qualify
+right now); notification firing is a *rate* (how often the notifier is invoked for them) — and
+today the rate is unbounded by anything the gate controls. Mechanics, verified in code:
+`webhook_notifier.check_and_alert` is **stateless** — gate, then post; no dedup, no cooldown, no
+memory of having notified (`webhook_notifier.py`, whole file). Its caller,
+`pipeline.background_analyze_and_alert`, is scheduled **per ingested event** on `POST /logs`
+(`ingest.py:232`) and per distinct source IP per batch on `POST /logs/batch` (`ingest.py:308`).
+Consequence: an actor that *stays* in the queue re-notifies on every ingest-triggered analysis —
+the Maintainer's 50/min brute force, pushed one event at a time, is **~50 webhook posts per
+minute for the duration of the attack**. Note this is not a defect A1.1 creates: the band path
+already repeat-fires today under the same statelessness (a CRITICAL-band actor re-notifies on
+every analysis via `band_meets`); flipping the default extends the exposure to the tier axis
+and to a population that, post-ADR-0070, is *designed* to be in the queue for hours.
+
+**Firing cadence is therefore #74's transition semantics, in scope with the flip — for both
+axes:** the notifier fires when an actor's alert-worthiness state *transitions* (enters a tier /
+first crosses the band threshold / worsens), never on re-evaluation of an unchanged state.
+**Must-NOT: an actor continuously in the queue (or continuously above the band threshold) MUST
+NOT re-notify on every ingest-triggered analysis under default config.** The default flip does
+not land without this; ON-by-default with a per-event cadence would be the chat flood D3's
+original OFF was protecting against, rebuilt out of the notifier's own statelessness.
+
+**Falsifier:** if a real ambient night produces more than the ADR-0068 D2-2 tripwire (10) of
+notifications under default config, the defect is in the **queue bar** (ADR-0070 D5's
+constants), not in this default — fix the bar, do not flip the default back. Flipping the
+default back would hide a flooding queue behind a silent channel.
+**Precondition (2026-07-16):** this falsifier is well-defined only once #74's transition
+semantics exist. Without them, counting notifications counts *ingest events* (stock-vs-flow
+correction above), and an ambient night could trip the wire through notifier cadence while the
+queue bar is perfectly calibrated — indicting the wrong component. Run the falsifier against
+transition-deduplicated notifications only.
+
+### A1.2 — Notification model for now: on/off + operator-selected threat level; per-state preferences deferred as a whole (revised 2026-07-16)
+
+**Ruling (Maintainer, 2026-07-16, verbatim):**
+
+> "Notification can be something turned on and turned off. Also users should be able to select
+> on what level of threat they may want to be notified. Right now, lets keep it that way. We
+> will work on notification system in detail later."
+
+**The interim model (what main has today — verified in code, 2026-07-16):**
+
+- **Level:** `alert_threshold` (`firewatch_sdk/config.py:94-97`, default `CRITICAL`) is the
+  operator-selected threat level, consumed by the notifier's band gate
+  (`webhook_notifier.py:220-223`). This knob already exists and is the ruling's "select on
+  what level of threat."
+- **On/off:** there is **no explicit enable/disable field** — verified: `RuntimeConfig`
+  (`config.py:94-124`) has no `notifications_enabled`. "Off" today means `webhook_url` is
+  unset (`config.py:111-114`, default `None`; the notifier returns without posting when the
+  URL is absent — `webhook_notifier.py:226-228`). The on/off is *implicit in the URL's
+  presence*. Recorded plainly as the interim rather than claiming a switch exists; an
+  explicit switch, if one is wanted, belongs to the deferred effort below.
+
+**Per-state notification preferences are deferred as a whole.** An earlier draft of this
+section recorded only a narrow future requirement (INFORM → webhook opt-in, "filed when the
+\#53 pressure surface exists"). The 2026-07-16 ruling supersedes that framing: the ADR-0070 D3
+operator vocabulary (CRITICAL / HIGH ALERT / INFORM) has **no per-state notification surface**
+today — CRITICAL and HIGH ALERT are both `tier <= 2` and collapse into the single
+`notify_on_auto_escalate` bool — and making the three states independently subscribable is
+deferred **whole** to a dedicated notification-system design effort ("we will work on
+notification system in detail later"). No design implied here; no issue filed now (the A1.3
+D-shape). **Stated interim:** until that effort, INFORM is visible on the dashboard / pressure
+strip, and the only notification controls are the two above.
+
+**Correction (2026-07-16, this batch): the previous "INFORM never notifies under default
+config" was overstated — the tier axis never fires for INFORM, but the band axis stays live.**
+Mechanics, verified on main:
+
+- *Tier axis:* an observed actor (`tier=None`) casts no tier vote in `is_alert_worthy`
+  (`escalation/worthiness.py:111-117`), and today's default notifier gate is band-only anyway
+  (`webhook_notifier.py:220-223` with `notify_on_auto_escalate=False`). INFORM never notifies
+  **via the tier axis**, under any config. That half of the claim holds.
+- *Band axis:* an observed actor **can** reach CRITICAL today. `tier=None` requires zero
+  BLOCK/DROP events (`escalation/decider.py:198-205`), which forecloses `brute_force`,
+  `persistence`, **and the AI boost** (`build_samples` groups only BLOCK/DROP events —
+  `scoring.py:140-143`; `analyze_ip` invokes the AI only when samples are non-empty —
+  `pipeline.py:686-688`). But `port_scan` (+25) counts all events' ports
+  (`scoring.py:106-109`), and SQLi/XSS signatures scan **all** events at disposition weight
+  0.75 (ALERT/LOG) or 1.0 (ALLOW) (`scoring.py:66-72, 113-125`): an unqualified
+  payload-bearing population reaches 81 (ALERT/LOG) or 100 (ALLOW-only with no detections) —
+  ≥ 76 = CRITICAL (`scoring.py:253-254`) → `band_meets` fires → it notifies under default
+  config. Concrete in-tree instance: Suricata severity-3 signatures normalize to `medium`
+  (`suricata/normalize.py:43-48,163`) — an unqualified ALERT under the D1 gate
+  (`qualify.py:42, 84-95`) — so SQLi+XSS snippets across ≥5 destination ports produce an
+  observed actor at score 81.
+- **The corrected property this amendment records:** an observed-stratum actor notifies
+  *only* through the band axis at ≥ `alert_threshold` — i.e., only through the operator's
+  chosen threat level. That is not a defect to fix: the band net is ADR-0067 D5's deliberate
+  catch-all, and the level gate is exactly the ruling's model. The non-payload observed
+  population — the flood the product-strategist's constraint targets — tops out at band 35
+  today (ADR-0067's D5 correction box: `port_scan` 25 + `multi_source` 10) and cannot reach
+  the CRITICAL default at any volume. Post-#53, ADR-0070 D2's R1 (+15) flows under the +30
+  `detection_boost` cap, lifting that non-payload ceiling to ~55 (HIGH) — still below the
+  CRITICAL default; the payload-bearing reachability above exists today, before R1, and R1
+  does not change it. Firing *cadence* for this path is governed by A1.1's transition
+  semantics (both axes), unchanged by this section.
+- **Falsifier:** an observed actor notifying under default config with score < 76, or via
+  the tier arm at any score, is a defect against this section.
+
+### A1.3 — OS/desktop push: deferred, recorded
+
+Explicitly out of scope now, by Maintainer decision. No design implied here; a future issue
+when prioritized. Webhook (Discord/Slack) is the notification transport for M1; email is a
+future transport ("or email in the future").
+
+### Amendment 1 retire list (grep-derived: `grep -rln "notify_on_auto_escalate" packages/ frontend/ docs/`)
+
+| Artifact | Disposition |
+|---|---|
+| D3's "defaulting OFF … Notifications stay quiet" ruling (this file, above) | Stands unedited (house rule); **default superseded by A1.1** — the toggle, mechanism, and predicate are unchanged |
+| `firewatch_sdk/config.py` `notify_on_auto_escalate: bool = False` | **Replace-with `True` in #74** |
+| `webhook_notifier.py` default gate path | Behaviour follows the field default — **verified in #74's tests** (must-NOT, as corrected by A1.2: observed-stratum actors never notify **via the tier axis**; the band axis stays live at ≥ `alert_threshold`) |
+| `webhook_notifier.check_and_alert` stateless per-invocation firing (no dedup/cooldown — verified 2026-07-16, whole file) | **Replaced in #74 with transition semantics** (fire on state transition, both axes — see the A1.1 stock-vs-flow correction). Until #74 lands, the per-event cadence is the *pre-existing* band-path behaviour; the default flip MUST land in the same change as the transition semantics, never before |
+| Issue #74 body, original criterion "exactly one notification per new alert cycle (existing notifier dedup semantics unchanged)" | **Replaced in the 2026-07-16 batch** — there are no existing dedup semantics (the premise was false); rewritten to explicit transition-semantics criteria with the must-NOT above |
+| Issue #74 body, must-NOT "an observed-stratum actor … SHALL NOT trigger a notification under default config" + Out-of-scope "per-state notification preferences … filed when the #53 pressure surface exists" | **Stands until Maintainer sequences the #74 reword** — both carry A1.2's superseded framing: the must-NOT must be scoped to the tier axis (the band axis is live per the A1.2 correction), and the out-of-scope pointer must repoint to the deferred notification-system effort (2026-07-16 ruling), not #53 |
+| `frontend/src/components/notifications/NotifyOnAutoEscalateToggle.tsx` help copy ("Default OFF keeps chat quiet by design per ADR-0059 D3") | **Replace-with A1 citation in #74** — the copy currently *defends the superseded default by citing this ADR*; leaving it is the mis-citation drift pattern |
+| `frontend/src/api/types.ts`, `NotificationsPanel.tsx`, test files (`SettingsRoute.test.tsx`, `AlertingPolicyPanel.test.tsx`, `NotificationsPanel.test.tsx`) | **Updated in #74** where they assert the OFF default; UI mechanics unchanged |
+| `docs/escalation-and-triage-model.md` notification text | **Updated in #74** |
+| `docs/internal/board-draft-2026-07.md` | Internal/archive-bound; no action (never cited publicly) |
+| D3's Alternatives row "Make notifications escalation-aware by default (toggle ON / forced) — rejected as the default" | Stands as history; its stated premise (pre-gate tier ≤ 2 population) is the thing that changed — see A1.1 |
+
 ## References
 
 - **Elastic detection-rule actions / risk_score + severity** —

@@ -343,6 +343,98 @@ best screen — becomes reachable.
   #42/#43.
 - The D8 re-bless is the **only** authorized golden move; `expected_scores.json` stays frozen.
 
+## Amendment 1 (2026-07-16): the `enforce` + pure-ALERT cell gets an honest label; D6's "rare" premise corrected
+
+**Status:** Proposed — Maintainer approved in intent (2026-07-16, verbatim: "It seems a good
+improvement"); this text awaits his read (same review batch as ADR-0070 Revision 1 / ADR-0071).
+House rule honoured: D6's text above is never edited; this amendment supersedes **one label
+mapping** (the `enforce` half of D6's `enforce`-or-undeclared disjunct) and **one distribution
+claim** (the "rare" adjective). Everything else in D6 — the posture axis, the purity
+constraint, the per-instance override, `observe`/`detect_only` labels, the per-sensor-truth
+rule — stands unchanged.
+
+### A1.1 — Posture `enforce` + zero blocks is *definitively not blocked*, not unknown
+
+When a qualified Tier-2 verdict's tallies show **posture `enforce` and zero BLOCK/DROP events**
+from that actor, the disposition is a new additive label — **`not_blocked_enforcing`** ("not
+blocked — this control was enforcing and did not block it") — instead of
+`block_status_unknown`. An inline control that only alerted **let the traffic through**: for an
+enforcing sensor that is a per-sensor *fact*, not an unknown (the same OCSF ground RC3
+established — `disposition_id = 19 Alert` asserts the request was **not** blocked). Calling it
+"unknown" is quieter than the truth — the exact failure mode this ADR exists to prevent, one
+cell over. `undeclared` and mixed-posture verdicts keep `block_status_unknown` (there it *is*
+genuinely unknown). Copy guidance (exact words are the frontend issue's): louder than "Flagged —
+needs review" — "got past an enforcing control" territory — but it MUST NOT say "breach":
+there is no success evidence in this cell (success-shaped evidence is Tier 1's ALLOW+detection
+class; honest-state discipline, ADR-0066 precedent).
+
+### A1.2 — Tier is unchanged, deliberately
+
+The #75 safety property stands and is re-affirmed here: **no posture value changes a tier or
+produces `block_status="blocked"`.** Two reasons, both load-bearing: (a) posture is instance
+*metadata* — a mis-declaration must be able to manufacture at most false urgency in a label,
+never tier movement; (b) promoting this cell to Tier 1 would, before #71's Azure WAF severity
+recalibration, hand every Prevention-mode commodity prober a Tier-1 ticket (see A1.3's
+distribution) — the flood rebuilt in the loudest tier. The louder truth rides the
+disposition/copy axis within Tier 2. **Falsifier:** a real incident in which an
+enforce+pure-ALERT actor needed Tier 1 to be noticed → that is a new design ADR with
+distribution numbers, never a quiet label promotion.
+
+### A1.3 — Correction to D6's distribution claim: the cell is not rare (verified populations)
+
+D6 said the residual `block_status_unknown` "becomes **rare and genuinely meaningful** (an
+inline control that alerted without a terminal verdict)". **"Genuinely meaningful" was right;
+"rare" is falsified by this codebase's own M1 sources** (all verified this session, file:line):
+
+- **aws_nfw declares `enforce` in Phase A** (#75's acceptance list, M1) and maps every
+  non-blocked stateful event → `ALERT` (its normalizer copies Suricata's shape). Alert-mode
+  rule groups are a standard NFW configuration — enforce + pure-ALERT is a *routine* M1
+  population the moment #75 lands.
+- **azure_waf in Prevention mode** logs every below-threshold rule match as
+  `Detected`/`Matched`/`AnomalyScoring` → `ALERT` (`_ACTION_MAP`,
+  `firewatch_azure_waf/normalize.py:55-78`, applied at `:254`); CRS's delayed-blocking
+  architecture (quoted verbatim in ADR-0069 D4c) *guarantees* that stream in both Detection and
+  Prevention modes. azure_waf is deliberately absent from Phase A's defaults (posture is
+  per-policy → #44), so in M1 it fills the **undeclared** half — but when #44 lands, Prevention
+  policies join the `enforce` cell wholesale. Post-#71 (contributors cap at `medium`) most of
+  that mass stops being *qualified*, which bounds this amendment's affected population — see
+  A1.4's landing order.
+- **suricata's IDS→IPS flip** — D6's own proof that posture is per-instance — produces the same
+  shape: alert-action rules in IPS mode emit `alert.action != "blocked"` → `ALERT`
+  (`firewatch_suricata/normalize.py:117-118,152-153`); every IPS-flipped instance populates the
+  cell post-#44.
+
+Disposition: **correction of a premise, not of the mechanism** (the D7-of-ADR-0070 pattern: a
+distribution claim in an ADR gets file:line verification, and gets corrected in the open when
+it fails). The meaningfulness is exactly why the shrug label underclaims: an enforcing control
+that alerted without blocking is the most actionable Tier-2 shape there is.
+
+### A1.4 — Landing: rides #75, before posture exists in code (zero label movement)
+
+`SourceMetadata.enforcement` does not exist in the SDK yet (verified this session — #75 is
+open, unstarted). Landing the four-way label table (`not_blocked_passive` /
+`detected_no_action` / `not_blocked_enforcing` / narrowed `block_status_unknown`) **inside
+#75's own implementation** means no shipped label ever moves: today's uniform
+`block_status_unknown` is the undeclared-posture value and stays; the new label first applies
+the moment an `enforce` posture first exists. `expected_scores.json` untouched (labels are
+decider-side); the SDK `EscalationDispositionLiteral` and the TS `DispositionKey` grow by one
+additive value. **Sequencing note, recorded on both issues:** #71 (Azure WAF severity
+recalibration) SHOULD land before #44 (per-policy posture) — both M3 — so the label meets the
+recalibrated, bounded population rather than the pre-#71 commodity mass; if the order inverts,
+the label is still *honest*, just loud at volume, and #50's oracle adjudicates.
+
+### Amendment 1 retire list (grep-derived this session: `grep -rn "rare and genuinely meaningful" docs/ packages/ frontend/`; `grep -rn "block_status_unknown" packages/ frontend/ docs/`)
+
+| Artifact | Disposition |
+|---|---|
+| D6's sentence "`enforce` or undeclared → `block_status_unknown`, which becomes **rare and genuinely meaningful**" (this file, above) | Stands unedited (house rule); **superseded by A1.1 (the `enforce` half) and A1.3 (the "rare" claim)**. Status line gains the pointer on acceptance |
+| Issue #75 acceptance criterion "WHEN from `enforce`, undeclared (`None`), or mixed postures, `block_status_unknown`" | **Replaced on this amendment's acceptance** — `enforce`+zero-blocks gets `not_blocked_enforcing`; a must-NOT is added (undeclared/mixed MUST NOT receive the new label) |
+| `frontend/src/lib/escalationCopy.ts:36-51` header comment (quotes the "rare" sentence; plans a **three**-way posture split) | **Stands until #75's frontend batch**, which updates it to the four-way split with an A1 citation — leaving the quote is the mis-citation drift pattern |
+| `docs/escalation-and-triage-model.md:113-122` (same quote, same three-way plan) | **Stands until the same batch**; updated with it |
+| `packages/firewatch-sdk/src/firewatch_sdk/models.py:271` comment ("enforcement posture undeclared … narrows at #44") | **Replaced in #75** when the literal grows |
+| Issues #44 / #45 (posture Phase B / posture-aware vocabulary) | **Stand**; #44 gains the A1.4 sequencing note (#71 first) and inherits the four-way vocabulary |
+| The #75 safety pin "no posture value SHALL … change any tier" | **Stands permanently** — re-affirmed by A1.2; boundary: label/copy only |
+
 ## References
 
 - **OCSF 1.8.0 `detection_finding`** — `disposition_id` 19 Alert ("…resulted in a notification

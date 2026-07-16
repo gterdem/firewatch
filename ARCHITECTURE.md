@@ -44,7 +44,9 @@ From your `core/models.py`, extended for the accepted ADRs:
 - `source_ip`, `destination_port`, `protocol`
 - `action` ∈ {BLOCK, ALLOW, DROP, ALERT, LOG}  — IDS→ALERT, WAF/IPS→BLOCK (ADR-0012); `LOG` is for non-blocking informational events (e.g. Syslog SSH-Login)
 - `rule_id`, `rule_name`, `payload_snippet`
-- `timestamp` (UTC ISO-8601), `severity` ∈ {critical, high, medium, low}, `category`
+- `timestamp` (UTC ISO-8601), `severity` ∈ {info, low, medium, high, critical}, `category`.
+  Severity semantics are contract surface — the five levels' meanings and the per-source mapping
+  discipline live in PLUGIN_CONTRACT.md "Severity semantics" (ADR-0069).
 - `source_type` ∈ {azure_waf, suricata, syslog, …} **and `source_id`** (named instance, ADR-0016)
 - **`attack_technique` (T####), `attack_tactic` (TA####), `kill_chain_phase`, `capec_id`** — populated at normalize-time (ADR-0014)
 - `RawEvent` carries source-specific `data: dict`; `Detection` is unchanged from legacy.

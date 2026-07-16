@@ -137,3 +137,68 @@ def test_no_legacy_source_module_field():
     assert {"source_type", "source_id"} <= set(FilterSpec.model_fields)
     assert "source_modules" not in ThreatScore.model_fields
     assert "source_types" in ThreatScore.model_fields
+
+
+# ---- AIStatusLiteral — ONE closed vocabulary (ADR-0066, issues #39/#40) ----
+
+
+def test_ai_status_literal_is_exactly_five_values():
+    """AIStatusLiteral SHALL be exactly the five ADR-0066 values.
+
+    The dead 'degraded' value (never produced by any code path) is removed.
+    """
+    from typing import get_args
+
+    from firewatch_sdk.models import AIStatusLiteral
+
+    assert set(get_args(AIStatusLiteral)) == {
+        "active",
+        "disabled",
+        "skipped",
+        "no_input",
+        "unavailable",
+    }
+
+
+def test_ai_status_literal_does_not_contain_degraded():
+    """'degraded' (dead vocabulary) must not be a valid ai_status value."""
+    from typing import get_args
+
+    from firewatch_sdk.models import AIStatusLiteral
+
+    assert "degraded" not in get_args(AIStatusLiteral)
+
+
+@pytest.mark.parametrize(
+    "value", ["active", "disabled", "skipped", "no_input", "unavailable"]
+)
+def test_threat_score_accepts_all_five_ai_status_values(value):
+    """ThreatScore.ai_status accepts every closed-vocabulary value."""
+    score = ThreatScore(
+        source_ip="203.0.113.5",
+        threat_level="LOW",
+        score=0,
+        total_events=0,
+        blocked_events=0,
+        attack_types=[],
+        first_seen=UTC_NOW,
+        last_seen=UTC_NOW,
+        ai_status=value,
+    )
+    assert score.ai_status == value
+
+
+def test_threat_score_rejects_degraded_ai_status():
+    """ThreatScore.ai_status rejects the removed 'degraded' value."""
+    with pytest.raises(ValidationError):
+        ThreatScore(
+            source_ip="203.0.113.5",
+            threat_level="LOW",
+            score=0,
+            total_events=0,
+            blocked_events=0,
+            attack_types=[],
+            first_seen=UTC_NOW,
+            last_seen=UTC_NOW,
+            ai_status="degraded",  # type: ignore[arg-type]
+        )

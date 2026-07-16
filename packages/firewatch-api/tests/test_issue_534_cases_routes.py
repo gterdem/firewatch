@@ -463,7 +463,10 @@ class _FakePipelineWithDetail:
             "blocked_events": 5,
             "first_seen": "2026-06-13T00:00:00Z",
             "last_seen": "2026-06-13T01:00:00Z",
-            "ai_status": "ok",
+            # ADR-0066: analyze_ip_detailed always stamps "active" (never the
+            # AIEngine port's internal "ok") when the engine ran — the route
+            # branches positively on "active" (issues #39/#40).
+            "ai_status": "active",
             "score_derivation": "rule",
             "score_breakdown": [
                 {"label": "Brute-force", "factor": "bf", "points": 30}

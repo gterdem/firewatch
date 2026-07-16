@@ -41,6 +41,13 @@ Security
 
 Dependency rule: imports firewatch-sdk and firewatch-api internals only.
 Never imports legacy/.
+
+ADR-0066 (issue #39): ledger rows persist the ``AIEngine`` port's internal
+``ai_status`` envelope discriminator verbatim (``"ok"``/``"unavailable"`` —
+``firewatch_core.pipeline._record_analysis``; unchanged, no data migration).
+Read routes map ``"ok" -> "active"`` so clients only ever see the ONE closed
+wire vocabulary; any other stored value (e.g. ``"unavailable"``) passes
+through unchanged.
 """
 from __future__ import annotations
 
@@ -95,6 +102,19 @@ def _get_ledger(request: Request) -> Any | None:
     Returns None when the ledger is not yet wired (pre-#407 degrade).
     """
     return getattr(request.app.state, "analysis_ledger", None)
+
+
+def _map_ledger_row_ai_status(row: dict[str, Any]) -> dict[str, Any]:
+    """Map a persisted ledger row's ``ai_status`` to the ONE closed wire vocabulary.
+
+    ADR-0066: the ``AIEngine`` port's internal ``"ok"`` discriminator is
+    stored verbatim (no data migration) — this maps it to ``"active"`` at the
+    read boundary only. Any other stored value (``"unavailable"``) passes
+    through unchanged. Returns a new dict; the input is not mutated.
+    """
+    if row.get("ai_status") == "ok":
+        return {**row, "ai_status": "active"}
+    return row
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +174,8 @@ async def list_analyses(
             detail="Analysis ledger read failed.",
         ) from exc
 
+    # ADR-0066: map the persisted "ok" discriminator to "active" at read time.
+    page["items"] = [_map_ledger_row_ai_status(item) for item in page.get("items", [])]
     return page
 
 
@@ -204,7 +226,8 @@ async def get_analysis(
             detail=f"Analysis record {analysis_id} not found.",
         )
 
-    return record
+    # ADR-0066: map the persisted "ok" discriminator to "active" at read time.
+    return _map_ledger_row_ai_status(record)
 
 
 # ---------------------------------------------------------------------------

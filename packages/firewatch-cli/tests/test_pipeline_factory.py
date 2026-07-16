@@ -136,10 +136,10 @@ class TestDisabledAIEngine:
 
     @pytest.fixture()
     def disabled_engine(self) -> Any:
-        """Return the _DisabledAIEngine instance directly."""
-        from firewatch_cli.commands._pipeline_factory import _DisabledAIEngine
+        """Return the DisabledAIEngine instance directly (core-owned, issue #39)."""
+        from firewatch_core.adapters.ai_disabled import DisabledAIEngine
 
-        return _DisabledAIEngine()
+        return DisabledAIEngine()
 
     @pytest.mark.asyncio
     async def test_disabled_engine_returns_disabled_status_concise(
@@ -211,6 +211,100 @@ class TestDisabledAIEngine:
             )
             await disabled_engine.is_available()
             mock_client.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Issue #39/#40 (ADR-0066): DisabledAIEngine's administratively_disabled flag
+# and the fault=True construction-failure path (AC4).
+# ---------------------------------------------------------------------------
+
+
+class TestDisabledAIEngineAdminFlag:
+    """DisabledAIEngine self-reports administrative disablement via getattr."""
+
+    def test_default_construction_reports_administratively_disabled(self) -> None:
+        """DisabledAIEngine() (default) sets administratively_disabled=True.
+
+        This is the additive attribute the pipeline's stamping authority
+        (firewatch_core.ai_status._is_admin_disabled via getattr) reads to
+        distinguish 'disabled' (a choice) from 'unavailable' (a fault).
+        """
+        from firewatch_core.adapters.ai_disabled import DisabledAIEngine
+
+        engine = DisabledAIEngine()
+        assert engine.administratively_disabled is True
+
+    def test_fault_construction_reports_not_administratively_disabled(self) -> None:
+        """DisabledAIEngine(fault=True) sets administratively_disabled=False.
+
+        Issue #40 AC4: engine CONSTRUCTION failure while ai_enabled=true is a
+        FAULT, not a choice — the pipeline must stamp 'unavailable', which
+        requires administratively_disabled to read False here.
+        """
+        from firewatch_core.adapters.ai_disabled import DisabledAIEngine
+
+        engine = DisabledAIEngine(fault=True)
+        assert engine.administratively_disabled is False
+
+    def test_openai_engine_has_no_administratively_disabled_attribute(self) -> None:
+        """The real OpenAIEngine has no administratively_disabled attribute.
+
+        getattr(engine, "administratively_disabled", False) must default to
+        False for any engine that does not opt in to the signal.
+        """
+        from firewatch_core.adapters.ai_openai import OpenAIEngine
+
+        engine = OpenAIEngine(base_url="http://127.0.0.1:11434", model="llama3.2")
+        assert getattr(engine, "administratively_disabled", False) is False
+
+    @pytest.mark.asyncio
+    async def test_fault_engine_envelope_status_is_unavailable_not_disabled(self) -> None:
+        """DisabledAIEngine(fault=True)'s own envelope carries 'unavailable', not 'disabled'."""
+        from firewatch_core.adapters.ai_disabled import DisabledAIEngine
+
+        engine = DisabledAIEngine(fault=True)
+        result = await engine.analyze_concise(
+            ip="192.0.2.1", total_events=1, blocked_events=1, rules_triggered=1,
+            first_seen="2024-01-01T00:00:00Z", last_seen="2024-01-01T00:00:00Z",
+            samples=[],
+        )
+        assert result.get("ai_status") == "unavailable"
+
+
+class TestConstructionFailureFallsBackToFaultEngine:
+    """Issue #40 AC4: engine construction failure while ai_enabled=true -> fault=True."""
+
+    def test_construction_failure_uses_fault_disabled_engine(self, tmp_path: Any) -> None:
+        """OpenAIEngine() raising at construction falls back to DisabledAIEngine(fault=True)."""
+        from firewatch_core.adapters.ai_disabled import DisabledAIEngine
+        from firewatch_cli.commands._pipeline_factory import _build_pipeline
+
+        with patch("firewatch_cli.commands._pipeline_factory.SQLiteEventStore") as mock_store, \
+             patch("firewatch_cli.commands._pipeline_factory.Pipeline") as mock_pipeline, \
+             patch("firewatch_cli.commands._pipeline_factory.JsonFileConfigStore") as mock_cfg_store, \
+             patch(
+                 "firewatch_cli.commands._pipeline_factory.OpenAIEngine",
+                 side_effect=ValueError("non-local base_url"),
+             ):
+            mock_store.return_value = MagicMock()
+            mock_cfg_store.return_value.get_runtime.return_value = MagicMock(
+                ai_enabled=True,
+                ollama_base_url="https://api.openai.com",
+                ollama_model="llama3.2",
+            )
+            _build_pipeline(config_file=tmp_path / "fw.json")
+
+            call_kwargs = mock_pipeline.call_args
+            ai_engine_arg = (
+                call_kwargs.kwargs.get("ai_engine")
+                or (call_kwargs.args[1] if len(call_kwargs.args) > 1 else None)
+            )
+            assert isinstance(ai_engine_arg, DisabledAIEngine)
+            assert ai_engine_arg.administratively_disabled is False, (
+                "Construction failure while ai_enabled=true is a FAULT, not a choice "
+                "(issue #40 AC4) — administratively_disabled must be False so the "
+                "stamping authority reports 'unavailable', never 'disabled'."
+            )
 
 
 # ---------------------------------------------------------------------------

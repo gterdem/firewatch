@@ -14,6 +14,14 @@
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
+# A green run proves nothing if it ran against the wrong tree. Bash is NOT pinned
+# to an agent's worktree (only Write/Edit are), and the `cd` above normalises to
+# the toplevel of wherever you happen to be — so a stray `cd` silently retargets
+# every gate below. Print what we actually ran against; paste it with the result.
+echo "==> tree:   $(git rev-parse --show-toplevel)"
+echo "==> branch: $(git branch --show-current 2>/dev/null || echo '(detached)')"
+echo "==> HEAD:   $(git rev-parse --short HEAD)"
+
 # CI runs this first. Without it, packages that declare their own dependencies
 # (e.g. aws-nfw -> boto3) cannot import, and ruff/pyright/pytest all report
 # failures that exist only in your environment.

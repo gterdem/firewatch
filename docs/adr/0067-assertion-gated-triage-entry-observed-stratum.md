@@ -345,8 +345,8 @@ best screen — becomes reachable.
 
 ## Amendment 1 (2026-07-16): the `enforce` + pure-ALERT cell gets an honest label; D6's "rare" premise corrected
 
-**Status:** Proposed — Maintainer approved in intent (2026-07-16, verbatim: "It seems a good
-improvement"); this text awaits his read (same review batch as ADR-0070 Revision 1 / ADR-0071).
+**Status:** Accepted (2026-07-16) — read and approved by the Maintainer (verbatim: "I read the
+ADR changes and I approve them"). Lands with #75 per A1.4; no shipped label moves.
 House rule honoured: D6's text above is never edited; this amendment supersedes **one label
 mapping** (the `enforce` half of D6's `enforce`-or-undeclared disjunct) and **one distribution
 claim** (the "rare" adjective). Everything else in D6 — the posture axis, the purity

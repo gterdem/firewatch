@@ -48,9 +48,13 @@ class LinuxAuthSource:
     Normalization (ADR-0012, ADR-0014, ADR-0016, ADR-0020, ADR-0067):
       - ``source_type`` is the constant ``"linux_auth"`` — never branches on
         ``source_id``.
-      - Every category is ``action=LOG`` — raw telemetry (ECS
-        ``event.kind: event``); the brute-force story escalates via the core
-        correlation rule, not per-event action remapping (ADR-0067 D1/RC5).
+      - ``action``/``severity`` per category (ALERT for the three failure
+        categories, LOG for success/account-creation/unclassified) — see
+        ``firewatch_linux_auth.normalize``'s module docstring for the full
+        table and its ADR-0070 D1 / ADR-0069 D4(e) justification; not
+        restated here to avoid the two docstrings drifting apart. Escalation
+        past a single low/medium severity is always a core correlation-rule
+        decision (ADR-0067 D1/RC5), never a per-event action/severity bump.
       - Distinct rule identities for SSH login failure/success, sudo
         authentication failure, generic PAM authentication failure, and new
         user account creation (T1110, T1548.003, T1136 — ADR-0014).

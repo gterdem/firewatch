@@ -78,20 +78,42 @@ def _resolve_class_uid(event: SecurityEvent) -> tuple[int, int]:
 def _resolve_activity_id(event: SecurityEvent, class_uid: int) -> int:
     """Return the activity_id appropriate for the event's OCSF class.
 
+    activity_id enums are PER-CLASS in OCSF (issue #80) — a value valid for
+    one class (e.g. Network Activity's 6 "Traffic") is a different, often
+    false, meaning for another (Authentication's 6 "Preauth"). Each branch
+    below resolves the value from that class's own OCSF 1.8.0 enum, cited
+    inline; there is no cross-class fallback.
+
     - HTTP Activity (4002): resolve from HTTP method in payload/raw_log.
       No resolvable method → 0 (Unknown).
       Source: scratch/ocsf-1.8.0-reference.md §3
-    - Network Activity (4001): 6 (Traffic) when lifecycle unknown.
-      Source: scratch/ocsf-1.8.0-reference.md §4
     - Detection Finding (2004): 1 (Create) — each export is a point-in-time snapshot.
       Source: scratch/ocsf-1.8.0-reference.md §2
+    - Authentication (3002): 1 (Logon) — every shipped emitter is a logon
+      attempt; success/failure is status_id, not activity_id (ADR-0071 D2).
+      Source: mapping.AUTHENTICATION_ACTIVITY_ID citation.
+    - Account Change (3001): 1 (Create) — the only shipped emitter
+      (useradd_new_user) is an account creation.
+      Source: mapping.ACCOUNT_CHANGE_ACTIVITY_ID citation.
+    - Network Activity (4001): 6 (Traffic) — explicit branch, no longer the
+      fallthrough. Source: scratch/ocsf-1.8.0-reference.md §4
+    - Base Event (0) and any class with no explicit branch above: 0 (Unknown)
+      — valid in every OCSF class's activity_id enum, unlike a value borrowed
+      from another class (e.g. the old 6 "Traffic" fallthrough).
+      Source: mapping.BASE_EVENT_ACTIVITY_ID / mapping.ACTIVITY_UNKNOWN citation.
     """
     if class_uid == mapping.AZURE_WAF_CLASS_UID:  # 4002 HTTP Activity
         return _http_activity_id(event)
     if class_uid == mapping.SURICATA_IDS_CLASS_UID:  # 2004 Detection Finding
         return mapping.DETECTION_FINDING_ACTIVITY_ID  # 1 Create
-    # 4001 Network Activity (and any unknown class)
-    return mapping.NETWORK_ACTIVITY_TRAFFIC  # 6 Traffic
+    if class_uid == mapping.AUTHENTICATION_CLASS_UID:  # 3002 Authentication
+        return mapping.AUTHENTICATION_ACTIVITY_ID  # 1 Logon
+    if class_uid == mapping.ACCOUNT_CHANGE_CLASS_UID:  # 3001 Account Change
+        return mapping.ACCOUNT_CHANGE_ACTIVITY_ID  # 1 Create
+    if class_uid == mapping.SURICATA_NET_CLASS_UID:  # 4001 Network Activity
+        return mapping.NETWORK_ACTIVITY_TRAFFIC  # 6 Traffic
+    # Base Event (0) and any ocsf_class with no explicit branch above.
+    return mapping.ACTIVITY_UNKNOWN  # 0 Unknown
 
 
 def _http_activity_id(event: SecurityEvent) -> int:
@@ -262,9 +284,11 @@ def event_to_ocsf(event: SecurityEvent) -> dict[str, Any]:
 
     Reads the event's own ocsf_class/ocsf_category to determine class_uid /
     category_uid (ADR-0020 — set at normalize-time by each plugin):
-      Azure WAF events  → HTTP Activity (class_uid=4002, category_uid=4)
-      Suricata IDS      → Detection Finding (class_uid=2004, category_uid=2)
-      Suricata network  → Network Activity (class_uid=4001, category_uid=4)
+      Azure WAF events   → HTTP Activity (class_uid=4002, category_uid=4)
+      Suricata IDS       → Detection Finding (class_uid=2004, category_uid=2)
+      Suricata network   → Network Activity (class_uid=4001, category_uid=4)
+      linux_auth/syslog  → Authentication (3002), Account Change (3001),
+                           Base Event (0) — see _resolve_activity_id (#80)
 
     Fills activity_id, disposition_id, severity_id, type_uid, metadata, time
     per the reference.  Does NOT modify the SecurityEvent.

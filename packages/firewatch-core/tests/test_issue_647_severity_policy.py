@@ -237,31 +237,31 @@ class TestDetectorDeclaredSeverity:
         return next((d for d in detections if d.rule_name == rule_name), None)
 
     def test_ids_then_brute_force_has_severity(self):
-        detections = detect(self._make_ids_then_bf_events())
+        detections = detect(self._make_ids_then_bf_events(), now=T0 + timedelta(hours=1))
         d = self._find(detections, "ids_then_brute_force")
         assert d is not None
         assert d.severity is not None, "ids_then_brute_force must declare a severity"
 
     def test_ids_then_brute_force_severity_is_sigma_level(self):
-        detections = detect(self._make_ids_then_bf_events())
+        detections = detect(self._make_ids_then_bf_events(), now=T0 + timedelta(hours=1))
         d = self._find(detections, "ids_then_brute_force")
         assert d is not None
         assert d.severity in ("info", "low", "medium", "high", "critical")
 
     def test_brute_force_then_login_has_severity(self):
-        detections = detect(self._make_brute_force_login_events())
+        detections = detect(self._make_brute_force_login_events(), now=T0 + timedelta(hours=1))
         d = self._find(detections, "brute_force_then_login")
         assert d is not None
         assert d.severity is not None
 
     def test_brute_force_then_login_auto_escalate_is_bool(self):
-        detections = detect(self._make_brute_force_login_events())
+        detections = detect(self._make_brute_force_login_events(), now=T0 + timedelta(hours=1))
         d = self._find(detections, "brute_force_then_login")
         assert d is not None
         assert isinstance(d.auto_escalate, bool)
 
     def test_multi_source_attack_has_severity(self):
-        detections = detect(self._make_multi_source_events())
+        detections = detect(self._make_multi_source_events(), now=T0 + timedelta(hours=1))
         d = self._find(detections, "multi_source_attack")
         assert d is not None
         assert d.severity is not None
@@ -275,7 +275,7 @@ class TestDetectorDeclaredSeverity:
 
     def test_brute_force_then_login_is_high_severity_or_critical(self):
         """Credential compromise is at minimum high per Sigma level conventions."""
-        detections = detect(self._make_brute_force_login_events())
+        detections = detect(self._make_brute_force_login_events(), now=T0 + timedelta(hours=1))
         d = self._find(detections, "brute_force_then_login")
         assert d is not None
         # EARS-1: rule must declare a meaningful level (not just 'info')
@@ -283,20 +283,20 @@ class TestDetectorDeclaredSeverity:
 
     def test_brute_force_then_login_auto_escalates(self):
         """Credential-compromise detection should auto-escalate (EARS-1)."""
-        detections = detect(self._make_brute_force_login_events())
+        detections = detect(self._make_brute_force_login_events(), now=T0 + timedelta(hours=1))
         d = self._find(detections, "brute_force_then_login")
         assert d is not None
         assert d.auto_escalate is True
 
     def test_score_delta_unchanged_by_severity_metadata(self):
         """EARS-2: adding severity metadata must NOT alter score_delta values."""
-        detections = detect(self._make_brute_force_login_events())
+        detections = detect(self._make_brute_force_login_events(), now=T0 + timedelta(hours=1))
         d = self._find(detections, "brute_force_then_login")
         assert d is not None
         assert d.score_delta == 30  # verbatim from original rule
 
     def test_ids_then_brute_force_score_delta_unchanged(self):
-        detections = detect(self._make_ids_then_bf_events())
+        detections = detect(self._make_ids_then_bf_events(), now=T0 + timedelta(hours=1))
         d = self._find(detections, "ids_then_brute_force")
         assert d is not None
         assert d.score_delta == 20  # verbatim from original rule

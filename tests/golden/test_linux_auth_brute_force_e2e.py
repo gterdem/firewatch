@@ -173,7 +173,8 @@ class TestIsolatedFailures:
         raws = [_failed_login_raw(offset_seconds=3600 * i) for i in range(2)]  # 1h apart
         events = [normalize(raw, _SOURCE_ID) for raw in raws]
 
-        detections = detect(events)
+        now = events[-1].timestamp
+        detections = detect(events, now=now)
         assert not any(d.rule_name.startswith("ssh_login_failure") for d in detections)
 
         verdict = decide(events, detections)
@@ -182,6 +183,6 @@ class TestIsolatedFailures:
 
     def test_single_failed_login_stays_observed(self):
         events = [normalize(_failed_login_raw(0), _SOURCE_ID)]
-        verdict = decide(events, detect(events))
+        verdict = decide(events, detect(events, now=events[0].timestamp))
         assert verdict.tier is None
         assert verdict.disposition == "observed"

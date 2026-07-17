@@ -379,29 +379,3 @@ class TestSshLoginFailureBurstRetired:
         assert detector_mod._SSH_LOGIN_SUCCESS_CATEGORIES == frozenset(
             {"SSH Login", "SSH Login Success"}
         )
-
-
-# ---------------------------------------------------------------------------
-# detect()'s backward-compatible `now` default
-# ---------------------------------------------------------------------------
-
-
-class TestDetectNowDefault:
-    def test_detect_without_now_still_works(self):
-        """Existing/golden call sites (`detect(events)`, no `now`) keep working
-        — `now` defaults to the real wall clock, mirroring Pipeline's own
-        `clock` parameter (issue #52)."""
-        events = [
-            make_event(category="SSH Brute Force", timestamp=T0 + timedelta(minutes=i))
-            for i in range(3)
-        ]
-        events.append(make_event(category="SSH Login", timestamp=T0 + timedelta(minutes=10)))
-        detections = detect(events)  # no now= kwarg
-        assert any(d.rule_name == "brute_force_then_login" for d in detections)
-
-    def test_old_fixture_timestamps_never_spuriously_fire_r1_under_real_clock(self):
-        """A years-old fixture timestamp, run through detect() with no explicit
-        `now`, must never spuriously fire attempt_pressure (decay makes it
-        negligible against any real wall-clock `now`)."""
-        events = [make_event(action="BLOCK", timestamp=T0) for _ in range(20)]
-        assert _by_name(detect(events), "attempt_pressure") is None

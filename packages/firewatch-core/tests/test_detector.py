@@ -31,7 +31,7 @@ def test_ids_then_brute_force():
         )
         for i in range(3)
     ]
-    d = _by_name(detect(events), "ids_then_brute_force")
+    d = _by_name(detect(events, now=T0), "ids_then_brute_force")
     assert d is not None and d.score_delta == 20
 
 
@@ -42,7 +42,7 @@ def test_ids_then_brute_force_below_threshold():
                    timestamp=T0 + timedelta(minutes=i))
         for i in range(2)  # only 2 < 3
     ]
-    assert _by_name(detect(events), "ids_then_brute_force") is None
+    assert _by_name(detect(events, now=T0), "ids_then_brute_force") is None
 
 
 def test_ids_then_brute_force_linux_auth():
@@ -59,7 +59,7 @@ def test_ids_then_brute_force_linux_auth():
         )
         for i in range(3)
     ]
-    d = _by_name(detect(events), "ids_then_brute_force")
+    d = _by_name(detect(events, now=T0), "ids_then_brute_force")
     assert d is not None and d.score_delta == 20
 
 
@@ -69,7 +69,7 @@ def test_brute_force_then_login():
         for i in range(3)
     ]
     events.append(make_event(category="SSH Login", timestamp=T0 + timedelta(minutes=10)))
-    d = _by_name(detect(events), "brute_force_then_login")
+    d = _by_name(detect(events, now=T0), "brute_force_then_login")
     assert d is not None and d.score_delta == 30
 
 
@@ -80,7 +80,7 @@ def test_brute_force_then_login_requires_login_after():
     ]
     # login BEFORE the brute-force burst → no detection
     events.append(make_event(category="SSH Login", timestamp=T0 - timedelta(minutes=5)))
-    assert _by_name(detect(events), "brute_force_then_login") is None
+    assert _by_name(detect(events, now=T0), "brute_force_then_login") is None
 
 
 def _linux_auth_failures(count: int = 3, *, start: datetime = T0):
@@ -113,24 +113,24 @@ class TestBruteForceThenLoginLinuxAuth:
     def test_fires_on_failures_then_success(self):
         events = _linux_auth_failures(3)
         events.append(_linux_auth_success(T0 + timedelta(minutes=10)))
-        d = _by_name(detect(events), "brute_force_then_login")
+        d = _by_name(detect(events, now=T0), "brute_force_then_login")
         assert d is not None and d.score_delta == 30
 
     def test_success_alone_no_fire(self):
         """MUST-NOT: a success with no preceding failures does not fire."""
         events = [_linux_auth_success(T0)]
-        assert _by_name(detect(events), "brute_force_then_login") is None
+        assert _by_name(detect(events, now=T0), "brute_force_then_login") is None
 
     def test_failures_alone_no_fire(self):
         """MUST-NOT: failures with no success do not fire."""
         events = _linux_auth_failures(3)
-        assert _by_name(detect(events), "brute_force_then_login") is None
+        assert _by_name(detect(events, now=T0), "brute_force_then_login") is None
 
     def test_success_outside_window_no_fire(self):
         """MUST-NOT: a success outside the 30-minute window does not fire."""
         events = _linux_auth_failures(3)
         events.append(_linux_auth_success(T0 + timedelta(minutes=45)))
-        assert _by_name(detect(events), "brute_force_then_login") is None
+        assert _by_name(detect(events, now=T0), "brute_force_then_login") is None
 
     def test_reaches_queue_gate(self):
         """The property that matters: the Detection this rule emits carries
@@ -151,7 +151,7 @@ class TestBruteForceThenLoginLinuxAuth:
 
         events = _linux_auth_failures(3)
         events.append(_linux_auth_success(T0 + timedelta(minutes=10)))
-        detections = detect(events)
+        detections = detect(events, now=T0)
         assert any(d.rule_name == "brute_force_then_login" for d in detections)
         result = qualify(events, detections)
         assert result.qualified is True
@@ -165,7 +165,7 @@ class TestBruteForceThenLoginLinuxAuth:
             for i in range(3)
         ]
         events.append(make_event(category="SSH Login", timestamp=T0 + timedelta(minutes=10)))
-        d = _by_name(detect(events), "brute_force_then_login")
+        d = _by_name(detect(events, now=T0), "brute_force_then_login")
         assert d is not None and d.score_delta == 30
 
 
@@ -174,7 +174,7 @@ def test_multi_source_attack():
         make_event(source_type="suricata", timestamp=T0),
         make_event(source_type="syslog", timestamp=T0 + timedelta(minutes=5)),
     ]
-    d = _by_name(detect(events), "multi_source_attack")
+    d = _by_name(detect(events, now=T0), "multi_source_attack")
     assert d is not None and d.score_delta == 10
 
 
@@ -183,7 +183,7 @@ def test_multi_source_attack_single_type_no_fire():
         make_event(source_type="suricata", timestamp=T0),
         make_event(source_type="suricata", timestamp=T0 + timedelta(minutes=5)),
     ]
-    assert _by_name(detect(events), "multi_source_attack") is None
+    assert _by_name(detect(events, now=T0), "multi_source_attack") is None
 
 
 def test_failing_rule_is_swallowed(monkeypatch):
@@ -191,8 +191,8 @@ def test_failing_rule_is_swallowed(monkeypatch):
         raise RuntimeError("rule exploded")
 
     monkeypatch.setattr(detector_mod, "BUILTIN_RULES", [_boom])
-    assert detect([make_event()]) == []  # logged + skipped, no raise
+    assert detect([make_event()], now=T0) == []  # logged + skipped, no raise
 
 
 def test_empty_events():
-    assert detect([]) == []
+    assert detect([], now=T0) == []

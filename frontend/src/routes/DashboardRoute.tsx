@@ -2,7 +2,9 @@
  * DashboardRoute — /dashboard page (MF-2 v2 triage redesign, issue #159).
  *
  * v2 layout (triage-first, SOC Design System):
- *   TriageBanner        — leads with "N actors need BLOCK decision" (SIEM alert)
+ *   TriageBanner        — leads with the posture-aware "N actors need a BLOCK
+ *                         decision" / "N actors need review" alert (SIEM
+ *                         alert; posture-aware headline — issue #45)
  *   KpiStrip            — demoted to thin single-row strip + AiEnginePill right slot (#207)
  *   ThreatActorSummary  — merged provenance-tagged top-actor block (#207)
  *   .dash-grid          — `1fr 300px` grid (dash-main + sidebar)
@@ -497,7 +499,7 @@ export default function DashboardRoute() {
         fontFamily: 'var(--fw-font-ui)',
       }}
     >
-      {/* Triage banner — leads with "N actors need BLOCK decision" (SIEM, ADR-0033) */}
+      {/* Triage banner — posture-aware headline (SIEM, ADR-0033; issue #45, ADR-0072 D6) */}
       <TriageBanner
         pendingActors={pendingActors}
         onAction={onAction}

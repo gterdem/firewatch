@@ -79,6 +79,7 @@ const {
   mockFetchRules,
   mockFetchIpEvents,
   mockFetchHealth,
+  mockCreateDecision,
 } =
   vi.hoisted(() => ({
     mockFetchThreatScore: vi.fn(),
@@ -86,6 +87,7 @@ const {
     mockFetchRules: vi.fn(),
     mockFetchIpEvents: vi.fn(),
     mockFetchHealth: vi.fn(),
+    mockCreateDecision: vi.fn(),
   }))
 
 vi.mock('../api/logs', () => ({
@@ -93,6 +95,12 @@ vi.mock('../api/logs', () => ({
   fetchDetailedAnalysis: mockFetchDetailedAnalysis,
   fetchRules: mockFetchRules,
   fetchIpEvents: mockFetchIpEvents,
+}))
+
+// Issue #45 (ADR-0072 D6): the Recent-Logs FalsePositiveButton calls
+// recordFalsePositive (lib/triageActions.ts) → createDecision (api/decisions.ts).
+vi.mock('../api/decisions', () => ({
+  createDecision: mockCreateDecision,
 }))
 
 // Mock fetchSourceTypes + fetchHealth for EntityPanelProvider + useDeepAnalysis.
@@ -1843,5 +1851,119 @@ describe('IpPanel #353 — Recent Logs Payload cell is width-constrained (no h-s
     // PayloadCellTooltip must still be present so the full value is reachable via popover.
     const logsSection = screen.getByTestId('modal-recent-logs')
     expect(logsSection.querySelector('span[data-truncated]')).not.toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #45 (ADR-0072 D6 O-1) — False Positive on the detection row
+//
+// The button targets a RULE, not the actor: it must only appear when the raw
+// stored event carries a `rule_name` identity (the same field the server's
+// `qualifying_rules` suppression evaluator reads), and it must call
+// recordFalsePositive(ip, rule_name) — NOT the rule-catalog display name.
+// ---------------------------------------------------------------------------
+
+describe('IpPanel #45 — False Positive on the detection row (ADR-0072 D6 O-1)', () => {
+  it('renders a False Positive button on a detection row that carries rule_name', async () => {
+    const analysisWithRuleName: import('../api/types').DetailedAnalysis = {
+      ...DETAILED_ANALYSIS_FIXTURE,
+      detections: [
+        {
+          timestamp: '2026-06-04T10:00:00Z',
+          source_type: 'suricata',
+          category: 'SQL Injection',
+          sid: '2001219',
+          rule_name: 'waf_sqli',
+          signature: 'ET SCAN Potential VNC Scan',
+          payload_snippet: 'GET /api/users?id=1 OR 1=1',
+        },
+      ],
+    }
+    mockFetchThreatScore.mockResolvedValue(THREATS_FIXTURE[0])
+    mockFetchDetailedAnalysis.mockResolvedValue(analysisWithRuleName)
+    mockFetchRules.mockResolvedValue(RULES_FIXTURE)
+    renderPanel('192.0.2.1')
+
+    await waitFor(() => expect(screen.getByTestId('modal-recent-logs')).toBeInTheDocument())
+    expect(screen.getByTestId('false-positive-button-0')).toBeInTheDocument()
+  })
+
+  it('does NOT render a False Positive button on a detection row with no rule_name (fail-toward-visibility, ADR-0072)', async () => {
+    const analysisNoRuleName: import('../api/types').DetailedAnalysis = {
+      ...DETAILED_ANALYSIS_FIXTURE,
+      detections: [
+        {
+          timestamp: '2026-06-04T10:00:00Z',
+          source_type: 'suricata',
+          category: 'SQL Injection',
+          sid: '2001219',
+          signature: 'ET SCAN Potential VNC Scan',
+          payload_snippet: 'GET /api/users?id=1 OR 1=1',
+        },
+      ],
+    }
+    mockFetchThreatScore.mockResolvedValue(THREATS_FIXTURE[0])
+    mockFetchDetailedAnalysis.mockResolvedValue(analysisNoRuleName)
+    mockFetchRules.mockResolvedValue(RULES_FIXTURE)
+    renderPanel('192.0.2.1')
+
+    await waitFor(() => expect(screen.getByTestId('modal-recent-logs')).toBeInTheDocument())
+    expect(screen.queryByTestId('false-positive-button-0')).toBeNull()
+  })
+
+  it('clicking False Positive POSTs /decisions with {actor_ip: ip, verb: "false_positive", rule_name} — the RAW event rule_name, not the catalog display name', async () => {
+    const analysisWithRuleName: import('../api/types').DetailedAnalysis = {
+      ...DETAILED_ANALYSIS_FIXTURE,
+      detections: [
+        {
+          timestamp: '2026-06-04T10:00:00Z',
+          source_type: 'suricata',
+          category: 'SQL Injection',
+          sid: '2001219',
+          rule_name: 'waf_sqli',
+          signature: 'ET SCAN Potential VNC Scan',
+          payload_snippet: 'GET /api/users?id=1 OR 1=1',
+        },
+      ],
+    }
+    mockFetchThreatScore.mockResolvedValue(THREATS_FIXTURE[0])
+    mockFetchDetailedAnalysis.mockResolvedValue(analysisWithRuleName)
+    mockFetchRules.mockResolvedValue(RULES_FIXTURE)
+    renderPanel('192.0.2.1')
+
+    await waitFor(() => expect(screen.getByTestId('modal-recent-logs')).toBeInTheDocument())
+    await userEvent.click(screen.getByTestId('false-positive-button-0'))
+
+    expect(mockCreateDecision).toHaveBeenCalledOnce()
+    expect(mockCreateDecision).toHaveBeenCalledWith({
+      actor_ip: '192.0.2.1',
+      verb: 'false_positive',
+      rule_name: 'waf_sqli',
+    })
+  })
+
+  it('shows a local "Reported" confirmation after clicking (no server round-trip needed to render feedback)', async () => {
+    const analysisWithRuleName: import('../api/types').DetailedAnalysis = {
+      ...DETAILED_ANALYSIS_FIXTURE,
+      detections: [
+        {
+          timestamp: '2026-06-04T10:00:00Z',
+          source_type: 'suricata',
+          rule_name: 'waf_sqli',
+          sid: '2001219',
+        },
+      ],
+    }
+    mockFetchThreatScore.mockResolvedValue(THREATS_FIXTURE[0])
+    mockFetchDetailedAnalysis.mockResolvedValue(analysisWithRuleName)
+    mockFetchRules.mockResolvedValue(RULES_FIXTURE)
+    renderPanel('192.0.2.1')
+
+    await waitFor(() => expect(screen.getByTestId('modal-recent-logs')).toBeInTheDocument())
+    const button = screen.getByTestId('false-positive-button-0')
+    await userEvent.click(button)
+
+    expect(button).toHaveTextContent('Reported')
+    expect(button).toBeDisabled()
   })
 })

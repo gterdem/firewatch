@@ -1,6 +1,28 @@
 /**
- * TriageBanner — leads the dashboard with the "N actors need a BLOCK decision"
- * alert (SIEM / ADR-0033 / issue #159).
+ * TriageBanner — leads the dashboard with the posture-aware "N actors need
+ * a BLOCK decision" / "N actors need review" alert (SIEM / ADR-0033 /
+ * issue #159; posture-aware headline — issue #45, ADR-0072 D6).
+ *
+ * Issue #45 (ADR-0072 D6 / C-1 Phase-A reconciliation) — posture-aware
+ * headline + queue-card vocabulary:
+ *   - The headline VERB ("BLOCK" vs "review") is derived from the queued
+ *     actors' escalation dispositions via `escalationCopy.ts`'s
+ *     `triageHeadlineText` — never hard-coded "BLOCK" regardless of posture.
+ *     A watch-only deployment (all queued dispositions
+ *     not_blocked_passive/detected_no_action/block_status_unknown) gets a
+ *     review verb; the word "block" never appears (must-NOT criterion).
+ *   - Queue card actions: Investigate (the IP token, unchanged) / Expected —
+ *     this is me / Harden (advice-only, ADR-0033 seam). Dismiss moved into an
+ *     overflow menu on the chip (D6 maintainer ruling). False positive is
+ *     NOT here — it targets a rule, not the actor (lives on the entity-panel
+ *     detection row instead, per D6).
+ *
+ * ADR-0058 D2 (issue #649): banner-worthiness now also considers the escalation
+ * axis. Tier 1 (allowed-through) and Tier 2 (block-status-unknown) actors surface
+ * even when their numeric score is LOW or MEDIUM. Each chip shows:
+ *   - the RULE-tagged justification line (ADR-0035)
+ *   - a human-readable disposition + block-status label
+ * The empty/calm state shows a 4-tier legend so analysts understand the model.
  *
  * ADR-0058 D2 (issue #649): banner-worthiness now also considers the escalation
  * axis. Tier 1 (allowed-through) and Tier 2 (block-status-unknown) actors surface
@@ -58,12 +80,14 @@
  * the dashboard remaining visible behind it.  No "Drill down" button — the IP
  * token IS the drill-down affordance (matches Elastic / Splunk / Sentinel UX).
  *
- * Dismiss chips call onAction(actor, 'dismiss') via the action seam (ADR-0033).
- * This component holds ZERO per-verb side-effect logic — it only calls the seam.
+ * Expected / Harden / Dismiss (overflow) all call onAction(actor, verb) via the
+ * action seam (ADR-0033). This component holds ZERO per-verb side-effect
+ * logic — it only calls the seam; `HARDEN_ADVICE` copy is shown locally in a
+ * popover, but the actual side effect (or lack thereof) lives in the seam.
  *
  * "Needs a decision" = threat_level is CRITICAL or HIGH, OR escalation tier 1/2,
- * AND the actor has not been dismissed (isDismissed check handled by caller via
- * `pendingActors`).
+ * AND the actor is not server-suppressed (ADR-0072 D3/D4 `isSuppressed` check —
+ * `lib/triageDecisions.ts` — handled by the caller via `pendingActors`).
  *
  * SECURITY (ADR-0029 D3): source_ip and justification are attacker-influenced.
  * Rendered as text nodes only — never via dangerouslySetInnerHTML.
@@ -87,10 +111,12 @@ import {
   dispositionColor,
   blockStatusLabel,
   tierGroupLabel,
+  triageHeadlineText,
 } from '../../lib/escalationCopy'
 import ClickableIp from '../entity/ClickableIp'
 import { Popover } from '../ds/Popover'
 import AttemptsHeadline from './AttemptsHeadline'
+import { ExpectedButton, HardenButton, ChipOverflowMenu } from './TriageChipActions'
 
 // ---------------------------------------------------------------------------
 // Top-N constant (issue #728)
@@ -242,11 +268,19 @@ export default function TriageBanner({
   const tierBuckets = groupByTier(visibleActors)
   const hasMultipleTiers = tierBuckets.length > 1 || tierBuckets.some((b) => b.tier != null)
 
+  // Issue #45 (ADR-0072 D6 / C-1): the headline VERB is derived from the
+  // queued actors' escalation dispositions — never hard-coded "BLOCK". See
+  // `escalationCopy.ts`'s `triageHeadlineText` for the full derivation.
+  const headlineText = triageHeadlineText(
+    count,
+    pendingActors.map((a) => a.escalation?.disposition),
+  )
+
   return (
     <div
       data-testid="triage-banner-active"
       role="alert"
-      aria-label={`${count} actor${count === 1 ? '' : 's'} need a block decision`}
+      aria-label={headlineText}
       style={{
         borderLeft: '4px solid var(--fw-triage-active)',
         background: 'var(--fw-bg-card)',
@@ -270,9 +304,7 @@ export default function TriageBanner({
         data-testid="triage-banner-headline"
       >
         <span aria-hidden="true">⚠</span>
-        <span>
-          {count} actor{count === 1 ? '' : 's'} need{count === 1 ? 's' : ''} a BLOCK decision
-        </span>
+        <span>{headlineText}</span>
       </div>
 
       {/* Actor chips — grouped by tier with headers (issue #728).
@@ -803,29 +835,18 @@ function ActorChip({ actor, onAction }: ActorChipProps) {
         </Popover>
       )}
 
-      {/* Dismiss — icon button (✕); marginLeft:auto pushes it to the right.
-          aria-label carries the IP so screen readers announce the target.
-          Component holds ZERO per-verb side-effect logic — calls seam only. */}
-      <button
-        type="button"
-        data-testid="triage-chip-dismiss"
-        aria-label={`Dismiss ${actor.source_ip}`}
-        onClick={() => onAction(actor, 'dismiss')}
-        style={{
-          background: 'none',
-          border: '1px solid var(--fw-border)',
-          borderRadius: 4,
-          padding: '1px 5px',
-          fontSize: 10,
-          color: 'var(--fw-t3)',
-          cursor: 'pointer',
-          marginLeft: 'auto',
-          lineHeight: 1.5,
-        }}
-      >
-        {/* ✕ icon — aria-label above describes the action (no visible text needed) */}
-        ✕
-      </button>
+      {/* Queue card actions (issue #45, ADR-0072 D6 maintainer ruling):
+          Expected / Harden are visible buttons; Dismiss moves into the
+          overflow menu. False positive is intentionally NOT here — it
+          targets a rule, not the actor (entity-panel detection row instead).
+          marginLeft:auto pushes this action cluster to the right.
+          Behavior lives in TriageChipActions.tsx (decomposition — this
+          component owns the chip LAYOUT, not the action cluster's logic). */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
+        <ExpectedButton actor={actor} onAction={onAction} />
+        <HardenButton actor={actor} onAction={onAction} />
+        <ChipOverflowMenu actor={actor} onAction={onAction} />
+      </div>
     </div>
   )
 }

@@ -29,6 +29,10 @@ import {
   dispositionColor,
   attemptsHeadlineText,
   pressureRowText,
+  ACTION_LABEL,
+  HARDEN_ADVICE,
+  hasBlockWorthyDisposition,
+  triageHeadlineText,
 } from '../lib/escalationCopy'
 
 describe('TIER_COPY table — semantics unchanged (ADR-0058)', () => {
@@ -335,5 +339,93 @@ describe('pressureRowText (issue #55 — strategist "show me the math" minimal s
   it('never renders a raw decayed-intensity float — only plain integers (ADR-0035)', () => {
     const text = pressureRowText(42, 18)
     expect(text).not.toMatch(/\d+\.\d+/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #45 (ADR-0072 D6) — queue-card verb/action-label copy
+// ---------------------------------------------------------------------------
+
+describe('ACTION_LABEL / HARDEN_ADVICE (issue #45, ADR-0072 D6)', () => {
+  it('exposes exactly the D6 queue-card + detection-row vocabulary', () => {
+    expect(ACTION_LABEL.investigate).toBe('Investigate')
+    expect(ACTION_LABEL.expected).toBe('Expected — this is me')
+    expect(ACTION_LABEL.harden).toBe('Harden')
+    expect(ACTION_LABEL.dismiss).toBe('Dismiss')
+    expect(ACTION_LABEL.falsePositive).toBe('False positive')
+  })
+
+  it('HARDEN_ADVICE is advice-only copy — never claims execution happened', () => {
+    expect(HARDEN_ADVICE.toLowerCase()).not.toMatch(/\bblocked\b|\bhardened\b/)
+    expect(HARDEN_ADVICE.toLowerCase()).toContain('does not execute this yet')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #45 (ADR-0072 D6 / C-1 Phase-A reconciliation) — posture-aware headline
+//
+// The must-NOT gate: a watch-only deployment (every queued disposition is
+// passive/detect-only/undeclared) SHALL NOT see the word "block" as the
+// pending decision.
+// ---------------------------------------------------------------------------
+
+describe('hasBlockWorthyDisposition / triageHeadlineText (issue #45 C-1)', () => {
+  it('returns false (review-only) when every disposition is passive/detect-only/unknown', () => {
+    expect(
+      hasBlockWorthyDisposition(['not_blocked_passive', 'detected_no_action', 'block_status_unknown']),
+    ).toBe(false)
+  })
+
+  it('returns false for a single not_blocked_passive disposition (watch-only sensor)', () => {
+    expect(hasBlockWorthyDisposition(['not_blocked_passive'])).toBe(false)
+  })
+
+  it('returns false for a single detected_no_action disposition (host-based, no removal)', () => {
+    expect(hasBlockWorthyDisposition(['detected_no_action'])).toBe(false)
+  })
+
+  it('returns false for a single block_status_unknown disposition (undeclared/mixed fallback)', () => {
+    expect(hasBlockWorthyDisposition(['block_status_unknown'])).toBe(false)
+  })
+
+  it('returns false for an absent escalation verdict (null/undefined disposition)', () => {
+    expect(hasBlockWorthyDisposition([null, undefined])).toBe(false)
+  })
+
+  it('returns false for already-blocked dispositions (nothing left to decide)', () => {
+    expect(hasBlockWorthyDisposition(['blocked_persistent', 'blocked_one_off'])).toBe(false)
+  })
+
+  it('returns true when at least one queued verdict is not_blocked_enforcing (an enforcing control exists)', () => {
+    expect(hasBlockWorthyDisposition(['not_blocked_passive', 'not_blocked_enforcing'])).toBe(true)
+  })
+
+  it('returns true when at least one queued verdict is allowed_through (Tier 1)', () => {
+    expect(hasBlockWorthyDisposition(['allowed_through'])).toBe(true)
+  })
+
+  it('triageHeadlineText never contains the word "block" when every disposition is passive/detect-only/unknown', () => {
+    const text = triageHeadlineText(3, [
+      'not_blocked_passive',
+      'detected_no_action',
+      'block_status_unknown',
+    ])
+    expect(text.toLowerCase()).not.toContain('block')
+    expect(text).toBe('3 actors need review')
+  })
+
+  it('triageHeadlineText preserves "needs a BLOCK decision" when an enforcing control is present', () => {
+    const text = triageHeadlineText(1, ['not_blocked_enforcing'])
+    expect(text).toBe('1 actor needs a BLOCK decision')
+  })
+
+  it('triageHeadlineText preserves "need a BLOCK decision" (plural) when Tier 1 allowed_through is queued', () => {
+    const text = triageHeadlineText(2, ['allowed_through', 'block_status_unknown'])
+    expect(text).toBe('2 actors need a BLOCK decision')
+  })
+
+  it('triageHeadlineText singular/plural "needs"/"need" tracks count independent of the verb branch', () => {
+    expect(triageHeadlineText(1, ['not_blocked_passive'])).toBe('1 actor needs review')
+    expect(triageHeadlineText(1, ['allowed_through'])).toBe('1 actor needs a BLOCK decision')
   })
 })

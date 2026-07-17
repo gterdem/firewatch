@@ -400,3 +400,108 @@ export function pressureRowText(attemptCount: number, spanMinutes: number): stri
   if (spanMinutes > 0) return `${attemptCount} attempts over ${spanMinutes} min`
   return `${attemptCount} attempts`
 }
+
+// ---------------------------------------------------------------------------
+// Triage-queue verb + action-label copy (issue #45, ADR-0072 D6) — the single
+// copy home for the queue-card action labels + the false-positive/harden
+// advisory text, alongside the posture-aware headline builder below.
+//
+// D6 placement (maintainer ruling): queue card actions are Investigate /
+// Expected — this is me / Harden (advice-only, ADR-0033 seam); Dismiss lives
+// in an overflow menu on the card; False positive lives on the detection row
+// (it targets a rule, not the actor). This module owns only the WORDING for
+// those affordances — the components own zero copy of their own (issue #6
+// discipline, extended here).
+// ---------------------------------------------------------------------------
+
+/** Button/menu-item labels for the triage-queue verbs (issue #45, ADR-0072 D6). */
+export const ACTION_LABEL = {
+  investigate: 'Investigate',
+  expected: 'Expected — this is me',
+  harden: 'Harden',
+  dismiss: 'Dismiss',
+  falsePositive: 'False positive',
+} as const
+
+/**
+ * Advisory copy shown when an operator activates "Harden" (ADR-0033: advice
+ * only, never an executed action — one-click enforcement arrives with SOAR,
+ * M4). Source-agnostic (no per-source branching — the modularity rule):
+ * fail2ban / a generic firewall rule are the lowest-common-denominator
+ * hardening step regardless of which plugin produced the evidence.
+ */
+export const HARDEN_ADVICE =
+  'Consider a longer-term block via your firewall or a tool like fail2ban. ' +
+  'FireWatch does not execute this yet — one-click enforcement is planned for a future release (SOAR).'
+
+// ---------------------------------------------------------------------------
+// Posture-aware headline (issue #45, ADR-0072 D6 / C-1 Phase-A reconciliation)
+//
+// The pre-#45 banner headline unconditionally said "N actors need a BLOCK
+// decision" — false on a watch-only deployment that has nothing that can
+// block. This derives the headline VERB from the queued verdicts' Phase-A
+// disposition keys (issue #75, merged): a review verb is used unless at
+// least one queued verdict's disposition demonstrates that blocking is a
+// real, not-yet-taken action for that evidence.
+//
+// `not_blocked_enforcing` is the one Tier-2 posture disposition where an
+// enforcing control demonstrably exists (it let this traffic through without
+// stopping it) — the only member of the Tier-2 family "MAY reference
+// blocking" per the issue AC. `allowed_through` (Tier 1) is the pre-existing,
+// unconditional loudest-tier wording and is out of scope for this Phase-A
+// pass (no posture concept exists for Tier 1 yet — that is future work, not
+// this issue's must-NOT). `not_blocked_passive` (watch-only sensor),
+// `detected_no_action` (host-based, no removal capability), and
+// `block_status_unknown` (undeclared/mixed fallback) all carry NO evidence of
+// a blocking capability and MUST NOT produce "block" wording (the issue's
+// core gate). Already-blocked tiers (`blocked_persistent`/`blocked_one_off`)
+// are likewise never block-worthy — the block already happened; there is
+// nothing left to decide.
+//
+// No new posture endpoint; no dependency on Phase B (#44) — this reads only
+// the disposition keys already present on every queued ThreatScore.escalation.
+// ---------------------------------------------------------------------------
+
+/** Dispositions that demonstrate a real, not-yet-taken blocking action. */
+const BLOCK_WORTHY_DISPOSITIONS: ReadonlySet<string> = new Set([
+  'allowed_through',
+  'not_blocked_enforcing',
+])
+
+/**
+ * True when at least one queued verdict's disposition demonstrates that
+ * blocking is a real, available, not-yet-taken action (issue #45 C-1).
+ *
+ * Accepts the raw `disposition` strings (not full `ThreatScore`s) so this
+ * module stays decoupled from `api/types` — callers (`TriageBanner.tsx`) map
+ * `pendingActors` to `escalation?.disposition` before calling.
+ */
+export function hasBlockWorthyDisposition(
+  dispositions: ReadonlyArray<string | null | undefined>,
+): boolean {
+  return dispositions.some((d) => d != null && BLOCK_WORTHY_DISPOSITIONS.has(d))
+}
+
+/**
+ * Build the triage-banner headline sentence for the active (non-empty) queue.
+ *
+ * WHEN every queued verdict's disposition is passive/detect-only/unknown (or
+ * absent) → a review verb, and the word "block" never appears (issue #45
+ * must-NOT — never "BLOCK" on a watch-only box).
+ * WHEN at least one queued verdict carries a block-worthy disposition → the
+ * existing "needs a BLOCK decision" wording is preserved for that queue.
+ *
+ * `count` is `pendingActors.length`; `dispositions` is
+ * `pendingActors.map((a) => a.escalation?.disposition)`.
+ */
+export function triageHeadlineText(
+  count: number,
+  dispositions: ReadonlyArray<string | null | undefined>,
+): string {
+  const actorWord = count === 1 ? 'actor' : 'actors'
+  const needWord = count === 1 ? 'needs' : 'need'
+  if (hasBlockWorthyDisposition(dispositions)) {
+    return `${count} ${actorWord} ${needWord} a BLOCK decision`
+  }
+  return `${count} ${actorWord} ${needWord} review`
+}

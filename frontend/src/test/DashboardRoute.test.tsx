@@ -348,6 +348,9 @@ describe('DashboardRoute', () => {
       expect(screen.getByTestId('triage-banner-active')).toBeInTheDocument()
     })
 
+    // Issue #45 (ADR-0072 D6): Dismiss lives in the per-chip overflow menu.
+    const overflowTriggers = screen.getAllByTestId('triage-chip-overflow-trigger')
+    await userEvent.click(overflowTriggers[0])
     const dismissButtons = screen.getAllByTestId('triage-chip-dismiss')
     await userEvent.click(dismissButtons[0])
 

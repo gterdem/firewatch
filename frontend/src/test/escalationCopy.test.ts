@@ -27,6 +27,8 @@ import {
   tierGroupLabel,
   blockStatusLabel,
   dispositionColor,
+  attemptsHeadlineText,
+  pressureRowText,
 } from '../lib/escalationCopy'
 
 describe('TIER_COPY table — semantics unchanged (ADR-0058)', () => {
@@ -266,5 +268,72 @@ describe('Tier 2 label — rebased for ADR-0067 (issue #6 PR)', () => {
 
   it('states only what ADR-0067 D1 settles: a qualifying assertion/detection exists', () => {
     expect(TIER_COPY[1].label.toLowerCase()).toMatch(/flag/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// attemptsHeadlineText / pressureRowText (issue #55, ADR-0070 D1/D3)
+// ---------------------------------------------------------------------------
+
+describe('attemptsHeadlineText (issue #55)', () => {
+  it('builds the exact headline sentence from server integers', () => {
+    expect(
+      attemptsHeadlineText({
+        attempt_count: 412,
+        actor_count: 87,
+        succeeded_count: 0,
+        queue_size: 2,
+      }),
+    ).toBe('412 hostile attempts from 87 actors — 0 succeeded · 2 need review')
+  })
+
+  it('pluralizes "attempt"/"actor" singular vs plural', () => {
+    expect(
+      attemptsHeadlineText({ attempt_count: 1, actor_count: 1, succeeded_count: 0, queue_size: 0 }),
+    ).toContain('1 hostile attempt from 1 actor')
+    expect(
+      attemptsHeadlineText({ attempt_count: 2, actor_count: 2, succeeded_count: 0, queue_size: 0 }),
+    ).toContain('2 hostile attempts from 2 actors')
+  })
+
+  it('uses "needs" (singular verb) when queue_size is 1, "need" otherwise', () => {
+    expect(
+      attemptsHeadlineText({ attempt_count: 5, actor_count: 5, succeeded_count: 0, queue_size: 1 }),
+    ).toContain('1 needs review')
+    expect(
+      attemptsHeadlineText({ attempt_count: 5, actor_count: 5, succeeded_count: 0, queue_size: 0 }),
+    ).toContain('0 need review')
+  })
+
+  it('renders a nonzero succeeded_count verbatim — never re-derived from tier (ADR-0070 D3)', () => {
+    expect(
+      attemptsHeadlineText({ attempt_count: 58, actor_count: 6, succeeded_count: 1, queue_size: 3 }),
+    ).toContain('1 succeeded')
+  })
+
+  it('"succeeded" does not pluralize with a trailing -d/-s change regardless of count', () => {
+    // "succeeded" is invariant past tense — same word for 0, 1, or N.
+    expect(
+      attemptsHeadlineText({ attempt_count: 10, actor_count: 3, succeeded_count: 3, queue_size: 0 }),
+    ).toContain('3 succeeded')
+  })
+})
+
+describe('pressureRowText (issue #55 — strategist "show me the math" minimal slice)', () => {
+  it('renders "N attempts over M min" for multiple attempts with a nonzero span', () => {
+    expect(pressureRowText(42, 18)).toBe('42 attempts over 18 min')
+  })
+
+  it('renders "1 attempt" (no span) for a single-attempt actor', () => {
+    expect(pressureRowText(1, 0)).toBe('1 attempt')
+  })
+
+  it('renders "N attempts" (no span) when span_minutes is 0 but attempt_count > 1', () => {
+    expect(pressureRowText(3, 0)).toBe('3 attempts')
+  })
+
+  it('never renders a raw decayed-intensity float — only plain integers (ADR-0035)', () => {
+    const text = pressureRowText(42, 18)
+    expect(text).not.toMatch(/\d+\.\d+/)
   })
 })

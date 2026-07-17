@@ -18,7 +18,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { assertLoopbackBase, resolveBaseUrl, putSourceConfig } from '../api/client'
+import { assertLoopbackBase, resolveBaseUrl, putSourceConfig, fetchBannerSummary } from '../api/client'
 
 describe('assertLoopbackBase', () => {
   // Valid loopback origins must not throw
@@ -160,6 +160,47 @@ describe('putSourceConfig request body shape', () => {
 
     const [url] = fetchSpy.mock.calls[0] as [string, RequestInit]
     expect(url).toContain('my%20source%2Ftype')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// fetchBannerSummary — GET /banner/summary (issue #55)
+// ---------------------------------------------------------------------------
+
+describe('fetchBannerSummary', () => {
+  let fetchSpy: ReturnType<typeof vi.fn>
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('issues a GET request to /banner/summary and returns the parsed JSON verbatim', async () => {
+    const body = {
+      attempt_count: 412,
+      actor_count: 87,
+      succeeded_count: 0,
+      queue_size: 2,
+      top_pressure: [{ source_ip: '192.0.2.10', attempt_count: 42, span_minutes: 18 }],
+      generated_at: '2026-06-04T10:00:00Z',
+    }
+    fetchSpy = vi.fn().mockResolvedValue(new Response(JSON.stringify(body), { status: 200 }))
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const result = await fetchBannerSummary()
+
+    expect(fetchSpy).toHaveBeenCalledOnce()
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/banner/summary')
+    expect(init.method).toBe('GET')
+    // Result is the parsed JSON verbatim — no client-side recomputation.
+    expect(result).toEqual(body)
+  })
+
+  it('throws on a non-ok response (surfaced via parseError, not swallowed)', async () => {
+    fetchSpy = vi.fn().mockResolvedValue(new Response(null, { status: 503 }))
+    vi.stubGlobal('fetch', fetchSpy)
+
+    await expect(fetchBannerSummary()).rejects.toBeTruthy()
   })
 })
 

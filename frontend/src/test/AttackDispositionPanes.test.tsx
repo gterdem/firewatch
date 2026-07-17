@@ -65,6 +65,9 @@ vi.mock('../api/client', () => {
     fetchScoreHistory: vi.fn().mockResolvedValue([]),
     // DashboardRoute fetches triage_threshold from /config/runtime (ADR-0059 D1 / #650).
     getRuntimeConfig: vi.fn().mockRejectedValue(new Error('not mocked')),
+    // GET /banner/summary (issue #55) — non-blocking; rejecting keeps this file's
+    // pre-#55 TriageBanner rendering assumptions unchanged.
+    fetchBannerSummary: vi.fn().mockRejectedValue(new Error('not mocked')),
     ApiError,
     resolveBaseUrl: () => '',
     assertLoopbackBase: () => {},

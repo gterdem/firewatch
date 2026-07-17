@@ -52,6 +52,7 @@ import {
   THREATS_AI_UNAVAILABLE_FIXTURE,
   HEALTH_AI_ONLINE,
   HEALTH_AI_OFFLINE,
+  BANNER_SUMMARY_ACTIVE,
 } from './readFixtures'
 import type { ThreatScore } from '../api/types'
 
@@ -59,14 +60,21 @@ import type { ThreatScore } from '../api/types'
 // Mocks
 // ---------------------------------------------------------------------------
 
-const { mockFetchStats, mockFetchTimeline, mockFetchCategories, mockFetchThreats, mockFetchHealth } =
-  vi.hoisted(() => ({
-    mockFetchStats: vi.fn(),
-    mockFetchTimeline: vi.fn(),
-    mockFetchCategories: vi.fn(),
-    mockFetchThreats: vi.fn(),
-    mockFetchHealth: vi.fn(),
-  }))
+const {
+  mockFetchStats,
+  mockFetchTimeline,
+  mockFetchCategories,
+  mockFetchThreats,
+  mockFetchHealth,
+  mockFetchBannerSummary,
+} = vi.hoisted(() => ({
+  mockFetchStats: vi.fn(),
+  mockFetchTimeline: vi.fn(),
+  mockFetchCategories: vi.fn(),
+  mockFetchThreats: vi.fn(),
+  mockFetchHealth: vi.fn(),
+  mockFetchBannerSummary: vi.fn(),
+}))
 
 vi.mock('../api/client', () => {
   class ApiError extends Error {
@@ -91,6 +99,10 @@ vi.mock('../api/client', () => {
     // Non-blocking; fall back to "HIGH" on failure → mock with a rejecting fn so tests
     // that don't care get the safe default and banner behaviour is unchanged.
     getRuntimeConfig: vi.fn().mockRejectedValue(new Error('not mocked')),
+    // GET /banner/summary (issue #55) — non-blocking; rejecting by default keeps
+    // attemptSummary null so existing #43 ObservedRecordLine tests are unchanged.
+    // Dedicated #55 tests (below) override this per-case via mockFetchBannerSummary.
+    fetchBannerSummary: mockFetchBannerSummary,
     ApiError,
     resolveBaseUrl: () => '',
     assertLoopbackBase: () => {},
@@ -206,6 +218,9 @@ describe('DashboardRoute', () => {
     clearDismissed()
     // Default: health fetch succeeds with AI online; individual tests override as needed.
     mockFetchHealth.mockResolvedValue(HEALTH_AI_ONLINE)
+    // Default: GET /banner/summary fails (non-blocking) so attemptSummary stays null
+    // and existing #43 ObservedRecordLine tests are unaffected; #55 tests override.
+    mockFetchBannerSummary.mockRejectedValue(new Error('not mocked'))
   })
 
   // EARS event-driven: on mount, calls all four read endpoints
@@ -807,6 +822,7 @@ describe('DashboardRoute — #649 escalation-axis banner-worthiness (ADR-0058)',
     vi.clearAllMocks()
     clearDismissed()
     mockFetchHealth.mockResolvedValue(HEALTH_AI_ONLINE)
+    mockFetchBannerSummary.mockRejectedValue(new Error('not mocked'))
   })
 
   // EARS: WHEN actor carries Tier 1 or Tier 2 escalation → admitted to banner
@@ -985,6 +1001,9 @@ describe('DashboardRoute — #43 observed stratum reaches the banner (ADR-0067 D
     vi.clearAllMocks()
     clearDismissed()
     mockFetchHealth.mockResolvedValue(HEALTH_AI_ONLINE)
+    // GET /banner/summary (issue #55) — reject so attemptSummary stays null and
+    // this describe's #43 ObservedRecordLine assertions are unaffected.
+    mockFetchBannerSummary.mockRejectedValue(new Error('not mocked'))
   })
 
   function makeObserved(overrides: Partial<ThreatScore> = {}): ThreatScore {
@@ -1147,6 +1166,50 @@ describe('DashboardRoute — #43 observed stratum reaches the banner (ADR-0067 D
 })
 
 // ---------------------------------------------------------------------------
+// Issue #55 — GET /banner/summary wiring: fetch -> attemptSummary -> TriageBanner
+// ---------------------------------------------------------------------------
+
+describe('DashboardRoute — attempts headline wiring (issue #55)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    clearDismissed()
+    mockFetchHealth.mockResolvedValue(HEALTH_AI_ONLINE)
+  })
+
+  it('fetches GET /banner/summary on mount and passes the result to TriageBanner', async () => {
+    mockFetchStats.mockResolvedValue(STATS_FIXTURE)
+    mockFetchTimeline.mockResolvedValue(TIMELINE_FIXTURE)
+    mockFetchCategories.mockResolvedValue(CATEGORIES_FIXTURE)
+    mockFetchThreats.mockResolvedValue([])
+    mockFetchBannerSummary.mockResolvedValue(BANNER_SUMMARY_ACTIVE)
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('attempts-headline')).toHaveTextContent(
+        '412 hostile attempts from 87 actors — 0 succeeded · 2 need review',
+      )
+    })
+    expect(mockFetchBannerSummary).toHaveBeenCalledTimes(1)
+  })
+
+  it('degrades gracefully (no crash, #43 fallback) when GET /banner/summary fails', async () => {
+    mockFetchStats.mockResolvedValue(STATS_FIXTURE)
+    mockFetchTimeline.mockResolvedValue(TIMELINE_FIXTURE)
+    mockFetchCategories.mockResolvedValue(CATEGORIES_FIXTURE)
+    mockFetchThreats.mockResolvedValue([])
+    mockFetchBannerSummary.mockRejectedValue(new Error('unreachable'))
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('triage-banner-calm')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('attempts-headline')).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Issue #262 — 2×2 bento grid layout
 // ---------------------------------------------------------------------------
 
@@ -1161,6 +1224,7 @@ describe('DashboardRoute — #262 bento grid layout', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockFetchHealth.mockResolvedValue(HEALTH_AI_ONLINE)
+    mockFetchBannerSummary.mockRejectedValue(new Error('not mocked'))
 
     origGetBoundingClientRect = Element.prototype.getBoundingClientRect
     Element.prototype.getBoundingClientRect = () => ({

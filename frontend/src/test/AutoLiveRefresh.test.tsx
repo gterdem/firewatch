@@ -155,6 +155,9 @@ vi.mock('../api/client', () => {
     fetchThreats: mockFetchThreats,
     fetchHealth: mockFetchHealth,
     getRuntimeConfig: vi.fn().mockRejectedValue(new Error('not mocked')),
+    // GET /banner/summary (issue #55) — non-blocking; rejecting keeps this file's
+    // pre-#55 TriageBanner rendering assumptions unchanged.
+    fetchBannerSummary: vi.fn().mockRejectedValue(new Error('not mocked')),
     fetchAnalyses: vi.fn().mockResolvedValue({ items: [], next_cursor: null, has_more: false }),
     fetchFeedbackSummary: vi.fn().mockResolvedValue(null),
     fetchScoreHistory: vi.fn().mockResolvedValue([]),

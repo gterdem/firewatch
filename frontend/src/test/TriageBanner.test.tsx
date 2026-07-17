@@ -29,9 +29,10 @@ import userEvent from '@testing-library/user-event'
 import TriageBanner, { TOP_ACTORS_DEFAULT } from '../components/dashboard/TriageBanner'
 import { EntityPanelContext } from '../components/entity/EntityPanelContext'
 import type { EntityPanelContextValue } from '../components/entity/EntityPanelContext'
-import type { ThreatScore, EscalationVerdict } from '../api/types'
+import type { ThreatScore, EscalationVerdict, BannerAttemptSummary } from '../api/types'
 import type { OnAction } from '../lib/triageActions'
 import type { ObservedRecordSummary } from '../lib/triageBand'
+import { BANNER_SUMMARY_ACTIVE, BANNER_SUMMARY_EMPTY } from './readFixtures'
 
 // ---------------------------------------------------------------------------
 // Mock react-router-dom useNavigate (issue #43 — the observed-record link)
@@ -1144,5 +1145,107 @@ describe('TriageBanner — observed-stratum aggregate record line (issue #43)', 
     const observedRow = screen.getByTestId('legend-tier-observed')
     const style = observedRow.getAttribute('style') ?? ''
     expect(style).not.toMatch(/overflow\s*:\s*(scroll|auto)/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Attempts headline + pressure strip (issue #55, ADR-0070 D1/D3/D5)
+//
+// EARS criteria under test:
+//   - WHEN attemptSummary.attempt_count > 0 → AttemptsHeadline renders in the
+//     SAME SLOT the #43 ObservedRecordLine occupies, superseding it (not
+//     stacking alongside it) — in BOTH the calm and active banner states.
+//   - WHEN attemptSummary is null/absent, or attempt_count === 0 → the #43
+//     ObservedRecordLine renders unchanged (no regression to the pre-#55
+//     calm-state behavior).
+// ---------------------------------------------------------------------------
+
+describe('TriageBanner — attempts headline supersedes the #43 line (issue #55)', () => {
+  const RECORD: ObservedRecordSummary = { eventCount: 42, sourceCount: 3 }
+
+  it('falls back to the #43 ObservedRecordLine when attemptSummary is absent (calm state)', () => {
+    render(<TriageBanner pendingActors={[]} onAction={vi.fn()} observedRecord={RECORD} />)
+
+    expect(screen.getByTestId('triage-observed-record')).toBeInTheDocument()
+    expect(screen.queryByTestId('attempts-headline')).toBeNull()
+  })
+
+  it('falls back to the #43 ObservedRecordLine when attemptSummary reports zero attempts (calm state)', () => {
+    render(
+      <TriageBanner
+        pendingActors={[]}
+        onAction={vi.fn()}
+        observedRecord={RECORD}
+        attemptSummary={BANNER_SUMMARY_EMPTY}
+      />,
+    )
+
+    expect(screen.getByTestId('triage-observed-record')).toBeInTheDocument()
+    expect(screen.queryByTestId('attempts-headline')).toBeNull()
+  })
+
+  it('renders the attempts headline (not the #43 line) when attempts exist (calm state)', () => {
+    render(
+      <TriageBanner
+        pendingActors={[]}
+        onAction={vi.fn()}
+        observedRecord={RECORD}
+        attemptSummary={BANNER_SUMMARY_ACTIVE}
+      />,
+    )
+
+    expect(screen.getByTestId('attempts-headline')).toHaveTextContent(
+      '412 hostile attempts from 87 actors — 0 succeeded · 2 need review',
+    )
+    // Superseded IN THE SAME SLOT — the #43 line must NOT also render.
+    expect(screen.queryByTestId('triage-observed-record')).toBeNull()
+  })
+
+  it('renders the attempts headline (not the #43 line) when attempts exist (active state)', () => {
+    render(
+      <TriageBanner
+        pendingActors={[ACTOR_ESCALATED_TIER1]}
+        onAction={vi.fn()}
+        observedRecord={RECORD}
+        attemptSummary={BANNER_SUMMARY_ACTIVE}
+      />,
+    )
+
+    expect(screen.getByTestId('triage-banner-active')).toBeInTheDocument()
+    expect(screen.getByTestId('attempts-headline')).toBeInTheDocument()
+    expect(screen.queryByTestId('triage-observed-record')).toBeNull()
+  })
+
+  it('the primary "N actors need a BLOCK decision" headline is unaffected by attemptSummary', () => {
+    render(
+      <TriageBanner
+        pendingActors={[ACTOR_ESCALATED_TIER1]}
+        onAction={vi.fn()}
+        attemptSummary={BANNER_SUMMARY_ACTIVE}
+      />,
+    )
+
+    expect(screen.getByTestId('triage-banner-headline')).toHaveTextContent(
+      '1 actor needs a BLOCK decision',
+    )
+  })
+
+  it('renders the pressure strip alongside the headline when attempts exist', () => {
+    render(<TriageBanner pendingActors={[]} onAction={vi.fn()} attemptSummary={BANNER_SUMMARY_ACTIVE} />)
+    expect(screen.getAllByTestId('pressure-row')).toHaveLength(5)
+  })
+
+  it('a null attemptSummary is equivalent to absent (defensive — non-fatal fetch failure)', () => {
+    const nullSummary: BannerAttemptSummary | null = null
+    render(
+      <TriageBanner
+        pendingActors={[]}
+        onAction={vi.fn()}
+        observedRecord={RECORD}
+        attemptSummary={nullSummary}
+      />,
+    )
+    expect(screen.getByTestId('triage-observed-record')).toBeInTheDocument()
+    expect(screen.queryByTestId('attempts-headline')).toBeNull()
   })
 })

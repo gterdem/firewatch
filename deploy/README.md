@@ -316,6 +316,220 @@ images and the FireWatch source code are unchanged either way (ADR-0042).
 
 ---
 
+## Reading the host's own logs from the container (issue #5)
+
+The M1 endpoint source plugins — `linux_auth` (sshd, sudo, PAM auth failures)
+and `clamav` (malware detections) — read *this machine's own* logs
+(ADR-0065's local-first principle). On bare metal that's automatic (see
+"Bare-metal path" below). **Inside Docker, the container has its own
+filesystem namespace and cannot see the host's journal or `/var/log` unless
+you deliberately bind-mount them in** — this section is that deliberate
+setup, plus how to verify it actually reads the host's events.
+
+Both `linux_auth` and `clamav` are already installed in the `firewatch` image
+(`deploy/Dockerfile`'s `uv sync --all-packages` pulls in every workspace
+source plugin) — nothing to add to the image itself; only the **mounts** and
+the plugins' own config (`mode`/`auth_log_path`/`log_path`, defaulted to the
+Debian/Ubuntu conventions already — see `firewatch_linux_auth.config` /
+`firewatch_clamav.config`) need to line up with what you mount.
+
+### journald path (systemd hosts — Arch, Ubuntu, Fedora, Debian)
+
+The primary, recommended path (ADR-0065 §3: journald-first). Apply the
+compose override `deploy/docker-compose.host-logs.yml` on top of any profile:
+
+```bash
+# 1. Find your host's systemd-journal group GID and put it in deploy/.env:
+getent group systemd-journal        # e.g. systemd-journal:x:999:
+echo "FW_HOST_LOG_GID=999" >> deploy/.env   # use YOUR actual GID, not 999
+
+# 2. Bring the stack up with the override applied (any profile — rules-only shown):
+FIREWATCH_AI_ENABLED=false \
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.host-logs.yml \
+    --profile rules-only up -d --build
+
+# 3. Confirm the container can read the host journal:
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.host-logs.yml \
+    exec firewatch journalctl -n 5 --no-pager
+```
+
+`deploy/docker-compose.host-logs.yml`'s journald section (the default —
+active section in the file) mounts `/var/log/journal` **and**
+`/etc/machine-id`, both read-only. Both are required — see the file's own
+comments and "Permission model" below for why `/etc/machine-id` specifically
+is load-bearing, not incidental.
+
+**Verification (the issue's acceptance check) — EICAR + a failed SSH login:**
+
+```bash
+# Failed SSH login (generates a linux_auth event) — from any machine that
+# can reach the host's sshd, or from the host itself against itself:
+ssh nonexistent-user@localhost   # answer/ignore the password prompt; it will fail
+
+# EICAR malware detection (generates a clamav event) — requires ClamAV
+# already installed/configured on the HOST with on-access or manual scanning
+# (see packages/sources/clamav/README.md — "Testing with EICAR", which links
+# the official eicar.org download; installing ClamAV itself is out of scope
+# for FireWatch, ADR-0021). The standard EICAR test string, written directly
+# (no download needed — the same string every antivirus engine recognizes as
+# "malware" by convention; harmless, not executable):
+mkdir -p /tmp/eicar-test
+printf '%s' 'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' \
+    > /tmp/eicar-test/eicar.com.txt
+
+# Then check the containerized FireWatch dashboard/API for both events:
+curl -fsS http://localhost:8080/threats | jq .
+```
+
+**PENDING MAINTAINER VERIFICATION** — this exact end-to-end check (the
+EICAR file and the failed SSH login actually appearing, scored, in the
+containerized FireWatch's `/threats`) has not been run against a live host by
+this change; it requires a real systemd host with sshd and a configured
+ClamAV on-access scanner, which this environment does not have. What HAS
+been verified live, on this build host (Ubuntu 24.04, systemd/journald
+present, 2026-07-17): the mount + permission mechanism itself — a
+`firewatch`-image container, running as the non-root `firewatch` user (UID
+1001) with **no** `group_add`, gets `journalctl`'s real
+`No journal files were opened due to insufficient permissions.` (exit 1)
+against the bind-mounted host journal; the SAME container with
+`group_add: ["999"]` (this host's real `systemd-journal` GID) successfully
+reads live host journal entries via `journalctl -o json` (the exact
+invocation `firewatch_sdk.localhost.journald.JournaldReader` uses) — and the
+full compose stack (`docker compose ... --profile rules-only up -d --build`
+with the override applied) came up healthy with `docker compose exec
+firewatch journalctl -n 5` returning real host entries and
+`groups=...,999(systemd-journal)` confirmed via `id`. See the git history of
+this change for the exact commands run.
+
+### file-tail path (non-systemd host, or hardened Docker/Podman)
+
+For a host with no systemd journal (rare on the mainstream distros this
+project targets, but real for minimal/container-base images or non-systemd
+inits), or a hardened Docker/Podman setup whose security profile restricts
+journal access specifically: edit `deploy/docker-compose.host-logs.yml`,
+commenting out the two journald lines and uncommenting the one `/var/log`
+line instead (the file's own comments walk through this).
+
+```bash
+# 1. Find the group that owns the auth log on your distro and put it in deploy/.env:
+getent group adm                    # Debian/Ubuntu — e.g. adm:x:4:
+echo "FW_HOST_LOG_GID=4" >> deploy/.env    # use YOUR actual GID
+
+# 2. Bring the stack up the same way as the journald path (same override file,
+#    now with its /var/log line uncommented instead):
+FIREWATCH_AI_ENABLED=false \
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.host-logs.yml \
+    --profile rules-only up -d --build
+
+# 3. Confirm the container can read the host's auth log:
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.host-logs.yml \
+    exec firewatch tail -n 5 /var/log/auth.log
+```
+
+Then set `linux_auth`'s `mode` to `"file"` (or leave it `"auto"` — it falls
+back to file-tail automatically when journald is unavailable) and
+`auth_log_path` to match your distro (`/var/log/auth.log` on Debian/Ubuntu —
+the default already; `/var/log/secure` on RHEL/CentOS-family — see the
+caveat below). **Verification** is the same EICAR + failed-SSH check as the
+journald path above, and carries the same **PENDING MAINTAINER
+VERIFICATION** status — what was verified live here is the mechanism only:
+without `group_add`, `tail /var/log/auth.log` as the non-root container user
+gets `Permission denied` (exit 1); with `group_add: ["4"]` (this host's
+`adm` GID) it reads real lines from the host's own `auth.log`. A write
+attempt (`echo hi >> /var/log/auth.log`) against the same `:ro` mount was
+also confirmed refused (`Read-only file system`) even with the matching
+group — the mount's read-only enforcement is independent of group access.
+
+**RHEL/CentOS caveat — a real, honest limitation, not papered over:**
+RHEL/CentOS-family distros ship `/var/log/secure` as `root:root`, mode
+`0600` (root-only, not group-readable) by default — unlike Debian/Ubuntu's
+`/var/log/auth.log` (`root:adm`, mode `0640`). `group_add` cannot help on
+those hosts: no non-root GID grants access to a file with no group read bit
+at all. On a RHEL/CentOS-family host, prefer the journald path (systemd
+journal files there are still group-readable via `systemd-journal`,
+unaffected by this); the file-tail path only works there if the host's own
+hardening policy is changed to loosen `/var/log/secure`'s permissions — a
+host-side decision this deployment does not make for you.
+
+### Permission model — explicit, no `privileged: true` shortcut
+
+Two independent mechanisms are in play, and conflating them is the most
+common way this goes wrong:
+
+1. **Read-only root mount (`:ro`).** Every bind mount in
+   `deploy/docker-compose.host-logs.yml` is read-only — a **kernel-enforced**
+   guarantee that the container cannot write to, truncate, or delete the
+   host's log files, independent of which user is reading inside the
+   container. Verified live above: a write attempt against the `:ro` mount
+   fails with `Read-only file system` even for a process with matching group
+   read access.
+2. **Group membership (`group_add`).** A read-only mount does not, by
+   itself, grant read access — Linux permission checks run against each
+   file's own owner/group/mode, regardless of the mount flag. FireWatch's
+   container runs as a non-root user (`firewatch`, UID 1001,
+   `deploy/Dockerfile` — ADR-0026 minimal privilege), so for it to actually
+   be *permitted* to read journal files (typically group `systemd-journal`,
+   mode `0640`) or `auth.log` (typically group `adm` on Debian/Ubuntu, mode
+   `0640`), it needs supplementary group membership matching the **host's**
+   group GID. Compose's `group_add:` (which `deploy/docker-compose.host-logs.yml`
+   uses, sourced from `FW_HOST_LOG_GID` in `deploy/.env`) adds that GID to
+   the running container process — the containerized equivalent of `sudo
+   usermod -aG systemd-journal $USER` for a bare-metal invocation, **without**
+   elevating to root and **without** `privileged: true`.
+
+**Never** use `privileged: true`, `user: root`, or `cap_add: [ALL]` to work
+around a permission error here. Each trades a scoped, auditable group grant
+(one GID, read-only data) for unrestricted host access from the one
+container whose entire job is watching for intrusions — the opposite of
+least privilege. If `group_add` with the correct GID still fails, that is a
+signal to re-check the GID (`getent group ...` **on the host**, not inside
+the container) or to reconsider the file-tail path's RHEL/CentOS caveat
+above — not to reach for a broader grant.
+
+### journald image size (issue #5 acceptance criterion)
+
+The image needs `journalctl` on `PATH` —
+`firewatch_sdk.localhost.journald.JournaldReader` shells out to
+`journalctl -o json` and raises a typed
+`JournaldUnavailableError` if the binary is missing (see that module's
+`_spawn`). On Debian (this image's base, `python:3.12-slim`), `journalctl`
+ships in the `systemd` package itself — no smaller package provides just the
+binary (`systemd-journal-remote` is a different tool, for *sending/receiving
+remote* journals, out of scope per this issue). `deploy/Dockerfile` installs
+it `--no-install-recommends` alongside the existing `curl` dependency, which
+skips systemd's optional recommends (dbus, cryptsetup, timesyncd, ...).
+
+**Measured** (not estimated) on this build host, 2026-07-17, same methodology
+as `docs/benchmarks/footprint-2026-06-12.md` (`docker image inspect --format
+'{{.Size}}'`, uncompressed):
+
+| Image | Bytes | Human-readable |
+|---|---|---|
+| `firewatch:latest` — before (curl only) | 230,102,016 | 230.1 MB |
+| `firewatch:latest` — after (curl + systemd) | 244,473,574 | 244.5 MB |
+| **Delta** | **14,371,558** | **~14.4 MB (+6.2%)** |
+
+This delta is specific to this build host's package versions/base-image
+digest at measurement time and will drift slightly as Debian ships new
+`systemd`/dependency versions — re-run the same `docker image inspect`
+comparison after a Dockerfile change to confirm the current number, rather
+than trusting this table indefinitely.
+
+### Bare-metal path — no extra steps
+
+Running FireWatch directly on the host (`uv run` / pipx, see below) needs
+**no container-specific setup at all**: `linux_auth`/`clamav` call
+`journalctl`/read `/var/log` as whatever OS user is already running the
+`firewatch` process. The only requirement is that user's own journal-read
+permission — the same `sudo usermod -aG systemd-journal $USER` (and re-login)
+that `JournaldReader`'s own error message recommends when it hits
+`EPERM`/`Permission denied`, or plain file-read permission on
+`/var/log/auth.log` for the file-tail fallback. No bind mounts, no
+`group_add`, no `/etc/machine-id` — the process already shares the host's
+journal and filesystem directly.
+
+---
+
 ## Bare-metal (pipx) path
 
 If you want to run FireWatch on bare metal without Docker, install it with
@@ -379,3 +593,8 @@ adapter, prompts, and scoring logic are identical in both profiles.
 | llama-server OOM-killed | GGUF too large for available RAM | Use a smaller quantization (Q4 vs Q8) or a 3B model |
 | Config not applied | Env var typo or stale container | `docker compose ... down && up -d` after editing `.env` |
 | `Refusing to bind non-loopback` | `--host 0.0.0.0` passed without API key | Do not override `--host`; keep the loopback default |
+| `error while interpolating services.firewatch.group_add...: required variable FW_HOST_LOG_GID is missing a value` | `deploy/docker-compose.host-logs.yml` applied without `FW_HOST_LOG_GID` set | Set it in `deploy/.env` — see "Reading the host's own logs" |
+| `journalctl`: `No journal files were opened due to insufficient permissions.` (exit 1) | `FW_HOST_LOG_GID` unset, wrong, or doesn't match the HOST's actual `systemd-journal` GID | Re-run `getent group systemd-journal` **on the host** (not inside the container) and correct `deploy/.env` |
+| `journalctl`: `Failed to open system journal: Permission denied` | Same root cause as above, different systemd/journald phrasing (the directory itself isn't listable, vs. individual files unreadable) | Same fix — correct `FW_HOST_LOG_GID` |
+| `journalctl` runs but shows nothing at all | Host's journald uses `Storage=volatile` (`/etc/systemd/journald.conf`) — no persistent files under `/var/log/journal` to bind-mount | Check `journalctl --disk-usage` on the host; either switch journald to persistent storage or use the file-tail path instead |
+| `tail: /var/log/auth.log: Permission denied` (file-tail path) | `FW_HOST_LOG_GID` doesn't match the host's `adm` (or equivalent) group | Re-run `getent group adm` on the host; on RHEL/CentOS-family hosts see the RHEL/CentOS caveat above — `group_add` cannot fix a root-only `0600` file |

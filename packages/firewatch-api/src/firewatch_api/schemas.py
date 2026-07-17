@@ -604,6 +604,28 @@ class ListDecisionsResponse(BaseModel):
     has_more: bool = False
 
 
+class ReentryAnnotation(BaseModel):
+    """Re-entry payload (ADR-0072 D4, issue #56) — engine integers only, never
+    a raw float; RULE-tagged provenance (ADR-0035).
+
+    Populated when the actor's CURRENT verdict tier is newly present
+    (``decided_tier`` was ``null``) or numerically lower (louder) than
+    ``decided_tier`` was at decision time. ``decided_score``/``current_score``
+    are carried as a #49 (novelty memory) input — a score increase ALONE is
+    never itself a re-entry trigger (ADR-0072 D4 boundary 2).
+    """
+
+    decided_tier: int | None = Field(
+        description="Verdict tier recorded at decision time; null = observed stratum.",
+    )
+    decided_score: int = Field(description="Engine score recorded at decision time.")
+    current_tier: int | None = Field(
+        description="The actor's CURRENT verdict tier; null = observed stratum.",
+    )
+    current_score: int = Field(description="The actor's CURRENT engine score.")
+    decided_at: str = Field(description="UTC ISO-8601 — when the baseline decision was made.")
+
+
 class TriageDecisionAnnotation(BaseModel):
     """The additive ``triage_decision`` annotation on ``ThreatScore`` (ADR-0072 D3/D8).
 
@@ -622,9 +644,13 @@ class TriageDecisionAnnotation(BaseModel):
     suppressed: bool = Field(
         description="OR of actor-identity and false-positive suppression (ADR-0072 D4).",
     )
-    reentry: dict[str, Any] | None = Field(
+    reentry: ReentryAnnotation | None = Field(
         default=None,
-        description="Always null until issue #56 implements re-entry (ADR-0072 D4 interim).",
+        description=(
+            "Populated (ADR-0072 D4, issue #56) when the actor's current tier "
+            "is newly present or strictly louder than at decision time — the "
+            "actor has re-entered the queue (suppressed=false). Null otherwise."
+        ),
     )
 
 

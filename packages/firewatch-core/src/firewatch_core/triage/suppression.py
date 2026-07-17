@@ -4,7 +4,7 @@
 truth every read surface consults (via ``firewatch_api.decision_annotator``):
 ``GET /threats``/``GET /threats/{ip}`` (the ``triage_decision`` annotation) and
 ``GET /banner/summary`` (``queue_size`` exclusion) — ADR-0072 finding 2, "one
-evaluator, every surface." No I/O; pure function of its two arguments.
+evaluator, every surface." No I/O; pure function of its arguments.
 
 D4 formula (quoted from the ADR)::
 
@@ -28,12 +28,18 @@ Two fail-toward-visibility boundaries (deliberate, ADR-0072 D4):
    explicit non-empty check below (an empty set IS a subset of anything in
    set theory, so the emptiness check is REQUIRED, not redundant).
 2. Score/volume deltas never enter suppression: ``decided_score`` is recorded
-   as a #49 input, never read by this module.
+   as a #49 input, never read by ``reentry`` (issue #56 must-NOT: a score
+   increase ALONE never re-enters an actor — only ``verdict.tier`` is
+   compared against ``A.decided_tier``).
 
-#56 seam: ``reentry`` is ALWAYS ``False`` in this module (the ADR-0072 D4
-"Interim between #47 and #56" clause) — ``suppressed_by_actor`` reduces to
-"an active actor-scoped decision exists". Issue #56 implements the tier-based
-``reentry`` predicate quoted above and wires it in where marked below.
+#56: the ``reentry`` predicate quoted above is implemented in
+``_reentry_info`` below and feeds both ``suppressed_by_actor`` and the
+``DecisionEvaluation.reentry`` payload (ADR-0072 D4's re-entry payload,
+engine integers only, RULE-tagged — ADR-0035). It only ever consults the
+latest active ACTOR-scoped row (``A``, verb in ``{expected, dismissed}``) —
+``false_positive`` rows are excluded structurally by ``_latest_actor_decision``
+and never participate in snapshot re-entry (§2/D4: FP suppression is coverage
+recomputation only).
 """
 from __future__ import annotations
 
@@ -41,7 +47,7 @@ from collections.abc import Sequence
 
 from firewatch_sdk.models import EscalationVerdict
 
-from firewatch_core.triage.models import DecisionEvaluation, TriageDecision
+from firewatch_core.triage.models import DecisionEvaluation, ReentryInfo, TriageDecision
 
 #: Verbs that suppress by actor identity (fail2ban ``ignoreip`` precedent,
 #: ADR-0070 D6) — ``false_positive`` is rule-scoped and excluded here.
@@ -68,9 +74,45 @@ def _fp_rule_set(active: list[TriageDecision]) -> frozenset[str]:
     )
 
 
+def _reentry_info(
+    actor_decision: TriageDecision,
+    verdict_tier: int | None,
+    current_score: int,
+) -> ReentryInfo | None:
+    """The #56 reentry predicate (ADR-0072 D4), evaluated against ``A`` — the
+    latest active ACTOR-scoped row (``false_positive`` rows never reach here;
+    callers only invoke this with ``A``, never an FP row — §2/D4: FP
+    suppression is coverage recomputation, not snapshot-based)::
+
+        reentry = (A.decided_tier IS None AND verdict.tier IS NOT None)
+               OR (both non-None AND verdict.tier < A.decided_tier)
+
+    Closed-form and deterministic against the stored snapshot; consults ONLY
+    tiers. ``current_score``/``decided_score`` ride along in the returned
+    payload as a #49 input (ADR-0072 D4 boundary 2) — a score increase alone
+    is NEVER a trigger (issue #56 must-NOT), so it never appears left of the
+    comparison above.
+    """
+    decided_tier = actor_decision.decided_tier
+    fired = (decided_tier is None and verdict_tier is not None) or (
+        decided_tier is not None and verdict_tier is not None and verdict_tier < decided_tier
+    )
+    if not fired:
+        return None
+    return ReentryInfo(
+        decided_tier=decided_tier,
+        decided_score=actor_decision.decided_score,
+        current_tier=verdict_tier,
+        current_score=current_score,
+        decided_at=actor_decision.decided_at,
+    )
+
+
 def evaluate(
     decisions: Sequence[TriageDecision],
     verdict: EscalationVerdict | None,
+    *,
+    current_score: int = 0,
 ) -> DecisionEvaluation:
     """Evaluate one actor's decision history against its CURRENT verdict (D4).
 
@@ -78,27 +120,34 @@ def evaluate(
     pre-computed strings already on *decisions*; "current" means whatever
     *verdict* the caller passes (recomputed at read time, ADR-0041).
 
+    ``current_score`` is the actor's current engine score, carried into the
+    ``reentry`` payload only (issue #56) — it never affects ``suppressed`` or
+    ``reentry`` itself (score/volume boundary, D4 boundary 2). Callers that
+    never render the payload (``is_suppressed`` / ``GET /banner/summary``)
+    may omit it; the default is discarded before it can be observed.
+
     ``verdict=None`` (no escalation verdict is available for this actor, e.g.
     the decider was not invoked) is treated as a verdict with ``tier=None``
     and no qualifying rules: ``suppressed_by_fp`` can never be True without a
-    real verdict (fail-toward-visibility), while ``suppressed_by_actor`` is
-    unaffected — actor-identity suppression does not consult the verdict at
-    all under the #47 interim (reentry ≡ False).
+    real verdict (fail-toward-visibility), while ``suppressed_by_actor``
+    still consults the reentry predicate against ``tier=None``.
     """
     active = _active_rows(decisions)
     actor_decision = _latest_actor_decision(active)
+    verdict_tier = verdict.tier if verdict is not None else None
 
-    # --- suppressed_by_actor -------------------------------------------------
-    # SEAM (#56): D4 defines `suppressed_by_actor = A exists AND NOT
-    # reentry(A, verdict)`. The ADR-0072 D4 "Interim between #47 and #56"
-    # clause hardcodes reentry ≡ False until #56 lands, so this reduces to
-    # "A exists". Replace with the full reentry predicate when #56 ships.
-    suppressed_by_actor = actor_decision is not None
+    # --- suppressed_by_actor / reentry (#56) ---------------------------------
+    # D4: `suppressed_by_actor = A exists AND NOT reentry(A, verdict)`.
+    reentry = (
+        _reentry_info(actor_decision, verdict_tier, current_score)
+        if actor_decision is not None
+        else None
+    )
+    suppressed_by_actor = actor_decision is not None and reentry is None
 
     # --- suppressed_by_fp -----------------------------------------------------
     fp_rules = _fp_rule_set(active)
     qualifying = frozenset(verdict.qualifying_rules) if verdict is not None else frozenset()
-    verdict_tier = verdict.tier if verdict is not None else None
     # The `bool(qualifying)` check is REQUIRED, not redundant: an empty set is
     # a subset of any set, so `qualifying <= fp_rules` alone would let an
     # actor with no named qualifying rule (an anonymous ALERT) be
@@ -114,5 +163,5 @@ def evaluate(
         suppressed_by_actor=suppressed_by_actor,
         suppressed_by_fp=suppressed_by_fp,
         active_actor_decision=actor_decision,
-        reentry=None,
+        reentry=reentry,
     )

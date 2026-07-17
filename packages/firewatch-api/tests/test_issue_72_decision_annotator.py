@@ -21,6 +21,11 @@ EARS → test mapping
   false suppression claim beyond actor-identity.
   -> test_none_verdict_does_not_crash
 
+- #56 reentry: WHEN the current verdict re-enters (tier appears / louder),
+  annotate() surfaces suppressed=false and a populated reentry dict with
+  current_score threaded through from the caller.
+  -> test_annotate_surfaces_reentry_payload_and_unsuppresses
+
 All IPs are RFC 5737 documentation IPs (198.51.100.0/24).
 """
 from __future__ import annotations
@@ -108,3 +113,21 @@ def test_none_verdict_does_not_crash() -> None:
     annotated = annotate(rows, None)
     assert annotated is not None
     assert annotated.suppressed is True
+
+
+def test_annotate_surfaces_reentry_payload_and_unsuppresses() -> None:
+    """#56 — a decided actor whose current tier is now LOUDER than the
+    decision-time snapshot re-enters: suppressed flips to False and the
+    reentry dict carries the caller-supplied current_score."""
+    row = _row(verb="expected", decided_tier=2, decided_score=30)
+    verdict = _verdict(tier=1)
+    result = annotate([row], verdict, current_score=77)
+    assert result is not None
+    assert result.suppressed is False
+    assert result.reentry == {
+        "decided_tier": 2,
+        "decided_score": 30,
+        "current_tier": 1,
+        "current_score": 77,
+        "decided_at": "2026-07-01T00:00:00+00:00",
+    }

@@ -45,6 +45,7 @@ from firewatch_api.schemas import (
     EvidenceChainResponse,
     IPEventTimelineResponse,
     NarrationResponse,
+    ReentryAnnotation,
     ThreatScoreWithDecision,
     TimelineEventItem,
     TriageDecisionAnnotation,
@@ -92,7 +93,10 @@ async def _annotate_score(score: ThreatScore, decision_store: Any) -> ThreatScor
     rows: list[dict[str, Any]] = []
     if decision_store is not None:
         rows = await decision_store.get_active_for_actor(score.source_ip)
-    annotated = decision_annotator.annotate(rows, score.escalation)
+    # current_score=score.score: the actor's live engine score feeds the
+    # #56 reentry payload only — it never affects suppression itself
+    # (ADR-0072 D4 boundary 2).
+    annotated = decision_annotator.annotate(rows, score.escalation, current_score=score.score)
     triage_decision = (
         TriageDecisionAnnotation(
             verb=annotated.verb,  # type: ignore[arg-type]
@@ -100,7 +104,7 @@ async def _annotate_score(score: ThreatScore, decision_store: Any) -> ThreatScor
             decided_tier=annotated.decided_tier,
             decided_score=annotated.decided_score,
             suppressed=annotated.suppressed,
-            reentry=annotated.reentry,
+            reentry=ReentryAnnotation(**annotated.reentry) if annotated.reentry else None,
         )
         if annotated is not None
         else None

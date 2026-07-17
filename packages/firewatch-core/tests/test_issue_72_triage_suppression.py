@@ -22,9 +22,30 @@ EARS criteria -> test mapping:
 - D4 boundary 2: decided_score/volume SHALL NEVER affect suppression.
   -> test_decided_score_does_not_affect_suppression
 
-- D4 interim (#47, reentry ≡ False): an actor-scoped decision SHALL suppress
-  regardless of any tier change until #56 lands.
-  -> test_reentry_is_always_false_in_this_module
+- #56 reentry: WHEN a decided actor's tier was None and a tier now appears,
+  suppressed_by_actor SHALL become False and `reentry` SHALL be populated.
+  -> TestReentry.test_tier_appears_reenters
+- #56 reentry: WHEN the current tier is numerically LOWER (louder) than the
+  decided tier, suppressed_by_actor SHALL become False and `reentry` SHALL be
+  populated.
+  -> TestReentry.test_louder_tier_reenters
+- #56 must-NOT: the SAME tier as decided_tier SHALL NOT reenter.
+  -> TestReentry.test_same_tier_does_not_reenter
+- #56 must-NOT: a HIGHER (quieter) tier number than decided_tier SHALL NOT
+  reenter (only a strictly LOWER tier number qualifies).
+  -> TestReentry.test_quieter_tier_does_not_reenter
+- #56 must-NOT: a score increase ALONE (tier unchanged) SHALL NOT reenter —
+  volume is never a re-entry trigger.
+  -> TestReentry.test_score_increase_alone_does_not_reenter
+- #56 must-NOT: a `false_positive` row (rule-scoped) never participates in
+  snapshot reentry — only the actor-scoped `A` row is compared.
+  -> TestReentry.test_false_positive_row_never_reenters
+- #56 payload: the `reentry` payload carries decided_tier/decided_score/
+  current_tier/current_score/decided_at as engine integers when it fires.
+  -> TestReentry.test_reentry_payload_shape
+- #56 re-decide semantics: the evaluator uses the LATEST active actor-scoped
+  row as the baseline — a fresh decision after reentry stops the reentry.
+  -> TestReentry.test_fresh_decision_after_reentry_uses_new_baseline
 
 - verdict.tier is None (observed): suppressed_by_fp SHALL be False (the D4
   formula requires tier IS NOT None).
@@ -203,16 +224,106 @@ def test_decided_score_does_not_affect_suppression():
 
 
 # ---------------------------------------------------------------------------
-# #47 interim: reentry is always False (the #56 seam)
+# #56 — the reentry clause (ADR-0072 D4)
 # ---------------------------------------------------------------------------
 
 
-def test_reentry_is_always_false_in_this_module():
-    """Even a verdict at a LOWER (louder) tier than decided_tier must stay
-    suppressed under the #47 interim — #56 is the only PR allowed to change
-    this (ADR-0072 D4 'Interim between #47 and #56')."""
-    decision = _decision(verb="expected", decided_tier=None, decided_score=0)
-    verdict = _verdict(tier=1)  # would satisfy the #56 reentry predicate
-    result = evaluate([decision], verdict)
-    assert result.suppressed_by_actor is True
-    assert result.reentry is None
+class TestReentry:
+    def test_tier_appears_reenters(self):
+        """decided_tier=None (observed at decision time) -> a tier now exists
+        -> the actor re-enters the queue."""
+        decision = _decision(verb="expected", decided_tier=None, decided_score=0)
+        verdict = _verdict(tier=2)
+        result = evaluate([decision], verdict)
+        assert result.suppressed_by_actor is False
+        assert result.suppressed is False
+        assert result.reentry is not None
+        assert result.reentry.decided_tier is None
+        assert result.reentry.current_tier == 2
+
+    def test_louder_tier_reenters(self):
+        """decided_tier=2 -> current tier=1 (numerically lower = louder) ->
+        the actor re-enters the queue."""
+        decision = _decision(verb="dismissed", decided_tier=2, decided_score=40)
+        verdict = _verdict(tier=1)
+        result = evaluate([decision], verdict)
+        assert result.suppressed_by_actor is False
+        assert result.suppressed is False
+        assert result.reentry is not None
+        assert result.reentry.decided_tier == 2
+        assert result.reentry.current_tier == 1
+
+    def test_same_tier_does_not_reenter(self):
+        """must-NOT: an unchanged tier holds the decision — no reentry."""
+        decision = _decision(verb="expected", decided_tier=2, decided_score=40)
+        verdict = _verdict(tier=2)
+        result = evaluate([decision], verdict)
+        assert result.suppressed_by_actor is True
+        assert result.suppressed is True
+        assert result.reentry is None
+
+    def test_quieter_tier_does_not_reenter(self):
+        """must-NOT: a numerically HIGHER (quieter) tier than decided_tier is
+        not a reentry — only a strictly LOWER tier number qualifies."""
+        decision = _decision(verb="expected", decided_tier=2, decided_score=40)
+        verdict = _verdict(tier=3)
+        result = evaluate([decision], verdict)
+        assert result.suppressed_by_actor is True
+        assert result.reentry is None
+
+    def test_score_increase_alone_does_not_reenter(self):
+        """must-NOT (the EARS WHILE clause): volume/score growth alone, with
+        the tier held constant, is NEVER a re-entry trigger."""
+        decision = _decision(verb="expected", decided_tier=2, decided_score=10)
+        verdict = _verdict(tier=2)
+        result = evaluate([decision], verdict, current_score=95)
+        assert result.suppressed_by_actor is True
+        assert result.suppressed is True
+        assert result.reentry is None
+
+    def test_false_positive_row_never_reenters(self):
+        """must-NOT: a `false_positive` row is rule-scoped, not actor-scoped —
+        it never participates in snapshot reentry (only `A`, the latest
+        active expected/dismissed row, is compared)."""
+        fp = _decision(id=1, verb="false_positive", rule_name="waf_sqli", decided_tier=3)
+        verdict = _verdict(tier=1, qualifying_rules=["waf_sqli"])
+        result = evaluate([fp], verdict)
+        assert result.active_actor_decision is None
+        assert result.reentry is None
+        # Still FP-suppressed via coverage, not snapshot reentry (§2/D4).
+        assert result.suppressed_by_fp is True
+
+    def test_reentry_payload_shape(self):
+        """The reentry payload carries engine integers only — decided_tier/
+        decided_score/current_tier/current_score/decided_at."""
+        decision = _decision(
+            verb="expected", decided_tier=None, decided_score=15,
+            decided_at="2026-07-10T00:00:00+00:00",
+        )
+        verdict = _verdict(tier=2)
+        result = evaluate([decision], verdict, current_score=61)
+        assert result.reentry is not None
+        assert result.reentry.decided_tier is None
+        assert result.reentry.decided_score == 15
+        assert result.reentry.current_tier == 2
+        assert result.reentry.current_score == 61
+        assert result.reentry.decided_at == "2026-07-10T00:00:00+00:00"
+
+    def test_fresh_decision_after_reentry_uses_new_baseline(self):
+        """Re-decide semantics: a NEW decision row (a fresh server snapshot,
+        e.g. after an operator re-decides a re-entered actor) becomes the
+        evaluator's baseline — the latest active row always wins."""
+        stale = _decision(
+            id=1, verb="expected", decided_tier=None,
+            decided_at="2026-07-01T00:00:00+00:00",
+        )
+        fresh = _decision(
+            id=2, verb="expected", decided_tier=2,
+            decided_at="2026-07-05T00:00:00+00:00",
+        )
+        verdict = _verdict(tier=2)  # matches the FRESH baseline, not the stale one
+        result = evaluate([stale, fresh], verdict)
+        assert result.active_actor_decision is not None
+        assert result.active_actor_decision.id == 2
+        assert result.suppressed_by_actor is True
+        assert result.reentry is None

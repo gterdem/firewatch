@@ -101,7 +101,7 @@ describe('SettingsRoute', () => {
       ai_enabled: true,
       ollama_base_url: 'http://localhost:11434',
       geo_provider: 'offline',
-      notify_on_auto_escalate: false,
+      notify_on_auto_escalate: true,
     })
   })
 

@@ -309,11 +309,25 @@ separated them. Each has its own name, own default, and lives in its own setting
 **Question it answers:** "Push this actor to my webhook (Discord, Slack, etc.)?"
 
 The underlying SDK field is `alert_threshold` (name preserved for compatibility; the UI label reads
-"Notification threshold"). Default: **CRITICAL** — chat is quiet by design. An optional
-"Also notify on auto-escalating detections" toggle (`notify_on_auto_escalate`, default **off**)
-extends this to Tier 1/Tier 2 actors regardless of their severity band. The toggle is off by
-default because a CRITICAL notification floor combined with the unconditional tier axis would flood
-chat with every low-score allowed-through event.
+"Notification threshold"). Default: **CRITICAL** — the operator's chosen severity floor for
+band-only notifications. An "Also notify on auto-escalating detections" toggle
+(`notify_on_auto_escalate`, default **ON** since
+[ADR-0059](adr/0059-three-named-thresholds-and-unified-alert-worthiness-predicate.md) Amendment 1)
+extends this to Tier 1/Tier 2 actors regardless of their severity band, so a HIGH ALERT actor
+notifies out of the box when a webhook is configured. Quiet chat is preserved by the
+[ADR-0067](adr/0067-assertion-gated-triage-entry-observed-stratum.md) assertion gate — which bounds
+*which* actors can ever reach Tier 2 — not by the toggle; an operator can still flip the toggle off
+to fall back to band-only notifications.
+
+Notification **cadence** is separate from worthiness (issue #74): the notifier fires on a state
+*transition* — an actor entering the escalation tiers, moving to a louder tier, or first crossing
+the Notification threshold — never on repeated re-evaluation of an unchanged state. An actor that
+stays continuously in the triage queue (or continuously above the threshold) does not re-notify on
+every ingested event; a brute-force attack pushed one event at a time produces one notification at
+the crossing, not one per event. This model is deliberately simple for now — on/off plus the
+operator's threat-level selector — per the Maintainer's 2026-07-16 ruling; per-state notification
+preferences (subscribing to INFORM independently, for example) are deferred to a future
+notification-system design effort (ADR-0059 Amendment 1 A1.2).
 
 Lives in: the **Notifications** settings card.
 

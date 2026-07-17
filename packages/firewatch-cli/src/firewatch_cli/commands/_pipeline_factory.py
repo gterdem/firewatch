@@ -5,8 +5,14 @@ selected from ``RuntimeConfig`` (ADR-0022 / issue #54):
 
 - ``ai_enabled`` true  → the real ``OpenAIEngine`` (local-first; degrades
   gracefully to ``ai_status="unavailable"`` when the endpoint is unreachable).
-- ``ai_enabled`` false → a rules-only ``_DisabledAIEngine`` that reports
-  ``ai_status="disabled"`` and never contacts an inference endpoint.
+- ``ai_enabled`` false → a rules-only ``DisabledAIEngine`` (core-owned,
+  ``firewatch_core.adapters.ai_disabled`` — relocated here from this module
+  by issue #39) that reports ``ai_status="disabled"`` and never contacts an
+  inference endpoint.
+- ``ai_enabled`` true but engine CONSTRUCTION fails → the same
+  ``DisabledAIEngine``, constructed with ``fault=True`` (issue #40 AC4): this
+  is a FAULT (admin wanted AI, the engine could not be built), never a choice,
+  so it reports ``ai_status="unavailable"``, not ``"disabled"``.
 
 Issue #150 — enrichment wiring:
   The pipeline is constructed with a geo enricher so that geo enrichment
@@ -32,8 +38,8 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
 
+from firewatch_core.adapters.ai_disabled import DisabledAIEngine
 from firewatch_core.adapters.ai_openai import OpenAIEngine
 from firewatch_core.adapters.geo_enricher import GeoEnricher
 from firewatch_core.adapters.sqlite_store import SQLiteEventStore
@@ -47,48 +53,6 @@ logger = logging.getLogger("firewatch.cli.pipeline_factory")
 _MMDB_DIR_NAME = "geo_data"
 
 
-class _DisabledAIEngine:
-    """Rules-only AI engine used when ``ai_enabled`` is False (ADR-0022, #54).
-
-    Reports ``ai_status="disabled"`` and never contacts an inference endpoint.
-    This is distinct from the *unreachable* case: when AI is enabled but the
-    endpoint is down, the real ``OpenAIEngine`` reports ``ai_status="unavailable"``.
-    Either way the AI contribution is additive-only (ADR-0015) — a non-concrete
-    ``threat_level="UNKNOWN"`` so it can never de-escalate the rule+detection score.
-    """
-
-    async def is_available(self) -> bool:
-        return False
-
-    async def analyze_concise(  # noqa: PLR0913
-        self,
-        ip: str,
-        total_events: int,
-        blocked_events: int,
-        rules_triggered: int,
-        first_seen: str,
-        last_seen: str,
-        samples: list[dict[str, Any]],
-        security_mode: bool = False,
-        correlations: list[Any] | None = None,
-    ) -> dict[str, Any]:
-        return {"ai_status": "disabled", "threat_level": "UNKNOWN"}
-
-    async def analyze_detailed(  # noqa: PLR0913
-        self,
-        ip: str,
-        total_events: int,
-        blocked_events: int,
-        rules_triggered: int,
-        first_seen: str,
-        last_seen: str,
-        samples: list[dict[str, Any]],
-        security_mode: bool = False,
-        correlations: list[Any] | None = None,
-    ) -> dict[str, Any]:
-        return {"ai_status": "disabled", "threat_level": "UNKNOWN"}
-
-
 def _build_pipeline(config_file: Path | str | None = None) -> object:
     """Construct and return a ``Pipeline`` for CLI use.
 
@@ -96,7 +60,7 @@ def _build_pipeline(config_file: Path | str | None = None) -> object:
       (current directory when ``config_file`` is ``None``).
     - The AI engine is selected from ``RuntimeConfig.ai_enabled`` (resolved via
       the config service, so env vars / config file apply): the real
-      ``OpenAIEngine`` when enabled, else a rules-only ``_DisabledAIEngine``.
+      ``OpenAIEngine`` when enabled, else a rules-only ``DisabledAIEngine``.
 
     Returns a plain ``object`` to keep callers decoupled from the concrete
     ``Pipeline`` type.
@@ -118,18 +82,21 @@ def _build_pipeline(config_file: Path | str | None = None) -> object:
             # A misconfigured (e.g. non-local, ADR-0022) base_url raises at
             # construction. Fail safe to rules-only rather than crashing the
             # runtime — the deterministic rule+detection score is the floor.
+            # Issue #40 AC4: this is a FAULT (AI was wanted), never a choice —
+            # fault=True so the stamping authority (ai_status.py) reports
+            # ai_status="unavailable", not "disabled".
             logger.error(
                 "AI engine construction failed (%s); falling back to rules-only "
-                "scoring (ai_status='disabled'). Check runtime.ollama_base_url.",
+                "scoring (ai_status='unavailable'). Check runtime.ollama_base_url.",
                 exc,
             )
-            ai_engine = _DisabledAIEngine()
+            ai_engine = DisabledAIEngine(fault=True)
     else:
         logger.info(
             "ai_enabled=false — building a rules-only pipeline "
             "(no inference endpoint will be contacted)."
         )
-        ai_engine = _DisabledAIEngine()
+        ai_engine = DisabledAIEngine()
 
     store = SQLiteEventStore(db_path=db_path)
     geo_enricher = _build_geo_enricher(store=store, db_dir=db_dir, runtime=runtime)

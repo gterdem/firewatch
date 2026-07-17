@@ -14,17 +14,16 @@
 #   docker compose --profile default up -d                       # Ollama path
 #   docker compose --profile lean up -d                          # llama.cpp path
 #   FIREWATCH_AI_ENABLED=false \
-#   FIREWATCH_OLLAMA_BASE_URL=http://127.0.0.1:11434 \
 #   docker compose --profile rules-only up -d                    # rules-only
 #
-# rules-only requires BOTH env vars above on the invocation (or in .env) —
-# see deploy/README.md. FIREWATCH_AI_ENABLED=false turns AI scoring off.
-# FIREWATCH_OLLAMA_BASE_URL must ALSO be overridden away from its default
-# (http://ollama:11434): that hostname never resolves under rules-only (the
-# `ollama` service does not start), and FireWatch's local-first validator
-# (ADR-0022) fails closed on DNS resolution failure — the container will not
-# start at all without this override. Any loopback/RFC-1918 literal works; it
-# is never dialed once ai_enabled=false selects `_DisabledAIEngine`.
+# rules-only requires only FIREWATCH_AI_ENABLED=false on the invocation (or in
+# .env) — see deploy/README.md. The shared FIREWATCH_OLLAMA_BASE_URL default
+# (http://ollama:11434) does NOT need to be overridden: that hostname never
+# resolves under rules-only (the `ollama` service does not start), but
+# FireWatch's config validator is pure/syntactic (ADR-0066, issue #40) — it
+# performs no DNS resolution, so an unresolvable hostname no longer crashes
+# the container. It is never dialed either way, since ai_enabled=false
+# selects `DisabledAIEngine` (firewatch_core.adapters.ai_disabled).
 #
 # Network topology (ADR-0026 loopback constraint):
 #   The `firewatch` service binds the API to 127.0.0.1:8000 only.
@@ -37,13 +36,14 @@
 #
 # Optional .env (copy deploy/.env.example → deploy/.env and adjust) — every var
 # below has a safe default, so .env is only needed to override, for the lean
-# profile, or to configure rules-only (both vars below are required together):
+# profile, or to configure rules-only:
 #   FW_HOST_PORT            host port for the nginx surface (default 8080)
 #   FIREWATCH_AI_ENABLED    enable AI scoring (default true; set false for rules-only)
 #   FIREWATCH_OLLAMA_MODEL  model name
-#   FIREWATCH_OLLAMA_BASE_URL  inference endpoint (profile-specific; a loopback
-#                              literal for rules-only; also the rules-only ->
-#                              LAN-endpoint upgrade path, ADR-0022)
+#   FIREWATCH_OLLAMA_BASE_URL  inference endpoint (profile-specific; also the
+#                              rules-only -> LAN-endpoint upgrade path,
+#                              ADR-0022; no override needed just to start
+#                              rules-only, ADR-0066/issue #40)
 #   GGUF_HOST_PATH          (lean only) host path to the .gguf file
 #   MODEL_FILE              (lean only) GGUF filename inside the container
 #

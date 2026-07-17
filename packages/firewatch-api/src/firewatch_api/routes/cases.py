@@ -502,8 +502,11 @@ async def draft_case_summary(request: Request, case_id: int) -> dict[str, Any]:
                 # Subject not in the event store — rule-only degrade is honest.
                 detail = {}
             else:
+                # ADR-0066: branch POSITIVELY on "active" — a "not in (...)"
+                # exclusion list would silently misread the "no_input" state
+                # as "AI ran".
                 ai_status_val = str(detail.get("ai_status", "unavailable"))
-                llm_available = ai_status_val not in ("unavailable", "skipped", "disabled")
+                llm_available = ai_status_val == "active"
         except Exception:
             logger.warning(
                 "POST /cases/%d/summary: analyze_ip_detailed failed for subject=%r — "

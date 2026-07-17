@@ -109,6 +109,7 @@ from firewatch_core.ai.stage_events import (
     StageEmitter,
     ValidatedFact,
 )
+from firewatch_core.ai_status import resolve_ai_status
 from firewatch_core.detector import detect
 from firewatch_core.escalation.decider import decide as _decide_escalation
 from firewatch_core.ports.analysis_ledger import AnalysisLedger, AnalysisRecord
@@ -149,10 +150,10 @@ _GENERATING_HEARTBEAT_INTERVAL_S = 2.0
 #          dedicated cross-file test.
 # W_CAMPAIGN feeds detect() — the correlation rules' own fetch horizon
 #          (`ids_then_brute_force`, `brute_force_then_login`,
-#          `multi_source_attack`, `ssh_login_failure_intense`, R1
-#          `attempt_pressure`). Revision 1 (ADR-0070): this is also the
-#          episode-counting memory the future R2/R3 campaign rules (#54) will
-#          use for recidivism — "is this actor WAGING A CAMPAIGN?", a longer
+#          `multi_source_attack`, R1 `attempt_pressure`, R2
+#          `attack_in_progress`, R3 `campaign`). Revision 1 (ADR-0070, issue
+#          #54): this is also the episode-counting memory R3 `campaign` uses
+#          for recidivism — "is this actor WAGING A CAMPAIGN?", a longer
 #          memory than the state window's "current state" question. λ̂ itself
 #          needs no horizon (an event this old has already decayed to ~0 at
 #          H=30min); the horizon exists so recidivism has bounded, declared
@@ -256,6 +257,21 @@ def _endpoint_host_from_engine(engine: AIEngine) -> str:
         return f"{host}:{port}" if port else host
     except Exception:
         return "unknown"
+
+
+def _is_admin_disabled(engine: AIEngine) -> bool:
+    """Return True when *engine* self-reports administrative disablement.
+
+    Additive optional-attribute pattern (ADR-0066, mirrors the
+    ``analyze_concise_with_meta`` detection already used elsewhere): the
+    concrete ``DisabledAIEngine`` (``firewatch_core.adapters.ai_disabled``)
+    sets ``administratively_disabled = True`` when ``ai_enabled=false``
+    chose it. ``OpenAIEngine`` and any third-party ``AIEngine`` adapter have
+    no such attribute, so ``getattr`` defaults to False — "off" is a choice
+    only a disabled-by-config engine may claim, never a real engine that
+    merely failed to connect (that is ``"unavailable"``, a fault).
+    """
+    return bool(getattr(engine, "administratively_disabled", False))
 
 
 class Pipeline:
@@ -706,61 +722,81 @@ class Pipeline:
         ai_meta: Any | None = None
         ai_insights: list[str] = []
         ai_confidence = 0.0
-        ai_status = "disabled"
         t_ai = 0.0
 
-        if use_ai:
-            samples = build_samples(events)
-            if samples:
-                t_ai_start = time.monotonic()
-                try:
-                    # MK-2: prefer *_with_meta when the concrete engine exposes it
-                    # (OpenAIEngine) so we capture prompt/response/usage for the ledger.
-                    # Fall back to the standard AIEngine port method for other engines.
-                    with_meta_fn = getattr(self.ai_engine, "analyze_concise_with_meta", None)
-                    if with_meta_fn is not None:
-                        _result_pair: tuple[dict[str, Any], Any] = await with_meta_fn(
-                            ip=ip,
-                            total_events=len(events),
-                            blocked_events=len(blocked),
-                            rules_triggered=len(samples),
-                            first_seen=str(min(timestamps)),
-                            last_seen=str(max(timestamps)),
-                            samples=samples,
-                            security_mode=security_mode,
-                            correlations=detections or None,
-                        )
-                        ai_result, ai_meta = _result_pair
-                    else:
-                        ai_result = await self.ai_engine.analyze_concise(
-                            ip=ip,
-                            total_events=len(events),
-                            blocked_events=len(blocked),
-                            rules_triggered=len(samples),
-                            first_seen=str(min(timestamps)),
-                            last_seen=str(max(timestamps)),
-                            samples=samples,
-                            security_mode=security_mode,
-                            correlations=detections or None,
-                        )
+        # ADR-0066: the ONE stamping authority replaces this path's old ad-hoc
+        # ai_status assignments. caller_opted_out is this call's own use_ai=False
+        # (a per-request choice — e.g. list-view fast paths that never want AI).
+        # admin_disabled is read via getattr so any engine may opt in to the
+        # signal (same additive pattern as analyze_concise_with_meta below);
+        # engines that don't set it (OpenAIEngine, third-party adapters) default
+        # to False. Inertness: neither is_available() nor build_samples() runs
+        # when the caller opted out or AI is administratively disabled.
+        caller_opted_out = not use_ai
+        admin_disabled = _is_admin_disabled(self.ai_engine)
+        engine_available = False
+        had_input = False
 
-                    ai_confidence = float(ai_result.get("confidence", 0.0))
-                    ai_insights = list(ai_result.get("insights", []))
-                    ai_status = "active"
+        if not caller_opted_out and not admin_disabled:
+            t_ai_start = time.monotonic()
+            engine_available = await self.ai_engine.is_available()
+            if engine_available:
+                samples = build_samples(events)
+                had_input = bool(samples)
+                if had_input:
+                    try:
+                        # MK-2: prefer *_with_meta when the concrete engine exposes it
+                        # (OpenAIEngine) so we capture prompt/response/usage for the ledger.
+                        # Fall back to the standard AIEngine port method for other engines.
+                        with_meta_fn = getattr(self.ai_engine, "analyze_concise_with_meta", None)
+                        if with_meta_fn is not None:
+                            _result_pair: tuple[dict[str, Any], Any] = await with_meta_fn(
+                                ip=ip,
+                                total_events=len(events),
+                                blocked_events=len(blocked),
+                                rules_triggered=len(samples),
+                                first_seen=str(min(timestamps)),
+                                last_seen=str(max(timestamps)),
+                                samples=samples,
+                                security_mode=security_mode,
+                                correlations=detections or None,
+                            )
+                            ai_result, ai_meta = _result_pair
+                        else:
+                            ai_result = await self.ai_engine.analyze_concise(
+                                ip=ip,
+                                total_events=len(events),
+                                blocked_events=len(blocked),
+                                rules_triggered=len(samples),
+                                first_seen=str(min(timestamps)),
+                                last_seen=str(max(timestamps)),
+                                samples=samples,
+                                security_mode=security_mode,
+                                correlations=detections or None,
+                            )
 
-                    intent = ai_result.get("intent", "")
-                    if intent:
-                        ai_insights.insert(0, f"Intent: {intent}")
-                    rec = ai_result.get("recommended_action", "")
-                    if rec:
-                        ai_insights.append(f"Recommended action: {rec}")
-                except Exception:
-                    # AI failure → rules-only score, never abort.
-                    logger.warning("AI analysis failed for %s, rules only", ip)
-                    ai_status = "unavailable"
-                t_ai = _ms_since(t_ai_start)
-            else:
-                ai_status = "active"
+                        ai_confidence = float(ai_result.get("confidence", 0.0))
+                        ai_insights = list(ai_result.get("insights", []))
+
+                        intent = ai_result.get("intent", "")
+                        if intent:
+                            ai_insights.insert(0, f"Intent: {intent}")
+                        rec = ai_result.get("recommended_action", "")
+                        if rec:
+                            ai_insights.append(f"Recommended action: {rec}")
+                    except Exception:
+                        # AI failure → rules-only score, never abort.
+                        logger.warning("AI analysis failed for %s, rules only", ip)
+                        ai_result = None
+            t_ai = _ms_since(t_ai_start)
+
+        ai_status = resolve_ai_status(
+            caller_opted_out=caller_opted_out,
+            admin_disabled=admin_disabled,
+            engine_available=engine_available,
+            had_input=had_input,
+            engine_result=ai_result,
+        )
 
         score, level, score_derivation = merge_score(
             rule_score, ai_result, detection_boost=detection_boost
@@ -993,8 +1029,22 @@ class Pipeline:
         # so it cannot stall concurrent requests (ADR-0023 §F single-loop deployment).
         t_ai_start = time.monotonic()
 
-        # Effective availability: explicitly skipped OR engine unreachable.
-        ai_will_run = include_ai and await self.ai_engine.is_available()
+        # ADR-0066: caller_opted_out (per-request ai=false) and admin_disabled
+        # (ai_enabled=false at the config layer, read via getattr — same
+        # additive pattern as analyze_detailed_with_meta below) are distinct
+        # CHOICES, both distinct from an unreachable engine (a FAULT). Neither
+        # dials is_available() when the caller opted out or AI is
+        # administratively disabled (inertness).
+        caller_opted_out = not include_ai
+        admin_disabled = _is_admin_disabled(self.ai_engine)
+        engine_available = False
+        if not caller_opted_out and not admin_disabled:
+            engine_available = await self.ai_engine.is_available()
+
+        # ai_will_run: "the engine will be dialed for this call" — kept as the
+        # name used throughout the rest of this method (samples building,
+        # stage-sink emission gating).
+        ai_will_run = engine_available
 
         if ai_will_run:
             rule_descs = await self.store.get_rule_descriptions()
@@ -1227,29 +1277,29 @@ class Pipeline:
         # Issue #211 extensions: ASN fields (additive, None when absent).
         result["asn"] = asn
         result["as_name"] = as_name
-        # ADR-0035 honesty: stamp ai_status to accurately reflect what happened.
-        # Three distinct states (issue #268 / #313):
-        #   'skipped'     — ai=false (caller opted out; engine never consulted)
-        #   'unavailable' — ai=true but engine offline/unreachable (requested but down)
-        #   (from ai_result) — engine ran; ai_result carries 'ok' or the engine's own status
-        # NB-3 (issue #306): 'skipped' is a pipeline-only stamp — only this block may
-        # write it.  If ai_result somehow carries ai_status='skipped' (misbehaving local
-        # model), the schema-validation layer in OpenAIEngine will already have triggered
-        # the fallback envelope (ai_result=None), but we guard here as defence-in-depth:
-        # strip 'skipped' so it cannot propagate from AI output to the caller.
-        if not include_ai:
-            # Issue #268: explicitly skipped by the caller.
-            result["ai_status"] = "skipped"
-        elif not ai_will_run:
-            # Issue #313 Fix 1: ai=true but is_available()=False — engine was requested
-            # but unreachable.  Stamp 'unavailable' so the client knows and never claim
-            # success (ADR-0035).
-            result["ai_status"] = "unavailable"
-        elif result.get("ai_status") == "skipped":
-            # NB-3 (issue #306): defence-in-depth — override a misbehaving model's
-            # ai_status='skipped' when AI actually ran.  The schema-layer should
-            # have caught this first (→ fallback envelope with ai_status='unavailable'),
-            # but we guard here too.  We stamp 'unavailable' rather than popping the
-            # field to keep the API contract intact (field is required by the TS client).
-            result["ai_status"] = "unavailable"
+        # ADR-0066: the ONE stamping authority — replaces the old three-branch
+        # ad-hoc assignment (this was the second of the two divergent dialects
+        # ADR-0066 unifies; see firewatch_core.ai_status for the truth table).
+        #
+        # NB-3 (issue #306) defence-in-depth: 'skipped' is a pipeline-only stamp.
+        # A misbehaving engine implementation that directly claims ai_status=
+        # 'skipped' in its envelope (bypassing OpenAIEngine's own schema
+        # validation, which already rejects this) must not have that claim
+        # trusted as a genuine verdict. This does NOT touch ai_result itself —
+        # scoring (merge_score above) and ledger persistence (_record_analysis
+        # below) already ran against the real ai_result and are unaffected;
+        # only the STATUS LABEL substitutes a None here so resolve_ai_status
+        # treats it the same as an engine that returned its own fallback
+        # envelope (untrustworthy -> 'unavailable', a fault, never 'active').
+        _status_engine_result = ai_result
+        if ai_result is not None and ai_result.get("ai_status") == "skipped":
+            _status_engine_result = None
+
+        result["ai_status"] = resolve_ai_status(
+            caller_opted_out=caller_opted_out,
+            admin_disabled=admin_disabled,
+            engine_available=engine_available,
+            had_input=True,
+            engine_result=_status_engine_result,
+        )
         return result

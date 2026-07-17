@@ -86,6 +86,22 @@ async def test_analyze_ip_detection_boost_flows():
     # 10 BLOCK spanning 36 min → brute-force(+30)+10 blocked = 40 rule;
     # attempt_pressure(+15) boost (ADR-0070 Revision 1 R1 — retired
     # sustained_attack's replacement; same score_delta, issue #53).
+    #
+    # This is ALSO the exact fixture that surfaced the false-`campaign`
+    # defect PR #86 caught (ADR-0070 Amendment 1): the closed-form decayed
+    # intensity climbs through theta_press=5 gradually (event 6 of 10, at
+    # t=24min, lambda_hat=5.396), then the 4-min gap to event 7 lets it dip
+    # fractionally BELOW 5 — to ~4.92, ~98% of the pressure floor — for
+    # ~42 seconds before event 7's own jump restores it. Under exact-crossing
+    # separation (Revision 1, pre-amendment) that 42-second dip was read as a
+    # full episode boundary, so `episodes()` reported 2 episodes and R3's
+    # recidivism clause fired `campaign` on a single continuous burst.
+    # Quiet-collapse hysteresis (theta_quiet = theta_press/2 = 2.5) fixes
+    # this: the trough (4.92) sits well above theta_quiet, so `episodes()`
+    # now reports ONE continuous episode — no recidivism, no endurance
+    # (span << D_ENDURE), no breadth — a single continuous moderate burst
+    # must NOT fire `campaign`.
+    # detection_boost = 15 (attempt_pressure only) → 40 (rule) + 15 = 55.
     events = [
         make_event(action="BLOCK", rule_id="900001",
                    timestamp=T0 + timedelta(minutes=4 * i))
@@ -95,16 +111,51 @@ async def test_analyze_ip_detection_boost_flows():
     ai: AIEngine = FakeAIEngine()
     score = await _pipeline(store, ai).analyze_ip(IP)
     assert any(d.rule_name == "attempt_pressure" for d in score.detections)
-    assert score.score == 55  # 40 + 15
+    assert not any(d.rule_name == "campaign" for d in score.detections), (
+        "a single continuous moderate burst must NOT fire campaign"
+    )
+    assert score.score == 55  # 40 (rule) + 15 (attempt_pressure) = 55
+
+
+async def test_analyze_ip_jittery_grinder_below_d_endure_does_not_fire_campaign():
+    """A jittery ~8/h grinder (alternating 3-min/12-min gaps — ADR-0070
+    Amendment 1 A1.2's "boundary oscillator") holds decayed intensity
+    straddling theta_press (5) on both sides, without ever collapsing
+    anywhere near theta_quiet (2.5): ONE merged pressure episode, well short
+    of D_ENDURE (24h). No recidivism (one episode), no endurance (span <<
+    24h), no breadth (no categories/ports set) — `campaign` must NOT fire."""
+    events = [
+        make_event(action="BLOCK", rule_id="900001", timestamp=T0)
+        for _ in range(6)
+    ]
+    elapsed = timedelta(0)
+    gaps = (timedelta(minutes=3), timedelta(minutes=12))
+    i = 0
+    while elapsed < timedelta(minutes=45):
+        elapsed += gaps[i % 2]
+        events.append(
+            make_event(action="BLOCK", rule_id="900001", timestamp=T0 + elapsed)
+        )
+        i += 1
+    store: EventStore = FakeStore(events)
+    ai: AIEngine = FakeAIEngine()
+    score = await _pipeline(store, ai).analyze_ip(IP)
+    assert not any(d.rule_name == "campaign" for d in score.detections)
 
 
 async def test_use_ai_false_skips_ai():
+    """use_ai=False is a per-request CALLER opt-out, not an admin/config choice.
+
+    ADR-0066: caller_opted_out -> 'skipped' (never 'disabled', which is
+    reserved for ai_enabled=false at the config layer — see
+    test_issue_39_40_ai_status_stamping.py for the admin-disabled case).
+    """
     fake_ai = FakeAIEngine()
     store: EventStore = FakeStore(_sqli_events(3))
     ai: AIEngine = fake_ai
     score = await _pipeline(store, ai).analyze_ip(IP, use_ai=False)
     assert fake_ai.concise_calls == 0
-    assert score.ai_status == "disabled"
+    assert score.ai_status == "skipped"
 
 
 async def test_ingest_returns_inserted_count():

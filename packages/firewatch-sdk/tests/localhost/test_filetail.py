@@ -593,3 +593,321 @@ class TestDefaultBoundIsRealistic:
         results = await asyncio.wait_for(_collect(reader.read("head")), timeout=5.0)
 
         assert [line for line, _ in results] == ["before", "after"]
+
+
+def _spy_readline_lengths(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """Wrap every ``fdopen()``'d file's ``readline()`` to record how many
+    characters each call actually decoded — the direct measure of "scan
+    work" issue #64 requires NOT growing with total line length across
+    polls. One shared list survives across separate ``read()`` calls (each
+    opens its own fresh file handle), exactly like production would across
+    separate poll cycles.
+    """
+    lengths: list[int] = []
+    orig_fdopen = os.fdopen
+
+    def _spy_fdopen(fd: int, *args: object, **kwargs: object) -> IO[str]:
+        fh = orig_fdopen(fd, *args, **kwargs)  # type: ignore[arg-type]
+        orig_readline = fh.readline
+
+        def _counting_readline(size: int = -1) -> str:
+            piece = orig_readline(size)
+            lengths.append(len(piece))
+            return piece
+
+        fh.readline = _counting_readline  # type: ignore[method-assign]
+        return fh
+
+    monkeypatch.setattr(os, "fdopen", _spy_fdopen)
+    return lengths
+
+
+# --------------------------------------------------------------------------- #
+# Issue #64 — an un-terminated, already over-bound line must not be re-scanned
+# from its start on every poll; per-poll cost must track only newly-appended
+# data. Directions (a) and (b) from the issue: remember scan progress, and
+# warn once per occurrence (not once per poll).
+# --------------------------------------------------------------------------- #
+
+
+class TestUnterminatedOverBoundRescan:
+    async def test_scan_progress_advances_monotonically_not_from_scratch(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Direct evidence of the fix: the remembered scan-progress offset
+        only ever advances by the amount newly appended — it never resets
+        back to the line's start on a later poll."""
+        monkeypatch.setattr(filetail, "_MAX_LINE_CHARS", 4)
+        path = tmp_path / "auth.log"
+        path.write_text("a" * 12)  # already 3x the (mocked) bound, no "\n"
+        reader = FileTailReader(path)
+
+        await _collect(reader.read("head"))
+        assert reader._pending_partial is not None
+        assert reader._pending_partial.scanned_to == 12
+
+        # Poll again with NO new data -- progress must not go backwards.
+        await _collect(reader.read("head"))
+        assert reader._pending_partial.scanned_to == 12
+
+        # Append more (still unterminated) -- progress advances by exactly
+        # that much, not back to 0.
+        with path.open("a") as f:
+            f.write("a" * 4)
+        await _collect(reader.read("head"))
+        assert reader._pending_partial.scanned_to == 16
+
+    async def test_per_poll_scan_cost_tracks_only_newly_appended_data(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The O(n^2) regression this issue closes: without the fix, every
+        poll re-decodes the entire already-scanned prefix. With the fix, a
+        poll with no new data does ~zero work, and a poll with newly
+        appended data does work proportional ONLY to what's new."""
+        monkeypatch.setattr(filetail, "_MAX_LINE_CHARS", 4)
+        path = tmp_path / "auth.log"
+        path.write_text("a" * 12)  # 3 already-over-bound chunks, no "\n"
+        reader = FileTailReader(path)
+        lengths = _spy_readline_lengths(monkeypatch)
+
+        await _collect(reader.read("head"))
+        chars_scanned_poll1 = sum(lengths)
+        assert chars_scanned_poll1 == 12  # must read what's already there once
+        lengths.clear()
+
+        await _collect(reader.read("head"))  # no new data appended
+        chars_scanned_poll2 = sum(lengths)
+        assert chars_scanned_poll2 == 0  # NOT a re-scan of the 12 old chars
+        lengths.clear()
+
+        with path.open("a") as f:
+            f.write("a" * 4)  # still unterminated
+        await _collect(reader.read("head"))
+        chars_scanned_poll3 = sum(lengths)
+        assert chars_scanned_poll3 == 4  # only the newly-appended chunk
+
+    async def test_still_growing_over_bound_line_warns_once_not_per_poll(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """The operator-visible warning for a STILL-GROWING over-bound line
+        fires exactly once for this occurrence, not once per poll, even
+        across several consecutive polls while it remains unterminated."""
+        monkeypatch.setattr(filetail, "_MAX_LINE_CHARS", 4)
+        path = tmp_path / "auth.log"
+        path.write_text("a" * 8)  # already over the (mocked) bound, no "\n"
+        reader = FileTailReader(path)
+
+        with caplog.at_level("WARNING", logger="firewatch.sdk.localhost.filetail"):
+            for _ in range(3):  # three polls, still no terminator
+                await _collect(reader.read("head"))
+
+        still_growing_warnings = [
+            r for r in caplog.records if "still-growing" in r.message.lower()
+        ]
+        assert len(still_growing_warnings) == 1
+
+    async def test_amortized_line_still_becomes_confirmed_oversized_once_terminated(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Once the writer finally flushes the terminator, the line — grown
+        and scanned incrementally across several polls — is STILL treated as
+        a confirmed oversized skip per #60's existing invariant: exactly one
+        (None, cursor) sentinel, as the final item, on a zero-record cycle."""
+        monkeypatch.setattr(filetail, "_MAX_LINE_CHARS", 4)
+        path = tmp_path / "auth.log"
+        path.write_text("a" * 8)  # over bound, unterminated
+        reader = FileTailReader(path)
+
+        # Two quiet polls while it's still growing/unterminated.
+        assert await _collect(reader.read("head")) == []
+        assert await _collect(reader.read("head")) == []
+
+        # Writer finally appends more content AND the terminator.
+        with path.open("a") as f:
+            f.write("aa\n")
+
+        results = await _collect(reader.read("head"))
+
+        assert len(results) == 1
+        line, cursor = results[0]
+        assert line is None
+        inode = path.stat().st_ino
+        assert cursor == f"{inode}:{path.stat().st_size}"
+        assert reader._pending_partial is None  # resolved -- nothing left to remember
+
+    async def test_rotation_clears_stale_scan_progress(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Remembered scan progress must not survive a rotation — the old
+        inode's offsets are meaningless against the new file."""
+        monkeypatch.setattr(filetail, "_MAX_LINE_CHARS", 4)
+        path = tmp_path / "auth.log"
+        path.write_text("a" * 8)  # over bound, unterminated
+        reader = FileTailReader(path)
+
+        await _collect(reader.read("head"))
+        assert reader._pending_partial is not None
+
+        os.rename(path, tmp_path / "auth.log.1")
+        path.write_text("b" * 8)  # new file, new inode, also unterminated/over-bound
+
+        await _collect(reader.read("head"))
+
+        assert reader._pending_partial is not None
+        assert reader._pending_partial.inode == path.stat().st_ino
+        assert reader._pending_partial.scanned_to == 8
+
+
+# --------------------------------------------------------------------------- #
+# Issue #65 — a single invalid byte must never crash read() with an uncaught
+# UnicodeDecodeError. errors="replace" (consistent with JournaldReader's own
+# decode boundary) turns it into U+FFFD instead, and the reader keeps working.
+# --------------------------------------------------------------------------- #
+
+
+class TestUndecodableContent:
+    async def test_invalid_byte_mid_line_does_not_crash_and_yields_replacement(
+        self, tmp_path: Path
+    ) -> None:
+        """The exact reproduction from the issue: a single 0xFF byte must
+        not raise UnicodeDecodeError out of read() — surrounding good lines
+        still arrive, and the bad line decodes with a replacement char
+        rather than vanishing or crashing the whole cycle."""
+        path = tmp_path / "auth.log"
+        path.write_bytes(b"before\n" + b"bad\xffbyte" + b"\n" + b"after\n")
+        reader = FileTailReader(path)
+
+        results = await asyncio.wait_for(_collect(reader.read("head")), timeout=2.0)
+
+        assert [line for line, _ in results] == ["before", "bad�byte", "after"]
+
+    async def test_undecodable_content_cannot_silently_merge_into_well_formed_text(
+        self, tmp_path: Path
+    ) -> None:
+        """A dropped (rather than replaced) invalid byte could silently
+        splice two tokens together into something a normalizer might
+        misparse as one well-formed field. Replacement must leave a visible
+        marker, never silently vanish."""
+        path = tmp_path / "auth.log"
+        path.write_bytes(b"user=admin\xffrole=root\n")
+        reader = FileTailReader(path)
+
+        results = await asyncio.wait_for(_collect(reader.read("head")), timeout=2.0)
+
+        assert len(results) == 1
+        line, _ = results[0]
+        assert line is not None
+        assert "�" in line
+        assert "adminrole" not in line  # never silently spliced together
+
+    async def test_undecodable_content_warning_is_rate_limited_not_per_line(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Many affected lines in one read() call must still produce only
+        ONE operator-visible warning, not one per line."""
+        path = tmp_path / "auth.log"
+        path.write_bytes(b"bad\xffline1\n" * 20)
+        reader = FileTailReader(path)
+
+        with caplog.at_level("WARNING", logger="firewatch.sdk.localhost.filetail"):
+            results = await asyncio.wait_for(
+                _collect(reader.read("head")), timeout=2.0
+            )
+
+        assert len(results) == 20  # all 20 lines still came through
+        undecodable_warnings = [
+            r for r in caplog.records if "not valid" in r.message.lower()
+        ]
+        assert len(undecodable_warnings) == 1
+
+    async def test_undecodable_warning_resets_per_read_call(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The rate limit is per read() call, not permanent for the
+        instance's lifetime: a later poll with fresh bad content warns
+        again."""
+        path = tmp_path / "auth.log"
+        path.write_bytes(b"bad\xffline\n")
+        reader = FileTailReader(path)
+
+        with caplog.at_level("WARNING", logger="firewatch.sdk.localhost.filetail"):
+            await asyncio.wait_for(_collect(reader.read("head")), timeout=2.0)
+            cursor_after_first = path.stat().st_size
+            with path.open("ab") as f:
+                f.write(b"more\xfebad\n")
+            await asyncio.wait_for(
+                _collect(reader.read(f"{path.stat().st_ino}:{cursor_after_first}")),
+                timeout=2.0,
+            )
+
+        undecodable_warnings = [
+            r for r in caplog.records if "not valid" in r.message.lower()
+        ]
+        assert len(undecodable_warnings) == 2
+
+    async def test_invalid_byte_at_rotation_boundary_survives_the_cascade(
+        self, tmp_path: Path
+    ) -> None:
+        """Both sides of a rotation boundary can carry undecodable bytes —
+        the OLD (renamed-away) file's still-unread tail, and the NEW file's
+        content — and the cascade must survive both without raising."""
+        path = tmp_path / "auth.log"
+        path.write_bytes(b"line1\n" + b"bad\xffline\n")
+        reader = FileTailReader(path)
+
+        agen = reader.read("head")
+        first = await agen.__anext__()
+        assert first[0] == "line1"
+
+        os.rename(path, tmp_path / "auth.log.1")
+        path.write_bytes(b"new\xfefile\n")
+
+        second = await agen.__anext__()  # unread tail of the OLD (rotated) file
+        third = await agen.__anext__()  # from the NEW file
+        await agen.aclose()
+
+        assert second[0] == "bad�line"
+        assert third[0] == "new�file"
+
+    async def test_truncated_multibyte_sequence_at_eof_is_ordinary_partial_not_corruption(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A multi-byte UTF-8 sequence split by a slow writer (its final
+        byte(s) not flushed yet) must be treated as an ordinary partial line
+        and retried once the rest arrives — NOT flagged as undecodable
+        corruption, and NOT permanently mangled into a replacement char."""
+        path = tmp_path / "auth.log"
+        # "€" (EURO SIGN) encodes as b"\xe2\x82\xac" -- write only the
+        # first two of its three bytes, with no trailing newline.
+        path.write_bytes(b"line1\n" + b"\xe2\x82")
+        reader = FileTailReader(path)
+
+        with caplog.at_level("WARNING", logger="firewatch.sdk.localhost.filetail"):
+            results = await asyncio.wait_for(
+                _collect(reader.read("head")), timeout=2.0
+            )
+            assert [line for line, _ in results] == ["line1"]  # partial left unconsumed
+            cursor = results[-1][1]  # resume point after "line1" — not "head" again
+            undecodable_warnings_before = [
+                r for r in caplog.records if "not valid" in r.message.lower()
+            ]
+            assert undecodable_warnings_before == []  # NOT flagged as corruption
+
+            # Writer finishes flushing the sequence + terminator.
+            with path.open("ab") as f:
+                f.write(b"\xac and more\n")
+
+            more_results = await asyncio.wait_for(
+                _collect(reader.read(cursor)), timeout=2.0
+            )
+
+        assert [line for line, _ in more_results] == ["€ and more"]
+        undecodable_warnings_after = [
+            r for r in caplog.records if "not valid" in r.message.lower()
+        ]
+        assert undecodable_warnings_after == []  # never flagged -- it was valid all along

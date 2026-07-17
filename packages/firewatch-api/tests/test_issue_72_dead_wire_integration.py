@@ -22,6 +22,12 @@ D4  false_positive scoped to (actor, rule_name) — a DIFFERENT qualifying
     rule still queues the actor even with an active FP decision on file.
     -> test_false_positive_does_not_suppress_different_rule
 
+D4/#56  POST /decisions (expected) at Tier 2 -> inject events that escalate
+    the actor to Tier 1 -> GET /threats shows `reentry` populated and
+    `suppressed:false` (the actor re-enters the queue); `GET /banner/summary`
+    `queue_size` reflects the re-entered actor.
+    -> TestReentryOverRealApp.test_tier_escalation_reenters_the_queue
+
 All IPs are RFC 5737 documentation IPs (203.0.113.0/24).
 """
 from __future__ import annotations
@@ -57,6 +63,22 @@ def _qualifying_alert_event(ip: str, rule_name: str = "waf_sqli") -> SecurityEve
         severity="high",
         rule_name=rule_name,
         timestamp=_NOW - timedelta(minutes=5),
+    )
+
+
+def _escalating_allow_event(ip: str, rule_name: str = "waf_sqli") -> SecurityEvent:
+    """A second-source ALLOW event: combined with ``_qualifying_alert_event``
+    it fires ``multi_source_attack`` (a detection) alongside an ALLOW action —
+    the decider's Tier-1 rule ("any ALLOW event where any detection fired",
+    unconditional) — escalating the actor from Tier 2 to Tier 1."""
+    return SecurityEvent(
+        source_type="azure_waf",
+        source_id="waf-1",
+        source_ip=ip,
+        action="ALLOW",
+        severity="high",
+        rule_name=rule_name,
+        timestamp=_NOW - timedelta(minutes=2),
     )
 
 
@@ -229,3 +251,69 @@ class TestValidation:
         client = TestClient(app)
         resp = client.delete("/decisions/999999")
         assert resp.status_code == 404
+
+
+class TestReentryOverRealApp:
+    """ADR-0072 D4/#56 — the reentry clause, over the real app + real sqlite
+    (the D8 dead-wire boundary this ADR mandates)."""
+
+    def test_tier_escalation_reenters_the_queue(self, real_app: Any) -> None:
+        app, store, _decision_store = real_app
+        _seed_qualifying_actor(store)  # Tier 2
+        client = TestClient(app)
+
+        # --- Decide "expected" at Tier 2 -------------------------------------
+        create_resp = client.post(
+            "/decisions", json={"actor_ip": _IP, "verb": "expected"},
+        )
+        assert create_resp.status_code == 201
+        assert create_resp.json()["decided_tier"] == 2
+
+        threats_suppressed = client.get("/threats").json()
+        actor = next(t for t in threats_suppressed if t["source_ip"] == _IP)
+        assert actor["triage_decision"]["suppressed"] is True
+        assert actor["triage_decision"]["reentry"] is None
+        assert client.get("/banner/summary").json()["queue_size"] == 0
+
+        # --- Inject events that escalate the actor to Tier 1 -----------------
+        asyncio.run(store.save_many([_escalating_allow_event(_IP)]))
+
+        threats_after = client.get("/threats").json()
+        actor_after = next(t for t in threats_after if t["source_ip"] == _IP)
+        assert actor_after["escalation"]["tier"] == 1
+
+        td = actor_after["triage_decision"]
+        assert td["suppressed"] is False
+        assert td["reentry"] is not None
+        assert td["reentry"]["decided_tier"] == 2
+        assert td["reentry"]["current_tier"] == 1
+        assert isinstance(td["reentry"]["decided_score"], int)
+        assert isinstance(td["reentry"]["current_score"], int)
+        assert td["reentry"]["decided_at"] == create_resp.json()["decided_at"]
+
+        # The re-entered actor is back in the queue count.
+        assert client.get("/banner/summary").json()["queue_size"] == 1
+
+    def test_redecide_after_reentry_sets_a_fresh_baseline(self, real_app: Any) -> None:
+        """Re-decide semantics: deciding again on a re-entered actor writes a
+        NEW row (append-only) whose fresh snapshot becomes the next
+        evaluation's baseline — the actor is suppressed again with no
+        reentry against the new decision."""
+        app, store, _decision_store = real_app
+        _seed_qualifying_actor(store)  # Tier 2
+        client = TestClient(app)
+
+        client.post("/decisions", json={"actor_ip": _IP, "verb": "expected"})
+        asyncio.run(store.save_many([_escalating_allow_event(_IP)]))  # -> Tier 1, reentered
+
+        redecide_resp = client.post(
+            "/decisions", json={"actor_ip": _IP, "verb": "expected"},
+        )
+        assert redecide_resp.status_code == 201
+        assert redecide_resp.json()["decided_tier"] == 1  # fresh server snapshot
+
+        threats = client.get("/threats").json()
+        actor = next(t for t in threats if t["source_ip"] == _IP)
+        assert actor["triage_decision"]["suppressed"] is True
+        assert actor["triage_decision"]["reentry"] is None
+        assert client.get("/banner/summary").json()["queue_size"] == 0

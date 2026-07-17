@@ -87,22 +87,21 @@ async def test_analyze_ip_detection_boost_flows():
     # attempt_pressure(+15) boost (ADR-0070 Revision 1 R1 — retired
     # sustained_attack's replacement; same score_delta, issue #53).
     #
-    # issue #54 (R3 `campaign`, +20) also fires for this EXACT fixture: the
-    # closed-form decayed intensity climbs through theta_press=5 gradually
-    # (event 6 of 10, at t=24min, lambda_hat=5.396) and — because the 4-min
-    # gap to event 7 is just wide enough for decay to dip fractionally BELOW
-    # 5 for ~42 seconds before event 7's own jump pushes it back above —
-    # `episodes()` (the exact, closed-form, no-grace-period segmentation
-    # ADR-0070 D3/#53 already ships) reports 2 episodes rather than 1,
-    # satisfying R3's recidivism clause (>=2 episodes). Verified numerically
-    # (not assumed): intensity_at dips to ~4.95 at 12:27:45 then jumps to
-    # ~5.92 at the next event (12:28:00). This is a genuine, if narrow,
-    # consequence of the ADR's exact-crossing episode definition applied to
-    # a fixture that happens to hover at the theta_press boundary while
-    # still ramping — flagged in issue #54's PR description for the
-    # ADR-0068 D3 live-calibration pass, not silently absorbed here.
-    # detection_boost = 15 (attempt_pressure) + 20 (campaign) = 35, capped
-    # at +30 (ADR-0036 D4) → 40 (rule) + 30 (capped boost) = 70.
+    # This is ALSO the exact fixture that surfaced the false-`campaign`
+    # defect PR #86 caught (ADR-0070 Amendment 1): the closed-form decayed
+    # intensity climbs through theta_press=5 gradually (event 6 of 10, at
+    # t=24min, lambda_hat=5.396), then the 4-min gap to event 7 lets it dip
+    # fractionally BELOW 5 — to ~4.92, ~98% of the pressure floor — for
+    # ~42 seconds before event 7's own jump restores it. Under exact-crossing
+    # separation (Revision 1, pre-amendment) that 42-second dip was read as a
+    # full episode boundary, so `episodes()` reported 2 episodes and R3's
+    # recidivism clause fired `campaign` on a single continuous burst.
+    # Quiet-collapse hysteresis (theta_quiet = theta_press/2 = 2.5) fixes
+    # this: the trough (4.92) sits well above theta_quiet, so `episodes()`
+    # now reports ONE continuous episode — no recidivism, no endurance
+    # (span << D_ENDURE), no breadth — a single continuous moderate burst
+    # must NOT fire `campaign`.
+    # detection_boost = 15 (attempt_pressure only) → 40 (rule) + 15 = 55.
     events = [
         make_event(action="BLOCK", rule_id="900001",
                    timestamp=T0 + timedelta(minutes=4 * i))
@@ -112,8 +111,36 @@ async def test_analyze_ip_detection_boost_flows():
     ai: AIEngine = FakeAIEngine()
     score = await _pipeline(store, ai).analyze_ip(IP)
     assert any(d.rule_name == "attempt_pressure" for d in score.detections)
-    assert any(d.rule_name == "campaign" for d in score.detections)
-    assert score.score == 70  # 40 (rule) + min(15+20, 30) (capped boost) = 70
+    assert not any(d.rule_name == "campaign" for d in score.detections), (
+        "a single continuous moderate burst must NOT fire campaign"
+    )
+    assert score.score == 55  # 40 (rule) + 15 (attempt_pressure) = 55
+
+
+async def test_analyze_ip_jittery_grinder_below_d_endure_does_not_fire_campaign():
+    """A jittery ~8/h grinder (alternating 3-min/12-min gaps — ADR-0070
+    Amendment 1 A1.2's "boundary oscillator") holds decayed intensity
+    straddling theta_press (5) on both sides, without ever collapsing
+    anywhere near theta_quiet (2.5): ONE merged pressure episode, well short
+    of D_ENDURE (24h). No recidivism (one episode), no endurance (span <<
+    24h), no breadth (no categories/ports set) — `campaign` must NOT fire."""
+    events = [
+        make_event(action="BLOCK", rule_id="900001", timestamp=T0)
+        for _ in range(6)
+    ]
+    elapsed = timedelta(0)
+    gaps = (timedelta(minutes=3), timedelta(minutes=12))
+    i = 0
+    while elapsed < timedelta(minutes=45):
+        elapsed += gaps[i % 2]
+        events.append(
+            make_event(action="BLOCK", rule_id="900001", timestamp=T0 + elapsed)
+        )
+        i += 1
+    store: EventStore = FakeStore(events)
+    ai: AIEngine = FakeAIEngine()
+    score = await _pipeline(store, ai).analyze_ip(IP)
+    assert not any(d.rule_name == "campaign" for d in score.detections)
 
 
 async def test_use_ai_false_skips_ai():

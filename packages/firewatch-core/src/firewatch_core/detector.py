@@ -38,7 +38,8 @@ Severity anchoring (Sigma ``level`` vocabulary):
   expiry, nothing persisted.
 - ``campaign``              — ``high``     / auto_escalate=True (issue #54, ADR-0070
   Revision 1 D3): fires when the actor's pressure episodes within the campaign horizon show
-  recidivism (≥2 episodes — rose, collapsed to quiet, rose again), endurance (one episode
+  recidivism (≥2 episodes — rose, collapsed to quiet, rose again — "collapsed to quiet"
+  meaning λ̂ fell below θ_quiet = θ_press/2, ADR-0070 Amendment 1), endurance (one episode
   spanning ≥ ``D_endure`` — the moderate-rate grinder that never spikes but never stops), or
   breadth (≥1 episode **and** ≥2 attack categories or ≥5 destination ports — pressure that is
   also exploring). Below ``attack_in_progress``'s ``score_delta`` so the decider's headline
@@ -320,7 +321,9 @@ that never spikes to THETA_HIGH but never stops."""
 CAMPAIGN_MIN_EPISODES = 2
 """Recidivism clause (ADR-0070 D3/D5): >=2 pressure episodes within the
 campaign horizon — the actor's intensity rose, collapsed to quiet, and rose
-again (fail2ban's ``recidive`` shape)."""
+again (fail2ban's ``recidive`` shape). "Collapsed to quiet" is defined by the
+theta_quiet crossing (theta_press/2, ADR-0070 Amendment 1) — episodes() merges
+two excursions unless lambda_hat fell that far between them."""
 
 CAMPAIGN_MIN_CATEGORIES = 2
 """Breadth clause (ADR-0070 D5): >=1 pressure episode AND >=2 distinct attack
@@ -396,10 +399,12 @@ def _campaign(events: list[SecurityEvent], now: datetime) -> list[Detection]:
     accepted for signature symmetry with the other time-anchored rules
     (``TimeAnchoredRule``) and is unused by design.
 
-    The clause-seam boundary (ADR-0070 D3): filling the quiet gap between two
-    episodes merges them (recidivism stops deriving), but the filler must
-    hold λ̂ >= θ_press continuously, which fires endurance at ``D_ENDURE`` —
-    no addition of events can move an actor to calm.
+    The clause-seam boundary (ADR-0070 D3, hysteresis per Amendment 1):
+    filling the quiet gap between two episodes merges them (recidivism stops
+    deriving), but the filler must prevent a θ_quiet collapse — hold
+    λ̂ >= θ_quiet in the gaps — which merges everything into one span that
+    fires endurance at ``D_ENDURE`` — no addition of events can move an actor
+    to calm.
     """
     del now  # unused by design — see docstring
     eps = episodes(events, PRESSURE_THRESHOLD, half_life=HALF_LIFE)

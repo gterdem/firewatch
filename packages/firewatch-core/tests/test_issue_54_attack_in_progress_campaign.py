@@ -60,6 +60,14 @@ AC-constants   theta_high, D_endure, and the campaign clause thresholds
                SHALL be named, code-declared constants (not operator-tunable).
                -> TestConstants
 
+AC-quiet-collapse (ADR-0070 Amendment 1) episodes() SHALL merge two
+               theta_press excursions unless lambda_hat fell below theta_quiet
+               (= theta_press/2) between them; a boundary oscillator that
+               never collapses to quiet SHALL NOT manufacture recidivism, and
+               SHALL still queue via endurance once its merged span reaches
+               D_endure.
+               -> TestQuietCollapseHysteresis
+
 Fixture IPs: all via `make_event`'s default (RFC 5737, 203.0.113.5) — never
 real/routable addresses (testing-conventions skill).
 """
@@ -68,6 +76,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import firewatch_core.detector as detector_mod
+from firewatch_core.attempts import HALF_LIFE, PRESSURE_THRESHOLD, QUIET_THRESHOLD, episodes
 from firewatch_core.detector import (
     CAMPAIGN_MIN_CATEGORIES,
     CAMPAIGN_MIN_EPISODES,
@@ -540,3 +549,94 @@ class TestConstants:
         """detector._CAMPAIGN_WINDOW (duplicated to avoid a circular import)
         MUST equal pipeline.W_CAMPAIGN — a drift guard, not a design choice."""
         assert detector_mod._CAMPAIGN_WINDOW == W_CAMPAIGN
+
+    def test_quiet_threshold_is_half_pressure_threshold(self):
+        """theta_quiet (ADR-0070 Amendment 1 A1.4) — episode-merge hysteresis
+        floor, ratio-coupled to theta_press until calibration says otherwise."""
+        assert QUIET_THRESHOLD == PRESSURE_THRESHOLD / 2 == 2.5
+
+
+# ---------------------------------------------------------------------------
+# AC-quiet-collapse — ADR-0070 Amendment 1 (theta_quiet hysteresis)
+# ---------------------------------------------------------------------------
+
+
+def _jittery_grinder_events(total_span: timedelta, burst: int = 6):
+    """A boundary-oscillator cadence (ADR-0070 Amendment 1 A1.2's "general
+    case"): an initial burst establishes pressure immediately, then an
+    alternating 3-min / 12-min drip (~8 attempts/h) holds lambda_hat
+    oscillating roughly in [5.0, 6.6] forever — straddling theta_press (5)
+    on both sides without ever coming anywhere close to theta_quiet (2.5)."""
+    events = _alert(burst, timestamp=T0)
+    elapsed = timedelta(0)
+    gaps = (timedelta(minutes=3), timedelta(minutes=12))
+    i = 0
+    while elapsed < total_span:
+        elapsed += gaps[i % 2]
+        events += _alert(1, timestamp=T0 + elapsed)
+        i += 1
+    return events
+
+
+class TestQuietCollapseHysteresis:
+    """The four personas that motivated theta_quiet (ADR-0070 Amendment 1,
+    A1.1-A1.5), verified against the corrected `episodes()` merge rule and
+    `campaign`'s consumption of it."""
+
+    def test_ten_attempts_four_minutes_apart_is_one_episode(self):
+        """The exact PR #86 defect fixture: 10 attempts 4 min apart trough
+        dips to ~4.92 — above theta_quiet (2.5) — so `episodes()` MUST report
+        exactly one episode, and `campaign` MUST NOT fire."""
+        events = [
+            make_event(
+                source_type="linux_auth", action="ALERT", severity="low",
+                timestamp=T0 + timedelta(minutes=4 * i),
+            )
+            for i in range(10)
+        ]
+        result = episodes(events, PRESSURE_THRESHOLD, half_life=HALF_LIFE)
+        assert len(result) == 1
+        now = T0 + timedelta(minutes=40)
+        assert _by_name(detect(events, now=now), "campaign") is None
+
+    def test_burst_then_return_within_forty_minutes_merges_recidivism_does_not_fire(self):
+        """10-attempt burst at T0, return burst at T0+40min: trough ~3.97 >=
+        theta_quiet (2.5) -> ONE merged episode; recidivism must NOT fire."""
+        b1 = _alert(10, timestamp=T0)
+        b2 = _alert(10, timestamp=T0 + timedelta(minutes=40))
+        events = b1 + b2
+        now = T0 + timedelta(minutes=40)
+        result = episodes(events, PRESSURE_THRESHOLD, half_life=HALF_LIFE)
+        assert len(result) == 1
+        assert _by_name(detect(events, now=now), "campaign") is None
+
+    def test_burst_then_return_after_two_hours_splits_recidivism_fires(self):
+        """Same bursts, but the return is at T0+2h: trough ~0.625 <
+        theta_quiet (2.5) -> TWO episodes; campaign fires via recidivism."""
+        b1 = _alert(10, timestamp=T0)
+        b2 = _alert(10, timestamp=T0 + timedelta(hours=2))
+        events = b1 + b2
+        now = T0 + timedelta(hours=2)
+        result = episodes(events, PRESSURE_THRESHOLD, half_life=HALF_LIFE)
+        assert len(result) == 2
+        d = _by_name(detect(events, now=now), "campaign")
+        assert d is not None
+        assert "pressure episodes" in d.reason
+
+    def test_jittery_grinder_below_thirty_minutes_does_not_fire_campaign(self):
+        """A jittery ~8/h grinder well short of D_endure must NOT fire
+        campaign — the boundary oscillator that motivated theta_quiet."""
+        events = _jittery_grinder_events(timedelta(minutes=30))
+        now = T0 + timedelta(minutes=30)
+        assert _by_name(detect(events, now=now), "campaign") is None
+
+    def test_jittery_grinder_extended_past_d_endure_fires_via_endurance_never_recidivism(self):
+        """Extending the SAME cadence to a span >= D_endure (24h) queues the
+        actor via endurance — never recidivism, since the oscillator never
+        collapses to theta_quiet and stays ONE merged episode throughout."""
+        events = _jittery_grinder_events(timedelta(hours=25))
+        now = T0 + timedelta(hours=25)
+        d = _by_name(detect(events, now=now), "campaign")
+        assert d is not None
+        assert "spanning" in d.reason
+        assert "pressure episodes" not in d.reason

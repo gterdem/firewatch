@@ -402,7 +402,8 @@ expiry.
 
 **`campaign` — intent demonstrated over time (issue #54, ADR-0070 Revision 1).** Within the
 7-day campaign horizon, `campaign` queues an actor whose pressure episodes show **recidivism**
-(intensity rose, went quiet, and rose again at least once more), **endurance** (one episode of
+(intensity rose, went quiet, and rose again at least once more — went quiet (λ̂ fell below
+θ_quiet = θ_press/2 — ADR-0070 Amendment 1)), **endurance** (one episode of
 sustained pressure lasting a full day or more — the moderate-rate grinder that never spikes but
 never stops), or **breadth** (a pressure episode combined with activity across multiple attack
 categories or a wide spread of destination ports — pressure that is also exploring, not commodity

@@ -59,6 +59,12 @@ PRESSURE_THRESHOLD = 5
 """theta_press — the R1 ``attempt_pressure`` firing threshold. Approximately the
 decayed mass of a fail2ban ``maxretry``-scale burst (ADR-0070 D5)."""
 
+QUIET_THRESHOLD = PRESSURE_THRESHOLD / 2
+"""theta_quiet — the episode-merge hysteresis floor (ADR-0070 Amendment 1):
+two theta_press excursions merge unless lambda_hat fell below this between
+them — one half-life of pure decay below the pressure floor. Provisional,
+NOT operator-tunable (D6); own falsifier in Amendment 1 A1.4."""
+
 
 # ── D1 — the attempt predicate ───────────────────────────────────────────────
 
@@ -180,40 +186,66 @@ def episodes(
     events: list[SecurityEvent],
     threshold: float,
     half_life: timedelta = HALF_LIFE,
+    quiet: float | None = None,
 ) -> list[Episode]:
-    """Segment *events* into maximal pressure episodes (lambda_hat(t) >= threshold).
+    """Segment *events* into pressure episodes under quiet-collapse hysteresis
+    (ADR-0070 Amendment 1, A1.1).
 
-    Boundaries are exact, closed-form: an episode opens instantly at the
-    attempt whose jump first reaches ``threshold`` (jumps are discontinuous, so
-    no "crossing time" computation is needed for the up-crossing), and closes
-    at ``t_i + ln(lambda_i / threshold) / beta`` — the moment continuous decay
-    from the last attempt's value would fall back below ``threshold`` — UNLESS
-    a later attempt arrives first, in which case the episode continues through
-    it without a gap (ADR-0070 D3's closed-form crossing formula).
+    Two ``threshold`` excursions of lambda_hat belong to the SAME episode
+    unless lambda_hat fell below ``quiet`` between them — a dual-threshold
+    (Schmitt trigger) comparator: enter an excursion at ``threshold``, but
+    merge it with whatever came before unless intensity collapsed all the way
+    to ``quiet`` in the gap. ``quiet`` defaults to ``threshold / 2`` (theta_quiet
+    = theta_press / 2 at the module's own constants) when not given; a
+    caller-supplied ``quiet`` MUST stay below ``threshold`` to preserve the
+    hysteresis — a merge floor at or above the entry threshold would never
+    let an excursion close.
+
+    Episode ``start``/``end`` semantics are unchanged from before this
+    amendment: ``start`` is the first excursion's opening attempt, ``end`` is
+    the LAST excursion's ``threshold`` down-crossing — computed exactly,
+    closed-form, at ``t_i + ln(lambda_i / threshold) / beta`` from the last
+    attempt before the merge point — UNLESS a later attempt arrives first, in
+    which case the episode continues through it without a gap. ``quiet``
+    governs ONLY the merge decision between excursions; it never moves a
+    boundary.
+
+    Still exact, still closed-form: lambda_hat is strictly decreasing between
+    attempts, so the infimum of lambda_hat over any gap is the smallest
+    PRE-JUMP value among the gap's attempts — exactly ``value - 1.0`` in the
+    fold below (the running decayed sum immediately before that attempt's own
+    unit contribution lands, already computed by ``_decay_fold``). The merge
+    test is therefore one comparison per attempt; nothing is sampled.
 
     Ships in this module for issue #54 (R2 ``attack_in_progress`` / R3
-    ``campaign``) to consume; not wired into any rule in this issue (#53).
+    ``campaign``) to consume.
     """
     attempts = _attempt_timestamps(events)
     if not attempts:
         return []
+    if quiet is None:
+        quiet = threshold / 2.0
     beta = _beta(half_life)
     folded = _decay_fold(attempts, beta)
 
     out: list[Episode] = []
-    episode_start: datetime | None = None
+    pending: Episode | None = None  # last closed excursion, held open for merging
+    start: datetime | None = None  # start of the episode currently being built
     for i, (stamp, value) in enumerate(zip(attempts, folded, strict=True)):
+        if pending is not None and value - 1.0 < quiet:
+            out.append(pending)  # lambda_hat collapsed to quiet before this attempt
+            pending = None
         if value < threshold:
-            episode_start = None
             continue
-        if episode_start is None:
-            episode_start = stamp
-        crossing_dt = math.log(value / threshold) / beta
-        candidate_end = stamp + timedelta(seconds=crossing_dt)
+        if start is None:
+            start = pending.start if pending is not None else stamp
+        end = stamp + timedelta(seconds=math.log(value / threshold) / beta)
         next_stamp = attempts[i + 1] if i + 1 < len(attempts) else None
-        if next_stamp is None or next_stamp > candidate_end:
-            out.append(Episode(start=episode_start, end=candidate_end))
-            episode_start = None
+        if next_stamp is None or next_stamp > end:
+            pending = Episode(start=start, end=end)
+            start = None
         # else: the next attempt arrives before decay would cross the
         # threshold — the episode continues uninterrupted into it.
+    if pending is not None:
+        out.append(pending)
     return out

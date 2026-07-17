@@ -456,10 +456,12 @@ async def get_ip_narration(
     # Determine whether the LLM should be called for narration.
     # The LLM runs ONLY when:
     #   - ai=true (caller did not opt out)
-    #   - AND the AI engine is available (ai_status from detail is not 'unavailable'/'skipped')
-    # This mirrors the analyze_ip_detailed availability check; we do not re-check
+    #   - AND the AI engine actually ran for the detailed call (ai_status == "active")
+    # ADR-0066: branch POSITIVELY on "active" — a "not in (...)" exclusion list
+    # would silently misread the new "no_input" state as "AI ran". This mirrors
+    # the analyze_ip_detailed availability check; we do not re-check
     # is_available() because the detailed call already stamped the correct ai_status.
-    ai_ran_in_detail = ai_status not in ("unavailable", "skipped", "disabled")
+    ai_ran_in_detail = ai_status == "active"
     will_narrate_with_llm = ai and ai_ran_in_detail
 
     if will_narrate_with_llm:

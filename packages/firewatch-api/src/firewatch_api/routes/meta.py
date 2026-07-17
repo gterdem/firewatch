@@ -8,6 +8,13 @@ issue #135: GET /health restores ``ollama_connected`` and ``ollama_model`` field
 The AI status probe hits ``GET {base_url}/v1/models`` (OpenAI-compatible health path,
 ADR-0022) with a 5-second timeout; any failure yields ``ollama_connected=False``
 without raising (health endpoints must always return 200).
+
+ADR-0066 (issue #39): additive ``ai`` field — Layer 1 engine state
+(``"active"``/``"disabled"``/``"unreachable"``).  Inertness principle: WHEN
+``ai_enabled=false``, this endpoint MUST NOT dial the inference endpoint at
+all — an off subsystem is inert, mirroring the config-validator and
+factory-construction inertness fixed in issue #40.  ``ollama_connected`` is
+retained for compatibility (deprecated): ``true`` iff ``ai == "active"``.
 """
 from __future__ import annotations
 
@@ -70,6 +77,11 @@ async def get_health(
     issue #135 — the frontend reads these to render the Local AI panel.
     The base_url is read from the runtime config (``ollama_base_url``); the local-first
     invariant is enforced at config-write time by the SDK validator (ADR-0022).
+
+    ``ai`` (ADR-0066): WHEN ``ai_enabled=false``, the inference endpoint is
+    NEVER dialed (inertness) and ``ai="disabled"`` is reported immediately.
+    Otherwise the endpoint is probed and ``ai`` is ``"active"`` or
+    ``"unreachable"``.
     """
     store_status = "unavailable"
     if store is not None:
@@ -81,22 +93,30 @@ async def get_health(
             logger.warning("health check: store connection failed", exc_info=True)
             store_status = "error"
 
-    # AI status: probe the configured local endpoint (issue #135, ADR-0022).
-    ollama_connected = False
+    # AI status: probe the configured local endpoint ONLY when ai_enabled=true
+    # (issue #135, ADR-0022; inertness fix ADR-0066/issue #39 — an off
+    # subsystem must never dial).
     ollama_model: str | None = None
+    ai_status: str = "disabled"
     if config_store is not None:
         try:
             runtime = config_store.get_runtime()
             ollama_model = runtime.ollama_model
-            ollama_connected = await _probe_ai_connected(runtime.ollama_base_url)
+            if getattr(runtime, "ai_enabled", True):
+                connected = await _probe_ai_connected(runtime.ollama_base_url)
+                ai_status = "active" if connected else "unreachable"
+            else:
+                ai_status = "disabled"
         except Exception:
             logger.warning("health check: AI status probe failed", exc_info=True)
+            ai_status = "unreachable"
 
     return {
         "status": "ok",
         "store": store_status,
-        "ollama_connected": ollama_connected,
+        "ollama_connected": ai_status == "active",
         "ollama_model": ollama_model,
+        "ai": ai_status,
     }
 
 

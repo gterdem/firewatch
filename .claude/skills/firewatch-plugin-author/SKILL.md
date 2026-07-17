@@ -27,6 +27,22 @@ ask the user to install a forwarder just to read their own machine.
 Emit a valid SecurityEvent: action mapping (ALERT vs BLOCK), severity, category, rule ids,
 `source_type`+`source_id`, and MITRE/CAPEC where derivable.
 
+## Severity mapping checklist (ADR-0069 D3 — contract surface, PLUGIN_CONTRACT.md "Severity semantics")
+Severity routes: `high`+ on an ALERT puts the actor in the triage queue on its own (ADR-0067
+D1(b)). For your source's map:
+1. **Translate** the vendor's own published scale where one exists (Suricata priority, CEF 0–10,
+   Windows Event level, …); never re-score individual events.
+2. **Cite + justify** every band against the Sigma definitions in the contract, with the vendor
+   doc URL in the mapping-table comment.
+3. **State the distribution**: what the source's ambient mass maps to vs. its genuine
+   assertions; ambient-at-volume classes land ≤ `medium` — by definition, not by tuning.
+4. **Fail quiet**: missing/unparseable vendor severity → `low`, never a gate-qualifying level,
+   never fabricated upward.
+5. **Contested calls** go to the volume oracle (`tests/volume/`, ADR-0068) — if the map floods
+   the queue under a realistic manifest, the map is wrong.
+
+**PR checklist line (required):** ambient-mass vs assertion distribution stated.
+
 ## Steps
 1. `packages/sources/<type>/` with its own `pyproject.toml` + the `firewatch.sources` entry point.
 2. `config_schema` = Pydantic model; resolved **env > file > default** (ADR-0006). Secret *values*

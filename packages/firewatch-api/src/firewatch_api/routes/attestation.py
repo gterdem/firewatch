@@ -20,10 +20,12 @@ Dependency rule: imports firewatch-sdk only. Never imports legacy/.
 """
 from __future__ import annotations
 
+import ipaddress
+import socket
 from typing import Any
 from urllib.parse import urlparse
 
-from firewatch_sdk.config import RuntimeConfig, _is_local_host
+from firewatch_sdk.config import RuntimeConfig
 
 # ---------------------------------------------------------------------------
 # Helper: extract host:port from base_url
@@ -85,17 +87,62 @@ def _runtime_profile_from_base_url(base_url: str) -> str:
 # ---------------------------------------------------------------------------
 # Helper: provable endpoint locality check
 # ---------------------------------------------------------------------------
+#
+# NB (ADR-0066 / issues #39-#40): the SDK config validator (firewatch_sdk.
+# config._validate_ollama_base_url_local_first) became PURE/syntactic — it no
+# longer resolves hostnames (the inertness principle: a validator must not
+# dial/resolve, and resolution is itself a TOCTOU vector). A local resolving
+# copy is kept HERE, scoped to this read-time attestation assembler, which is
+# a deliberate exception documented alongside the module's "pure — no I/O"
+# claim above: this one predicate performs a DNS lookup so the
+# ``endpoint_validated_local`` claim stays honest for hostname-configured
+# endpoints (e.g. the Compose default ``http://ollama:11434``) — mirroring
+# the resolving check that now lives at ``OpenAIEngine.__init__`` (the dial
+# boundary), the only other place this proof is made.
+
+
+def _is_local_host(host: str) -> bool:
+    """Return True if *host* resolves to a loopback, RFC 1918, or link-local address.
+
+    Mirrors ``OpenAIEngine._is_local_address`` (``firewatch_core.adapters.ai_openai``)
+    — the same predicate the dial boundary itself uses to decide whether to
+    refuse a non-local endpoint (ADR-0022). Fail-closed: DNS failure or any
+    other resolution error is treated as non-local.
+    """
+    host = host.strip("[]")
+    if host.lower() == "localhost":
+        return True
+    try:
+        addr = ipaddress.ip_address(host)
+        if addr.is_unspecified:
+            return False
+        return bool(addr.is_loopback or addr.is_private or addr.is_link_local)
+    except ValueError:
+        pass
+    try:
+        resolved = socket.getaddrinfo(host, None)
+        for _family, _type, _proto, _canonname, sockaddr in resolved:
+            ip_str = str(sockaddr[0])
+            try:
+                addr = ipaddress.ip_address(ip_str)
+                if addr.is_unspecified:
+                    continue
+                if addr.is_loopback or addr.is_private or addr.is_link_local:
+                    return True
+            except ValueError:
+                continue
+        return False
+    except OSError:
+        return False
 
 
 def _endpoint_validated_local(base_url: str) -> bool:
     """Return True when the endpoint host is a validated local address (ADR-0022).
 
-    Uses the same ``_is_local_host`` predicate that the SDK validator and
-    ``OpenAIEngine.__init__`` use — the boot guard proof (ADR-0047 derivation
-    table row 2).  Because ``RuntimeConfig`` already rejected any non-local URL
-    at config-write time, this will be ``True`` in the normal operating case.
-    It is computed here (not hardcoded) so the claim is provable from the
-    actual current config value, not asserted unconditionally.
+    Uses ``_is_local_host`` (this module) — the same proof the dial boundary
+    (``OpenAIEngine.__init__``) makes. It is computed here (not hardcoded) so
+    the claim is provable from the actual current config value, not asserted
+    unconditionally.
     """
     parsed = urlparse(base_url)
     host = parsed.hostname or ""

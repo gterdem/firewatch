@@ -242,6 +242,46 @@ def test_get_analysis_no_ledger_returns_503() -> None:
 
 
 # ---------------------------------------------------------------------------
+# ADR-0066 (issue #39) — persisted "ok" maps to "active" at the read boundary
+# ---------------------------------------------------------------------------
+
+
+def test_list_analyses_maps_persisted_ok_to_active() -> None:
+    """GET /ai/analyses maps a stored ai_status='ok' row to 'active' in the response.
+
+    Ledger rows persist the AIEngine port's internal 'ok' discriminator
+    verbatim (no data migration) — read routes map it to the ONE closed wire
+    vocabulary so clients never see 'ok'.
+    """
+    rows = [_make_summary_row(1, IP_A)]
+    assert rows[0]["ai_status"] == "ok"  # sanity: the fixture stores the raw value
+    client = _client_with_ledger(_FakeLedger(rows))
+    resp = client.get("/ai/analyses")
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert items[0]["ai_status"] == "active"
+
+
+def test_list_analyses_passes_through_unavailable_unchanged() -> None:
+    """A stored ai_status='unavailable' row passes through unchanged (not remapped)."""
+    row = _make_summary_row(1, IP_A)
+    row["ai_status"] = "unavailable"
+    client = _client_with_ledger(_FakeLedger([row]))
+    resp = client.get("/ai/analyses")
+    assert resp.json()["items"][0]["ai_status"] == "unavailable"
+
+
+def test_get_analysis_maps_persisted_ok_to_active() -> None:
+    """GET /ai/analyses/{id} maps a stored ai_status='ok' row to 'active'."""
+    ledger = _FakeLedger()
+    ledger._rows = [_make_detail_row(1, IP_A)]
+    client = _client_with_ledger(ledger)
+    resp = client.get("/ai/analyses/1")
+    assert resp.status_code == 200
+    assert resp.json()["ai_status"] == "active"
+
+
+# ---------------------------------------------------------------------------
 # E_ROUND_TRIP — persist -> GET round-trip via real SqliteAnalysisLedger
 # ---------------------------------------------------------------------------
 

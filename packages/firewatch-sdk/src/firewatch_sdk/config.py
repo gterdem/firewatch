@@ -34,17 +34,21 @@ GeoProviderLiteral = Literal["offline", "online"]
 # ---------------------------------------------------------------------------
 
 
-def _is_local_host(host: str) -> bool:
-    """Return True if *host* resolves to a loopback, RFC 1918, or link-local address.
+def _is_local_ip_literal(host: str) -> bool | None:
+    """Classify *host* as a local/non-local IP literal, PURELY syntactically.
 
-    Mirrors the same predicate in ``firewatch_core.adapters.ai_openai._is_local_address``.
-    Duplicated here (SDK layer) so the validator has no dependency on ``firewatch-core``
-    (dependency rule: SDK is shared; core never imports plugins; plugins never import core).
+    Returns ``True`` when *host* parses as an IP literal that is loopback,
+    RFC 1918, or link-local; ``False`` when it parses as an IP literal that is
+    NOT local (a public/cloud address is rejected at config-write time,
+    ADR-0022/ADR-0066); ``None`` when *host* is not an IP literal at all (a
+    hostname — the caller must NOT reject these; see module docstring below).
 
-    Allowed ranges (ADR-0022):
-    - Loopback: 127.0.0.0/8, ::1/128
-    - RFC 1918: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
-    - Link-local: 169.254.0.0/16, fe80::/10
+    ADR-0066 (inertness principle): this function performs NO DNS resolution
+    and NO network I/O — it is pure and fast, exactly the same posture this
+    module already takes for the webhook validator's canonical-IP fast path.
+    Locality for HOSTNAMES is enforced later, at the dial boundary
+    (``OpenAIEngine.__init__`` / first use), which only ever runs when
+    ``ai_enabled=true`` — an off subsystem must never resolve, dial, or crash.
 
     NB-4: 0.0.0.0 (unspecified address, RFC 5735 sec 3) is explicitly rejected.
     """
@@ -53,27 +57,11 @@ def _is_local_host(host: str) -> bool:
         return True
     try:
         addr = ipaddress.ip_address(host)
-        if addr.is_unspecified:
-            return False
-        return bool(addr.is_loopback or addr.is_private or addr.is_link_local)
     except ValueError:
-        pass
-    # Hostname: DNS lookup — fail-closed on any error.
-    try:
-        resolved = socket.getaddrinfo(host, None)
-        for _family, _type, _proto, _canonname, sockaddr in resolved:
-            ip_str = str(sockaddr[0])
-            try:
-                addr = ipaddress.ip_address(ip_str)
-                if addr.is_unspecified:
-                    continue
-                if addr.is_loopback or addr.is_private or addr.is_link_local:
-                    return True
-            except ValueError:
-                continue
+        return None
+    if addr.is_unspecified:
         return False
-    except OSError:
-        return False
+    return bool(addr.is_loopback or addr.is_private or addr.is_link_local)
 
 
 class RuntimeConfig(BaseModel):
@@ -183,31 +171,49 @@ class RuntimeConfig(BaseModel):
     @field_validator("ollama_base_url")
     @classmethod
     def _validate_ollama_base_url_local_first(cls, v: str) -> str:
-        """Reject any base_url whose host is not loopback/RFC 1918/LAN (ADR-0022).
+        """Reject a literal cloud IP; let hostnames pass syntactically (ADR-0066).
 
-        Defense-in-depth: the check also lives in OpenAIEngine.__init__, but we
-        want to surface a misconfiguration at config-write time so operators get
-        immediate feedback rather than discovering the problem when the AI engine
-        is instantiated.
+        Inertness principle (ADR-0066, refining ADR-0022's enforcement point):
+        this validator must stay PURE and FAST — no DNS resolution, no network
+        I/O — because it runs at config-parse time regardless of whether AI is
+        even enabled. A hostname-based ``ollama_base_url`` (e.g. the Compose
+        default ``http://ollama:11434``) is accepted here unconditionally, even
+        when it is currently unresolvable — resolution is itself a TOCTOU
+        vector, the same rationale this module already applies to the webhook
+        validator's canonical-IP fast path (``_assert_webhook_url_safe``).
 
-        Uses ``_is_local_host`` (defined in this module) — no import from
-        firewatch-core (dependency rule).
+        Scheme and IP-literal locality checks remain: a literal cloud IP
+        (e.g. ``https://203.0.113.10``) is still rejected here, at
+        config-write time. The *resolving* local-first check for hostnames
+        moves entirely to the dial boundary (``OpenAIEngine.__init__`` / first
+        use, ``firewatch_core.adapters.ai_openai``), which only ever runs when
+        ``ai_enabled=true`` — an off subsystem never resolves, dials, or
+        crashes (issue #40).
         """
         from urllib.parse import urlparse
 
         parsed = urlparse(v)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError(
+                f"ollama_base_url scheme must be 'http' or 'https', got "
+                f"{parsed.scheme!r} (ADR-0022)."
+            )
         host = parsed.hostname or ""
         if not host:
             raise ValueError(
                 f"Cannot determine host from ollama_base_url={v!r} — rejecting (ADR-0022)."
             )
-        if not _is_local_host(host):
+        locality = _is_local_ip_literal(host)
+        if locality is False:
             raise ValueError(
-                f"ollama_base_url {v!r} (host={host!r}) does not resolve to a loopback "
-                "or RFC 1918/LAN address.  FireWatch local-first invariant (ADR-0022) "
-                "prohibits sending telemetry data to a public or cloud endpoint.  "
-                "Use Ollama (http://127.0.0.1:11434), vLLM, or another local runtime."
+                f"ollama_base_url {v!r} (host={host!r}) is a literal IP address that "
+                "is not loopback/RFC 1918/LAN.  FireWatch local-first invariant "
+                "(ADR-0022) prohibits sending telemetry data to a public or cloud "
+                "endpoint.  Use Ollama (http://127.0.0.1:11434), vLLM, or another "
+                "local runtime."
             )
+        # locality is True (a local IP literal) or None (a hostname — passes
+        # syntactically; locality is enforced at the dial boundary, ADR-0066).
         return v
 
     @field_validator("webhook_url")

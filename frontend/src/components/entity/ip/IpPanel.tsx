@@ -31,6 +31,12 @@
  * #284: Payload cells now use PayloadCellTooltip — anchored popover with full sanitized payload
  * text on hover/focus when truncated. No popover when content fits. ADR-0029 D3: text nodes only.
  *
+ * Issue #45 (ADR-0072 D6): Recent-logs Signature cells additionally show a
+ * FalsePositiveButton when the raw stored event carries a `rule_name`
+ * identity — this is the "detection row" placement the D6 maintainer ruling
+ * requires (False Positive targets a rule, not the actor; it must NOT sit on
+ * the triage-queue actor card — see TriageBanner.tsx's ActorChip).
+ *
  * SECURITY (ADR-0029 D3): All attacker-controlled fields rendered as text nodes only.
  * discoveryCache drives RuleCellTooltip hints (ADR-0034, D2 #195) — zero per-source branching.
  */
@@ -49,6 +55,7 @@ import DeepAnalysisControl from './DeepAnalysisControl'
 import NarrationPanel from './NarrationPanel'
 import IpScoreSection from './IpScoreSection'
 import RichDetailSection from './RichDetailSection'
+import FalsePositiveButton from './FalsePositiveButton'
 import { SectionChips } from '../SectionChips'
 import { EvidenceSection } from '../../evidence/EvidenceSection'
 import { AccordionTimeline } from './timeline/AccordionTimeline'
@@ -524,6 +531,20 @@ export default function IpPanel({ ip, discoveryCache }: IpPanelProps) {
                 const hint = discoveryCache != null
                   ? findActionHint(discoveryCache, sourceType, ruleName)
                   : null
+                // Issue #45 (ADR-0072 D6/D1): the False Positive identity is the
+                // raw stored event's `rule_name` (SecurityEvent.rule_name,
+                // source-declared free text) — NOT `ruleName` above, which is the
+                // rule-CATALOG display name resolved from GET /rules. Suppression
+                // matches against `EscalationVerdict.qualifying_rules`, which is
+                // built server-side from this same raw `rule_name` field. A
+                // detection with no `rule_name` gets no button — ADR-0072's
+                // fail-toward-visibility boundary: an anonymous detection can
+                // never be FP-suppressed, so offering the action would be a
+                // silent no-op.
+                const fpRuleName =
+                  typeof log.rule_name === 'string' && log.rule_name.trim() !== ''
+                    ? log.rule_name
+                    : null
                 // #270: Find correlated context for this log entry's timestamp.
                 // Match timeline events within ±5min of this log's timestamp.
                 const logTimeMs = (() => {
@@ -615,14 +636,26 @@ export default function IpPanel({ ip, discoveryCache }: IpPanelProps) {
                     >
                       {/* #283: RuleCellTooltip replaces the old role="button" span +
                           RulePopup. Peek on hover/focus; pin on click/Enter. */}
-                      <RuleCellTooltip
-                        ruleName={ruleName}
-                        ruleId={sid}
-                        category={safeText(log.category ?? '')}
-                        sourceType={sourceType}
-                        rules={rules}
-                        hint={hint}
-                      />
+                      <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                        <RuleCellTooltip
+                          ruleName={ruleName}
+                          ruleId={sid}
+                          category={safeText(log.category ?? '')}
+                          sourceType={sourceType}
+                          rules={rules}
+                          hint={hint}
+                        />
+                        {/* Issue #45 (ADR-0072 D6): False Positive targets THIS
+                            detection row's rule, never the actor — only shown
+                            when the raw event carries a rule_name identity. */}
+                        {fpRuleName !== null && (
+                          <FalsePositiveButton
+                            actorIp={ip}
+                            ruleName={fpRuleName}
+                            data-testid={`false-positive-button-${i}`}
+                          />
+                        )}
+                      </span>
                     </td>
                     {/* Payload — PayloadCellTooltip: anchored popover on hover/focus
                         when truncated (#284, #353). ADR-0029 D3: text nodes only.

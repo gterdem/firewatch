@@ -10,15 +10,28 @@
  *
  * SIEM behaviour (ADR-0033 § "What the seam does in MF"):
  *   investigate → open the entity slide-over for the actor's IP (ADR-0037, issue #204)
+ *   expected    → "Expected — this is me" (issue #45, ADR-0072 D6): persisted
+ *                 server-side as an `expected` decision — actor-identity
+ *                 suppression (fail2ban `ignoreip` precedent, ADR-0070 D6).
  *   dismiss     → resolve/close the actor — persisted server-side as a
  *                 `dismissed` decision (ADR-0072, issue #47). Queue membership
  *                 (suppression) is computed server-side and read via
  *                 `lib/triageDecisions.ts`'s `isSuppressed` — this seam does
  *                 NOT decide suppression, it only records the operator's verb.
+ *   harden      → advice-only (issue #45, ADR-0033): NO server call, NO
+ *                 execution. The UI surfaces `escalationCopy.ts`'s
+ *                 `HARDEN_ADVICE` text; the seam exists so a future
+ *                 SOAR-adjacent flow can hook in without component changes.
  *   block       → record the block *decision* / raise the alert (NOT execute
  *                 enforcement) — persisted the same way as `dismiss` (the
  *                 server-side vocabulary has no separate "block" verb; ADR-0072
  *                 D6's three verbs are expected/dismissed/false_positive).
+ *
+ * `false_positive` is deliberately NOT a `ThreatActionVerb` (ADR-0072 D6,
+ * issue #45 O-1): it targets a (actor, rule) pair, not the actor, and lives on
+ * the entity-panel detection row, never the actor card. See
+ * `recordFalsePositive` below — called directly from the detection-row UI,
+ * bypassing this actor-scoped seam.
  *
  * SOAR execution (ADR-0033 § "What plugs in later"):
  *   A future SOAR milestone supplies the enforcement executor behind verb === "block".
@@ -26,12 +39,14 @@
  *   The single wire-in point is the `block` branch of `makeOnAction`, AFTER
  *   the existing decision-record step.
  *
- * Persistence (ADR-0072, issue #47):
- *   `dismiss`/`block` persist a `dismissed` decision via `POST /decisions`
- *   (api/decisions.ts) — the server computes and stores the tier/score
- *   snapshot; this seam never self-reports them. Persistence is best-effort:
- *   a failed POST is logged and swallowed (this stays a SIEM record/alert
- *   action, not a blocking one — ADR-0015 additive-only precedent).
+ * Persistence (ADR-0072, issue #47; #45 adds `expected`):
+ *   `dismiss`/`block` persist a `dismissed` decision; `expected` persists an
+ *   `expected` decision — both via `POST /decisions` (api/decisions.ts). The
+ *   server computes and stores the tier/score snapshot; this seam never
+ *   self-reports them. Persistence is best-effort: a failed POST is logged
+ *   and swallowed (this stays a SIEM record/alert action, not a blocking one
+ *   — ADR-0015 additive-only precedent). `harden` persists nothing (advice
+ *   only — see above).
  *
  *   The pre-#47 localStorage implementation (isDismissed/reconcileAcknowledged/
  *   hasMaterialChange/acknowledge, issues #727/#755) is RETIRED — see
@@ -57,10 +72,14 @@ import type { EntityRef } from '../components/entity/EntityPanelContext'
 // ---------------------------------------------------------------------------
 
 /**
- * The three triage verbs exposed by the action seam.
+ * The triage verbs exposed by the action seam.
  * `acknowledge` is retired (ADR-0072 D6) — removed from this union.
+ * `expected` and `harden` added by issue #45 (ADR-0072 D6 queue-card
+ * vocabulary). `false_positive` is intentionally NOT here — it is
+ * rule-scoped, not actor-scoped (see the module doc's `recordFalsePositive`
+ * note) and is called directly from the detection-row UI, not this seam.
  */
-export type ThreatActionVerb = 'block' | 'investigate' | 'dismiss'
+export type ThreatActionVerb = 'block' | 'investigate' | 'dismiss' | 'expected' | 'harden'
 
 /**
  * The `onAction` function signature.
@@ -124,6 +143,46 @@ async function persistDismissed(actor: ThreatScore): Promise<void> {
   }
 }
 
+/**
+ * Persist an `expected` decision for `actor` via `POST /decisions`
+ * (ADR-0072 D3, issue #45). Best-effort — same swallow-and-log contract as
+ * `persistDismissed`. Actor-identity scoped (fail2ban `ignoreip` precedent,
+ * ADR-0070 D6): suppresses all queue entries for this actor, not just the
+ * one currently shown.
+ */
+async function persistExpected(actor: ThreatScore): Promise<void> {
+  try {
+    await createDecision({ actor_ip: actor.source_ip, verb: 'expected' })
+  } catch (err) {
+    console.warn('[triageActions] failed to persist expected decision:', err)
+  }
+}
+
+/**
+ * Record a `false_positive` decision for a single (actor, rule) pair
+ * (ADR-0072 D2/D4, issue #45 O-1). Deliberately NOT part of the
+ * `ThreatActionVerb` seam — it targets a rule, not the actor, and is called
+ * directly from the entity-panel detection-row UI (the "detection targets a
+ * rule" placement rule, D6).
+ *
+ * Best-effort, same swallow-and-log contract as the other persistence
+ * helpers here — a failed POST must not break the entity panel.
+ *
+ * `ruleName` must be a non-empty string identity (the raw event's
+ * `rule_name`, e.g. `SecurityEvent.rule_name` echoed back on the stored log
+ * row) — the caller is responsible for only surfacing this action when such
+ * an identity exists (ADR-0072's fail-toward-visibility boundary: an
+ * anonymous/rule-less detection can never be FP-suppressed).
+ */
+export async function recordFalsePositive(actorIp: string, ruleName: string): Promise<void> {
+  if (!isValidIpFormat(actorIp) || ruleName === '') return
+  try {
+    await createDecision({ actor_ip: actorIp, verb: 'false_positive', rule_name: ruleName })
+  } catch (err) {
+    console.warn('[triageActions] failed to persist false_positive decision:', err)
+  }
+}
+
 // ---------------------------------------------------------------------------
 // SIEM implementation factory
 //
@@ -152,6 +211,14 @@ export interface OnActionCallbacks {
   navigate?: (path: string) => void
   onDismiss?: (actor: ThreatScore) => void
   onBlock?: (actor: ThreatScore) => void
+  /** Optional callback called after `expected` records the decision (issue #45). */
+  onExpected?: (actor: ThreatScore) => void
+  /**
+   * Optional callback called when `harden` fires (issue #45). ADR-0033:
+   * advice-only — this callback is for UI feedback (e.g. showing the
+   * `HARDEN_ADVICE` copy) only; it must never trigger an execution path.
+   */
+  onHarden?: (actor: ThreatScore) => void
 }
 
 /**
@@ -176,6 +243,25 @@ export function makeOnAction(callbacks: OnActionCallbacks): OnAction {
         // MH (issue #204): open the entity slide-over for this IP (ADR-0037).
         // Dashboard stays visible behind the panel — no route navigation occurs.
         callbacks.openEntity({ kind: 'ip', value: actor.source_ip })
+        return
+      }
+
+      case 'expected': {
+        // "Expected — this is me" (issue #45, ADR-0072 D6): actor-identity
+        // suppression, fail2ban `ignoreip` precedent (ADR-0070 D6). Persisted
+        // server-side; suppression is computed at read time by the server —
+        // this seam does not mutate any local state.
+        callbacks.onExpected?.(actor)
+        return persistExpected(actor)
+      }
+
+      case 'harden': {
+        // Advice-only (issue #45, ADR-0033): NO persistence, NO execution.
+        // The caller (UI) is responsible for surfacing HARDEN_ADVICE copy;
+        // this seam only exists so a future flow can hook in without any
+        // component change. Must-NOT (ADR-0033): this branch performs no
+        // network call and no side effect beyond the optional callback.
+        callbacks.onHarden?.(actor)
         return
       }
 

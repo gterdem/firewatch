@@ -239,14 +239,16 @@ describe('TriageBanner', () => {
   })
 
   // ---------------------------------------------------------------------------
-  // Dismiss behavior (unchanged)
+  // Dismiss behavior — now lives in the overflow menu (issue #45, ADR-0072 D6
+  // maintainer ruling: "Dismiss lives in an overflow menu on the card").
   // ---------------------------------------------------------------------------
 
   // Event-driven: dismiss button calls onAction with 'dismiss'
-  it('calls onAction(actor, "dismiss") when dismiss button is clicked', async () => {
+  it('calls onAction(actor, "dismiss") when the overflow menu\'s Dismiss item is clicked', async () => {
     const onAction: OnAction = vi.fn()
     render(<TriageBanner pendingActors={[ACTOR_CRITICAL]} onAction={onAction} />)
 
+    await userEvent.click(screen.getByTestId('triage-chip-overflow-trigger'))
     await userEvent.click(screen.getByTestId('triage-chip-dismiss'))
 
     expect(onAction).toHaveBeenCalledTimes(1)
@@ -258,6 +260,7 @@ describe('TriageBanner', () => {
     const onAction = vi.fn() as MockedFunction<OnAction>
     render(<TriageBanner pendingActors={[ACTOR_CRITICAL]} onAction={onAction} />)
 
+    await userEvent.click(screen.getByTestId('triage-chip-overflow-trigger'))
     await userEvent.click(screen.getByTestId('triage-chip-dismiss'))
 
     expect(onAction).toHaveBeenCalledTimes(1)
@@ -265,12 +268,61 @@ describe('TriageBanner', () => {
   })
 
   // Dismiss button has accessible aria-label
-  it('dismiss button has aria-label with IP', () => {
+  it('dismiss button has aria-label with IP', async () => {
     render(<TriageBanner pendingActors={[ACTOR_CRITICAL]} onAction={vi.fn()} />)
+    await userEvent.click(screen.getByTestId('triage-chip-overflow-trigger'))
     expect(screen.getByTestId('triage-chip-dismiss')).toHaveAttribute(
       'aria-label',
       `Dismiss ${ACTOR_CRITICAL.source_ip}`,
     )
+  })
+
+  // Dismiss is NOT visible on the card until the overflow menu is opened
+  // (issue #45 O-1 placement rule).
+  it('Dismiss is not visible until the overflow menu is opened', () => {
+    render(<TriageBanner pendingActors={[ACTOR_CRITICAL]} onAction={vi.fn()} />)
+    expect(screen.queryByTestId('triage-chip-dismiss')).toBeNull()
+    expect(screen.getByTestId('triage-chip-overflow-trigger')).toBeInTheDocument()
+  })
+
+  // Clicking the overflow menu's Dismiss item closes the menu (no stray open menu left behind).
+  it('clicking Dismiss in the overflow menu closes the menu', async () => {
+    render(<TriageBanner pendingActors={[ACTOR_CRITICAL]} onAction={vi.fn()} />)
+    await userEvent.click(screen.getByTestId('triage-chip-overflow-trigger'))
+    await userEvent.click(screen.getByTestId('triage-chip-dismiss'))
+    expect(screen.queryByTestId('triage-chip-overflow-menu')).toBeNull()
+  })
+
+  // ---------------------------------------------------------------------------
+  // Expected / Harden — queue card actions (issue #45, ADR-0072 D6)
+  // ---------------------------------------------------------------------------
+
+  it('calls onAction(actor, "expected") when "Expected — this is me" is clicked', async () => {
+    const onAction: OnAction = vi.fn()
+    render(<TriageBanner pendingActors={[ACTOR_CRITICAL]} onAction={onAction} />)
+
+    await userEvent.click(screen.getByTestId('triage-chip-expected'))
+
+    expect(onAction).toHaveBeenCalledTimes(1)
+    expect(onAction).toHaveBeenCalledWith(ACTOR_CRITICAL, 'expected')
+  })
+
+  it('calls onAction(actor, "harden") when "Harden" is clicked, and shows advisory copy — no execution', async () => {
+    const onAction: OnAction = vi.fn()
+    render(<TriageBanner pendingActors={[ACTOR_CRITICAL]} onAction={onAction} />)
+
+    await userEvent.click(screen.getByTestId('triage-chip-harden'))
+
+    expect(onAction).toHaveBeenCalledTimes(1)
+    expect(onAction).toHaveBeenCalledWith(ACTOR_CRITICAL, 'harden')
+    // Advice-only: the advisory note appears locally; no fetch/execution occurs
+    // (the seam's own must-NOT is covered in triageActions.test.ts).
+    expect(screen.getByTestId('triage-chip-harden-advice')).toBeInTheDocument()
+  })
+
+  it('False positive is NOT offered on the actor chip/card (issue #45 O-1 — it targets a rule, not the actor)', () => {
+    render(<TriageBanner pendingActors={[ACTOR_CRITICAL]} onAction={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: /false positive/i })).toBeNull()
   })
 
   // ---------------------------------------------------------------------------
@@ -539,6 +591,7 @@ describe('TriageBanner — ADR-0058 D2 escalation axis (issue #649)', () => {
     const onAction: OnAction = vi.fn()
     render(<TriageBanner pendingActors={[ACTOR_ESCALATED_TIER1]} onAction={onAction} />)
 
+    await userEvent.click(screen.getByTestId('triage-chip-overflow-trigger'))
     await userEvent.click(screen.getByTestId('triage-chip-dismiss'))
     expect(onAction).toHaveBeenCalledWith(ACTOR_ESCALATED_TIER1, 'dismiss')
   })
@@ -610,22 +663,30 @@ describe('TriageBanner — ADR-0058 D2 escalation axis (issue #649)', () => {
     expect(justEl).toHaveTextContent(ESCALATION_TIER1.justification)
   })
 
-  // EARS: dismiss button shows ✕ icon (not the word "Dismiss")
-  it('dismiss button shows ✕ icon, not the word "Dismiss" (issue #708)', () => {
+  // EARS: the overflow trigger shows the ⋮ icon; the Dismiss menu item inside
+  // shows its text label (issue #45 supersedes #708's icon-only chip button —
+  // Dismiss is no longer a bare icon button on the card; it is a labeled menu
+  // item in the overflow menu, ADR-0072 D6).
+  it('overflow trigger shows ⋮ icon; the Dismiss menu item shows its text label', async () => {
     render(<TriageBanner pendingActors={[ACTOR_ESCALATED_TIER1]} onAction={vi.fn()} />)
 
-    const btn = screen.getByTestId('triage-chip-dismiss')
-    expect(btn).toHaveTextContent('✕')
-    expect(btn).not.toHaveTextContent('Dismiss')
+    const trigger = screen.getByTestId('triage-chip-overflow-trigger')
+    expect(trigger).toHaveTextContent('⋮')
+
+    await userEvent.click(trigger)
+    expect(screen.getByTestId('triage-chip-dismiss')).toHaveTextContent('Dismiss')
   })
 
-  // EARS: no-verdict chip renders IP + Dismiss only — no tier, no popover trigger
-  it('no-verdict chip renders IP + Dismiss only (no tier badge, no popover trigger) (issue #708)', () => {
+  // EARS: no-verdict chip renders IP + queue-card actions — no tier, no popover trigger
+  it('no-verdict chip renders IP + queue-card actions only (no tier badge, no popover trigger) (issue #708/#45)', async () => {
     render(<TriageBanner pendingActors={[ACTOR_NO_ESCALATION]} onAction={vi.fn()} />)
 
     // IP is present
     expect(screen.getByTestId('clickable-ip')).toBeInTheDocument()
-    // Dismiss is present
+    // Expected / Harden / overflow (Dismiss) are present regardless of escalation.
+    expect(screen.getByTestId('triage-chip-expected')).toBeInTheDocument()
+    expect(screen.getByTestId('triage-chip-harden')).toBeInTheDocument()
+    await userEvent.click(screen.getByTestId('triage-chip-overflow-trigger'))
     expect(screen.getByTestId('triage-chip-dismiss')).toBeInTheDocument()
     // No tier badge, no disposition trigger, no block-status, no justification
     expect(screen.queryByTestId('triage-chip-tier')).toBeNull()
@@ -1011,15 +1072,18 @@ describe('TriageBanner — #728 top-N + view-all + tier headers', () => {
     expect(screen.queryByTestId('triage-view-all')).toBeNull()
   })
 
-  // Dismiss still works inside a tier group (no regression)
+  // Dismiss still works inside a tier group (no regression) — now via the
+  // overflow menu (issue #45, ADR-0072 D6). useDismissableDisclosure enforces
+  // a single-open-at-a-time invariant, so only one overflow menu (and its
+  // Dismiss item) is in the DOM at a time — open the first actor's menu.
   it('dismiss button inside tier-group calls onAction correctly (no regression)', async () => {
     const onAction: OnAction = vi.fn()
     const actors = makeActors(2, 2, 'block_status_unknown', 90)
     render(<TriageBanner pendingActors={actors} onAction={onAction} />)
 
-    // Click the first dismiss button
-    const dismissBtns = screen.getAllByTestId('triage-chip-dismiss')
-    await userEvent.click(dismissBtns[0])
+    const overflowTriggers = screen.getAllByTestId('triage-chip-overflow-trigger')
+    await userEvent.click(overflowTriggers[0])
+    await userEvent.click(screen.getByTestId('triage-chip-dismiss'))
 
     expect(onAction).toHaveBeenCalledTimes(1)
     expect(onAction).toHaveBeenCalledWith(actors[0], 'dismiss')

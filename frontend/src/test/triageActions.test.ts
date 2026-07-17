@@ -41,7 +41,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { makeOnAction, isValidIpFormat, type ThreatActionVerb, type OnAction } from '../lib/triageActions'
+import {
+  makeOnAction,
+  isValidIpFormat,
+  recordFalsePositive,
+  type ThreatActionVerb,
+  type OnAction,
+} from '../lib/triageActions'
 import type { ThreatScore } from '../api/types'
 import type { EntityRef } from '../components/entity/EntityPanelContext'
 
@@ -117,12 +123,14 @@ describe('triageActions — action seam entrypoint', () => {
     expect(() => onAction(ACTOR, 'investigate')).not.toThrow()
   })
 
-  it('verb type is the union "block" | "investigate" | "dismiss" — acknowledge retired (ADR-0072 D6)', () => {
-    const verbs: ThreatActionVerb[] = ['block', 'investigate', 'dismiss']
-    expect(verbs).toHaveLength(3)
+  it('verb type is the union "block"|"investigate"|"dismiss"|"expected"|"harden" — acknowledge retired (ADR-0072 D6); expected/harden added (issue #45)', () => {
+    const verbs: ThreatActionVerb[] = ['block', 'investigate', 'dismiss', 'expected', 'harden']
+    expect(verbs).toHaveLength(5)
     expect(verbs).toContain('block')
     expect(verbs).toContain('investigate')
     expect(verbs).toContain('dismiss')
+    expect(verbs).toContain('expected')
+    expect(verbs).toContain('harden')
   })
 })
 
@@ -272,6 +280,151 @@ describe('triageActions — dismiss verb (ADR-0072 D3, issue #47)', () => {
 })
 
 // ---------------------------------------------------------------------------
+// 3b. Event-driven: expected → persists an 'expected' decision server-side
+//     (issue #45, ADR-0072 D3/D6 — "Expected — this is me")
+// ---------------------------------------------------------------------------
+
+describe('triageActions — expected verb (issue #45, ADR-0072 D6)', () => {
+  it('WHEN expected fires, POST /decisions is called with {actor_ip, verb: "expected"}', async () => {
+    const openEntity = vi.fn()
+    const onAction = makeOnAction({ openEntity })
+
+    await onAction(ACTOR, 'expected')
+
+    expect(mockCreateDecision).toHaveBeenCalledOnce()
+    expect(mockCreateDecision).toHaveBeenCalledWith({
+      actor_ip: ACTOR.source_ip,
+      verb: 'expected',
+    })
+  })
+
+  it('expected never sends decided_tier/decided_score (server is the sole snapshot authority)', async () => {
+    const openEntity = vi.fn()
+    const onAction = makeOnAction({ openEntity })
+
+    await onAction(ACTOR, 'expected')
+
+    const body = mockCreateDecision.mock.calls[0][0] as Record<string, unknown>
+    expect(body).not.toHaveProperty('decided_tier')
+    expect(body).not.toHaveProperty('decided_score')
+  })
+
+  it('WHEN expected fires, the onExpected callback is called with the actor', () => {
+    const openEntity = vi.fn()
+    const onExpected = vi.fn()
+    const onAction = makeOnAction({ openEntity, onExpected })
+
+    onAction(ACTOR, 'expected')
+
+    expect(onExpected).toHaveBeenCalledOnce()
+    expect(onExpected).toHaveBeenCalledWith(ACTOR)
+  })
+
+  it('expected does NOT call openEntity (no slide-over side-effect)', () => {
+    const openEntity = vi.fn()
+    const onAction = makeOnAction({ openEntity })
+
+    onAction(ACTOR, 'expected')
+
+    expect(openEntity).not.toHaveBeenCalled()
+  })
+
+  it('a rejected createDecision is swallowed — expected does not throw', async () => {
+    mockCreateDecision.mockRejectedValueOnce(new Error('network error'))
+    const openEntity = vi.fn()
+    const onAction = makeOnAction({ openEntity })
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    await expect(onAction(ACTOR, 'expected')).resolves.toBeUndefined()
+    expect(warnSpy).toHaveBeenCalled()
+
+    warnSpy.mockRestore()
+  })
+
+  it('expected is a no-op when source_ip is malformed', () => {
+    const openEntity = vi.fn()
+    const onExpected = vi.fn()
+    const onAction = makeOnAction({ openEntity, onExpected })
+    const badActor: ThreatScore = { ...ACTOR, source_ip: 'not-an-ip' }
+
+    onAction(badActor, 'expected')
+
+    expect(onExpected).not.toHaveBeenCalled()
+    expect(mockCreateDecision).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 3c. Event-driven: harden → advice-only, NO execution, NO persistence
+//     (issue #45, ADR-0033 must-NOT)
+// ---------------------------------------------------------------------------
+
+describe('triageActions — harden verb (issue #45, ADR-0033 — advice only)', () => {
+  it('WHEN harden fires, the onHarden callback is called with the actor', () => {
+    const openEntity = vi.fn()
+    const onHarden = vi.fn()
+    const onAction = makeOnAction({ openEntity, onHarden })
+
+    onAction(ACTOR, 'harden')
+
+    expect(onHarden).toHaveBeenCalledOnce()
+    expect(onHarden).toHaveBeenCalledWith(ACTOR)
+  })
+
+  it('harden does NOT call createDecision — no persistence for an advice-only verb', () => {
+    const openEntity = vi.fn()
+    const onAction = makeOnAction({ openEntity })
+
+    onAction(ACTOR, 'harden')
+
+    expect(mockCreateDecision).not.toHaveBeenCalled()
+  })
+
+  it('harden does NOT call global fetch (no execution path — ADR-0033 must-NOT)', () => {
+    const openEntity = vi.fn()
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const onAction = makeOnAction({ openEntity })
+
+    onAction(ACTOR, 'harden')
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    fetchSpy.mockRestore()
+  })
+
+  it('harden does NOT call openEntity, onDismiss, onBlock, or onExpected', () => {
+    const openEntity = vi.fn()
+    const onDismiss = vi.fn()
+    const onBlock = vi.fn()
+    const onExpected = vi.fn()
+    const onAction = makeOnAction({ openEntity, onDismiss, onBlock, onExpected })
+
+    onAction(ACTOR, 'harden')
+
+    expect(openEntity).not.toHaveBeenCalled()
+    expect(onDismiss).not.toHaveBeenCalled()
+    expect(onBlock).not.toHaveBeenCalled()
+    expect(onExpected).not.toHaveBeenCalled()
+  })
+
+  it('harden without optional callbacks does not throw (callbacks are optional)', () => {
+    const openEntity = vi.fn()
+    const onAction = makeOnAction({ openEntity })
+    expect(() => onAction(ACTOR, 'harden')).not.toThrow()
+  })
+
+  it('harden is a no-op when source_ip is malformed', () => {
+    const openEntity = vi.fn()
+    const onHarden = vi.fn()
+    const onAction = makeOnAction({ openEntity, onHarden })
+    const badActor: ThreatScore = { ...ACTOR, source_ip: 'not-an-ip' }
+
+    onAction(badActor, 'harden')
+
+    expect(onHarden).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // 4. Event-driven: block → record decision / raise alert (SIEM), NOT execute
 //    (persisted the same way as dismiss — ADR-0072 has no separate "block" verb)
 // ---------------------------------------------------------------------------
@@ -408,5 +561,45 @@ describe('triageActions — malformed source_ip rejected at action time (N-2)', 
 
     expect(onBlock).not.toHaveBeenCalled()
     expect(mockCreateDecision).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 7. recordFalsePositive — rule-scoped, NOT part of the actor-scoped seam
+//    (issue #45, ADR-0072 D2/D4/D6 O-1: false positive targets a rule)
+// ---------------------------------------------------------------------------
+
+describe('triageActions — recordFalsePositive (issue #45, ADR-0072 D6 O-1)', () => {
+  it('POSTs /decisions with {actor_ip, verb: "false_positive", rule_name}', async () => {
+    await recordFalsePositive('192.0.2.1', 'waf_sqli')
+
+    expect(mockCreateDecision).toHaveBeenCalledOnce()
+    expect(mockCreateDecision).toHaveBeenCalledWith({
+      actor_ip: '192.0.2.1',
+      verb: 'false_positive',
+      rule_name: 'waf_sqli',
+    })
+  })
+
+  it('is a no-op when actorIp is malformed (N-2 guard reused)', async () => {
+    await recordFalsePositive('not-an-ip', 'waf_sqli')
+
+    expect(mockCreateDecision).not.toHaveBeenCalled()
+  })
+
+  it('is a no-op when ruleName is an empty string', async () => {
+    await recordFalsePositive('192.0.2.1', '')
+
+    expect(mockCreateDecision).not.toHaveBeenCalled()
+  })
+
+  it('a rejected createDecision is swallowed — does not throw', async () => {
+    mockCreateDecision.mockRejectedValueOnce(new Error('network error'))
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    await expect(recordFalsePositive('192.0.2.1', 'waf_sqli')).resolves.toBeUndefined()
+    expect(warnSpy).toHaveBeenCalled()
+
+    warnSpy.mockRestore()
   })
 })

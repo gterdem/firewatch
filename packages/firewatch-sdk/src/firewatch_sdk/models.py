@@ -375,6 +375,18 @@ class EscalationVerdict(BaseModel):
                              only for legacy/external verdicts that predate the amendment.
                              Defaults to ``None`` so existing serialised shapes remain valid
                              (ADR-0048/0055 additive pattern — no required-field break).
+    ``qualifying_rules``    — additive, defaulted ``list[str]`` (ADR-0072 D1): the rule_name
+                             identities whose assertion satisfied the ADR-0067 D1 gate for this
+                             actor — ``QualifyResult.qualifying_detections[].rule_name`` plus any
+                             qualifying ``ALERT`` event's ``SecurityEvent.rule_name`` (deduped,
+                             ``None`` values dropped). Populated by ``escalation.decider.decide``
+                             via ``escalation.qualify.qualify`` — never by an LLM. Empty when
+                             qualification came from a source-declared severity alone with no
+                             named rule (an anonymous ALERT), or when nothing qualified. Consumed
+                             by ``firewatch_core.triage.suppression.evaluate`` to scope
+                             "false positive" decisions to the exact rule identity they target
+                             (ADR-0070 D6 / ADR-0072 D4) — never by scoring. Additive; changes no
+                             score or tier (golden oracle stays byte-identical).
 
     Standard alignment:
     - Disposition semantics anchored to OCSF ``disposition_id`` (1.8.0):
@@ -394,6 +406,10 @@ class EscalationVerdict(BaseModel):
     # ADR-0058 Amendment 1 (A2) — additive, optional (non-breaking).
     # Populated by the decider on every verdict; None for pre-amendment external shapes.
     disposition_counts: DispositionCounts | None = None
+    # ADR-0072 D1 — additive, defaulted. Populated by the decider from the D1
+    # assertion gate (escalation.qualify.qualify); [] when nothing qualified or
+    # qualification carried no named rule. Never scored.
+    qualifying_rules: list[str] = []
 
 
 class ScoreBreakdownItem(BaseModel):

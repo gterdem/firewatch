@@ -126,7 +126,7 @@ def _succeeded(verdict: EscalationVerdict, detections: list[Detection]) -> bool:
     return any(d.severity == "critical" for d in detections)
 
 
-def _queued(verdict: EscalationVerdict) -> bool:
+def _queued(verdict: EscalationVerdict, *, suppressed: bool) -> bool:
     """K = queue size: actors carrying a Tier-1 or Tier-2 escalation verdict.
 
     This is the ADR-0067 D1(a) assertion-gated queue population — core-owned
@@ -134,8 +134,16 @@ def _queued(verdict: EscalationVerdict) -> bool:
     band half, ADR-0059 D1). Matches the CRITICAL / HIGH ALERT states in
     ADR-0070 D3's table; INFORM (``tier is None``) never counts, by design
     (ADR-0067 D2 — the observed stratum makes no escalation claim).
+
+    ADR-0072 finding 2: a Tier-1/Tier-2 actor that is currently SUPPRESSED
+    (an active `expected`/`dismissed` decision, or a `false_positive` row
+    covering every qualifying rule — ``firewatch_core.triage.suppression.
+    evaluate``) no longer counts toward the queue — the SAME evaluator the
+    ``triage_decision`` annotation on ``GET /threats`` uses, via
+    ``firewatch_api.decision_annotator.is_suppressed`` (the caller passes
+    *suppressed* in; this module never re-derives it).
     """
-    return verdict.tier in (1, 2)
+    return verdict.tier in (1, 2) and not suppressed
 
 
 # ---------------------------------------------------------------------------
@@ -151,6 +159,7 @@ def compute_actor_attempt_stats(
     detections: list[Detection],
     verdict: EscalationVerdict,
     now: datetime,
+    suppressed: bool = False,
 ) -> ActorAttemptStats:
     """Derive one actor's :class:`ActorAttemptStats`.
 
@@ -173,6 +182,11 @@ def compute_actor_attempt_stats(
         verdict: ``decide(state_events, detections)`` output for this actor.
         now: The pipeline's anchored evaluation instant (ADR-0070 D2/D3) —
             threaded through, never read locally.
+        suppressed: ADR-0072 finding 2 — whether this actor's CURRENT verdict
+            is suppressed (``firewatch_api.decision_annotator.is_suppressed``,
+            over ``firewatch_core.triage.suppression.evaluate``). Defaults to
+            ``False`` (today's behaviour) when the caller has no decision
+            store wired.
     """
     timestamps = sorted(e.timestamp for e in state_events if is_attempt(e))
     attempt_count = len(timestamps)
@@ -192,7 +206,7 @@ def compute_actor_attempt_stats(
         span_minutes=span_minutes,
         peak_intensity=peak,
         succeeded=_succeeded(verdict, detections),
-        queued=_queued(verdict),
+        queued=_queued(verdict, suppressed=suppressed),
     )
 
 

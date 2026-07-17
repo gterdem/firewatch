@@ -38,11 +38,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardRoute from '../routes/DashboardRoute'
-import { clearDismissed } from '../lib/triageActions'
 import {
   STATS_FIXTURE,
   STATS_EMPTY_FIXTURE,
@@ -67,6 +66,7 @@ const {
   mockFetchThreats,
   mockFetchHealth,
   mockFetchBannerSummary,
+  mockCreateDecision,
 } = vi.hoisted(() => ({
   mockFetchStats: vi.fn(),
   mockFetchTimeline: vi.fn(),
@@ -74,6 +74,14 @@ const {
   mockFetchThreats: vi.fn(),
   mockFetchHealth: vi.fn(),
   mockFetchBannerSummary: vi.fn(),
+  mockCreateDecision: vi.fn(),
+}))
+
+// ADR-0072 (issue #47): dismiss/block persist via POST /decisions instead of
+// localStorage. Mock the client so tests never hit a real network call, and
+// so persistence can be asserted directly.
+vi.mock('../api/decisions', () => ({
+  createDecision: mockCreateDecision,
 }))
 
 vi.mock('../api/client', () => {
@@ -215,12 +223,26 @@ describe('DashboardRoute', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     // Clear dismissed actors between tests so triage banner state is clean
-    clearDismissed()
+    localStorage.clear()
     // Default: health fetch succeeds with AI online; individual tests override as needed.
     mockFetchHealth.mockResolvedValue(HEALTH_AI_ONLINE)
     // Default: GET /banner/summary fails (non-blocking) so attemptSummary stays null
     // and existing #43 ObservedRecordLine tests are unaffected; #55 tests override.
     mockFetchBannerSummary.mockRejectedValue(new Error('not mocked'))
+    // ADR-0072 (issue #47): default createDecision to a resolved record so
+    // dismiss/block clicks in tests never hit a real network call.
+    mockCreateDecision.mockResolvedValue({
+      id: 1,
+      actor_ip: '192.0.2.1',
+      verb: 'dismissed',
+      rule_name: null,
+      decided_tier: null,
+      decided_score: 0,
+      decided_at: '2026-07-17T00:00:00Z',
+      revoked_at: null,
+      author: 'local operator',
+      note: null,
+    })
   })
 
   // EARS event-driven: on mount, calls all four read endpoints
@@ -307,8 +329,14 @@ describe('DashboardRoute', () => {
     })
   })
 
-  // Event-driven (MF-2): dismiss chip → banner count decreases
-  it('removes actor from triage banner after dismiss chip is clicked', async () => {
+  // Event-driven (ADR-0072, issue #47): dismiss chip persists server-side.
+  //
+  // Queue suppression is now computed SERVER-SIDE and annotated on the next
+  // GET /threats (ADR-0072 D3) — the pre-#47 localStorage-driven instant
+  // removal is retired (D7). This test asserts the persistence call; the
+  // "both surfaces agree" behaviour is covered below by the
+  // server-annotated-suppression test, which is the actual contract surface.
+  it('dismiss chip persists a "dismissed" decision server-side (ADR-0072 D3)', async () => {
     mockFetchStats.mockResolvedValue(STATS_FIXTURE)
     mockFetchTimeline.mockResolvedValue(TIMELINE_FIXTURE)
     mockFetchCategories.mockResolvedValue(CATEGORIES_FIXTURE)
@@ -320,14 +348,18 @@ describe('DashboardRoute', () => {
       expect(screen.getByTestId('triage-banner-active')).toBeInTheDocument()
     })
 
-    // Dismiss the first actor chip
     const dismissButtons = screen.getAllByTestId('triage-chip-dismiss')
     await userEvent.click(dismissButtons[0])
 
-    // Banner should now show 1 actor (was 2)
     await waitFor(() => {
-      expect(screen.getByTestId('triage-banner-headline')).toHaveTextContent('1 actor')
+      expect(mockCreateDecision).toHaveBeenCalledWith({
+        actor_ip: THREATS_NEEDS_TRIAGE_FIXTURE[0].source_ip,
+        verb: 'dismissed',
+      })
     })
+    // No local-state removal within this render — the dashboard does not crash
+    // and the banner is still present (suppression arrives on the next fetch).
+    expect(screen.getByTestId('triage-banner-active')).toBeInTheDocument()
   })
 
   // Event-driven (MF-2): recommendation card Investigate/Dismiss do not crash
@@ -355,8 +387,12 @@ describe('DashboardRoute', () => {
     expect(screen.getByTestId('kpi-strip')).toBeInTheDocument()
   })
 
-  // F5-D1 EARS (issue #564): Dismiss on rec card removes it from the queue on next render
-  it('F5-D1: Dismiss on a recommendation card removes that card from the queue (issue #564)', async () => {
+  // F5-D1 EARS (issue #564, superseded by ADR-0072 issue #47): Dismiss on a
+  // recommendation card persists server-side. Card-queue exclusion is now
+  // driven by the server-computed `triage_decision.suppressed` annotation
+  // (see the server-annotated-suppression test below) — the pre-#47
+  // localStorage-driven instant removal is retired (D7).
+  it('F5-D1: Dismiss on a recommendation card persists a "dismissed" decision (ADR-0072 D3)', async () => {
     mockFetchStats.mockResolvedValue(STATS_FIXTURE)
     mockFetchTimeline.mockResolvedValue(TIMELINE_FIXTURE)
     mockFetchCategories.mockResolvedValue(CATEGORIES_FIXTURE)
@@ -369,17 +405,16 @@ describe('DashboardRoute', () => {
     })
 
     const cardsBefore = screen.getAllByTestId('rec-card')
-    const countBefore = cardsBefore.length
-    expect(countBefore).toBeGreaterThan(0)
+    expect(cardsBefore.length).toBeGreaterThan(0)
 
-    // Dismiss the first card
     const dismissBtns = screen.getAllByTestId('rec-card-dismiss')
     await userEvent.click(dismissBtns[0])
 
-    // Card count must decrease by 1 on the next render
     await waitFor(() => {
-      const cardsAfter = screen.getAllByTestId('rec-card')
-      expect(cardsAfter).toHaveLength(countBefore - 1)
+      expect(mockCreateDecision).toHaveBeenCalledWith({
+        actor_ip: THREATS_NEEDS_TRIAGE_FIXTURE[0].source_ip,
+        verb: 'dismissed',
+      })
     })
   })
 
@@ -404,12 +439,28 @@ describe('DashboardRoute', () => {
     expect(screen.getAllByTestId('rec-card-dismiss').length).toBeGreaterThan(0)
   })
 
-  // F5-D1 EARS (issue #564): banner count and card-queue count stay consistent after dismiss
-  it('F5-D1: banner count and card-queue count are consistent after dismiss (issue #564)', async () => {
+  // F5-D1 EARS (issue #564) superseded by ADR-0072 D3 "one evaluator, every
+  // surface": banner count and card-queue count SHALL stay consistent — now
+  // driven by the server-computed `triage_decision.suppressed` annotation on
+  // GET /threats rather than a client-side localStorage flag.
+  it('ADR-0072 D3: an actor the server marks suppressed is excluded from BOTH the banner and the rec-card queue', async () => {
+    const suppressedActor: ThreatScore = {
+      ...THREATS_NEEDS_TRIAGE_FIXTURE[0],
+      triage_decision: {
+        verb: 'dismissed',
+        decided_at: '2026-07-16T00:00:00Z',
+        decided_tier: null,
+        decided_score: 95,
+        suppressed: true,
+        reentry: null,
+      },
+    }
+    const stillQueuedActor = THREATS_NEEDS_TRIAGE_FIXTURE[1]
+
     mockFetchStats.mockResolvedValue(STATS_FIXTURE)
     mockFetchTimeline.mockResolvedValue(TIMELINE_FIXTURE)
     mockFetchCategories.mockResolvedValue(CATEGORIES_FIXTURE)
-    mockFetchThreats.mockResolvedValue(THREATS_NEEDS_TRIAGE_FIXTURE)
+    mockFetchThreats.mockResolvedValue([suppressedActor, stillQueuedActor])
 
     renderDashboard()
 
@@ -418,20 +469,22 @@ describe('DashboardRoute', () => {
       expect(screen.getByTestId('recommendation-cards')).toBeInTheDocument()
     })
 
-    const cardsBefore = screen.getAllByTestId('rec-card')
-    const countBefore = cardsBefore.length
+    // Banner: only the non-suppressed actor's chip is present (scoped to the
+    // banner's chip container — the IP may legitimately still appear
+    // elsewhere on the page, e.g. the Threat Actors table, since lifetime
+    // facts are never hidden, ADR-0067 D2).
+    expect(screen.getByTestId('triage-banner-headline')).toHaveTextContent('1 actor')
+    const bannerChips = within(screen.getByTestId('triage-banner-chips'))
+    expect(bannerChips.queryByText(suppressedActor.source_ip)).toBeNull()
+    expect(bannerChips.getByText(stillQueuedActor.source_ip)).toBeInTheDocument()
 
-    // Dismiss the first actor via the triage banner chip
-    const dismissChips = screen.getAllByTestId('triage-chip-dismiss')
-    await userEvent.click(dismissChips[0])
-
-    // Both banner (actor count) and rec-cards (card count) must decrease
-    await waitFor(() => {
-      const bannerHeadline = screen.getByTestId('triage-banner-headline')
-      expect(bannerHeadline).toHaveTextContent('1 actor')
-      const cardsAfter = screen.getAllByTestId('rec-card')
-      expect(cardsAfter).toHaveLength(countBefore - 1)
-    })
+    // Rec-cards: the suppressed actor's IP does not appear in the queue either
+    // — same evaluator, same exclusion, both surfaces (ADR-0072 D3).
+    const cardIps = within(screen.getByTestId('recommendation-cards'))
+      .getAllByTestId('clickable-ip')
+      .map((el) => el.textContent)
+    expect(cardIps).not.toContain(suppressedActor.source_ip)
+    expect(cardIps).toContain(stillQueuedActor.source_ip)
   })
 
   // Layout (MF-2): recommendation cards panel present
@@ -820,7 +873,7 @@ describe('DashboardRoute', () => {
 describe('DashboardRoute — #649 escalation-axis banner-worthiness (ADR-0058)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    clearDismissed()
+    localStorage.clear()
     mockFetchHealth.mockResolvedValue(HEALTH_AI_ONLINE)
     mockFetchBannerSummary.mockRejectedValue(new Error('not mocked'))
   })
@@ -999,7 +1052,7 @@ describe('DashboardRoute — #649 escalation-axis banner-worthiness (ADR-0058)',
 describe('DashboardRoute — #43 observed stratum reaches the banner (ADR-0067 D2/D5)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    clearDismissed()
+    localStorage.clear()
     mockFetchHealth.mockResolvedValue(HEALTH_AI_ONLINE)
     // GET /banner/summary (issue #55) — reject so attemptSummary stays null and
     // this describe's #43 ObservedRecordLine assertions are unaffected.
@@ -1172,7 +1225,7 @@ describe('DashboardRoute — #43 observed stratum reaches the banner (ADR-0067 D
 describe('DashboardRoute — attempts headline wiring (issue #55)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    clearDismissed()
+    localStorage.clear()
     mockFetchHealth.mockResolvedValue(HEALTH_AI_ONLINE)
   })
 

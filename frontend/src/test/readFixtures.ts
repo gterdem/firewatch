@@ -167,6 +167,7 @@ export const THREATS_FIXTURE: ThreatScore[] = [
     asn: null,
     as_name: null,
     score_delta: 22,
+    triage_decision: null,
   },
   {
     source_ip: '192.0.2.2',
@@ -187,6 +188,7 @@ export const THREATS_FIXTURE: ThreatScore[] = [
     asn: null,
     as_name: null,
     score_delta: null,
+    triage_decision: null,
   },
 ]
 
@@ -215,6 +217,7 @@ export const THREATS_CORRELATED_FIXTURE: ThreatScore[] = [
     asn: null,
     as_name: null,
     score_delta: 38,
+    triage_decision: null,
   },
 ]
 
@@ -239,6 +242,7 @@ export const THREATS_AI_UNAVAILABLE_FIXTURE: ThreatScore[] = [
     asn: null,
     as_name: null,
     score_delta: null,
+    triage_decision: null,
   },
 ]
 

@@ -171,7 +171,6 @@ const CATEGORIES_MANY_FIXTURE: CategoryCount[] = [
 // ---------------------------------------------------------------------------
 
 import DashboardRoute from '../routes/DashboardRoute'
-import { clearDismissed } from '../lib/triageActions'
 
 function renderDashboard() {
   return render(
@@ -302,7 +301,7 @@ describe('bucketRows (unit)', () => {
 describe('DashboardRoute — two-pane split (issue #206)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    clearDismissed()
+    localStorage.clear()
     mockFetchHealth.mockResolvedValue(HEALTH_AI_ONLINE)
   })
 

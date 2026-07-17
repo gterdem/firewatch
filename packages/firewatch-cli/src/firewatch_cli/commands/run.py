@@ -136,6 +136,7 @@ async def cmd_run(
     store: Any = None
     ledger: Any = None  # MK-2 verdict ledger (ADR-0044) — closed in _graceful_shutdown
     case_store: Any = None  # ADR-0053 D4 (issue #534) — closed in _graceful_shutdown
+    decision_store: Any = None  # ADR-0072 D2 (issue #47) — closed in _graceful_shutdown
     supervisor: Supervisor | None = None
     server: uvicorn.Server | None = None
     server_task: asyncio.Task[None] | None = None
@@ -168,6 +169,14 @@ async def cmd_run(
         if db_path is not None:
             case_store = SqliteCaseStore(db_path=db_path)
             await case_store.init()
+
+        # ADR-0072 D2 (issue #47): decision store — separate aiosqlite
+        # connection on THIS loop (ADR-0023 §F) so /decisions and the
+        # triage_decision annotation / queue_size exclusion read/write live data.
+        from firewatch_core.adapters.decisions.sqlite_decisions import SqliteDecisionStore
+        if db_path is not None:
+            decision_store = SqliteDecisionStore(db_path=db_path)
+            await decision_store.init()
 
         # Step 3: build supervisor, register instances, call startup() (no signals).
         supervisor = Supervisor(pipeline)
@@ -213,6 +222,7 @@ async def cmd_run(
             supervisor=supervisor,
             analysis_ledger=ledger,
             case_store=case_store,
+            decision_store=decision_store,
         )
         config = uvicorn.Config(app, host=effective_host, port=port, log_level="info")
         server = uvicorn.Server(config)
@@ -256,6 +266,7 @@ async def cmd_run(
             store=store,
             ledger=ledger,
             case_store=case_store,
+            decision_store=decision_store,
         )
         # Cancel supervisor_stopped if it was created but not yet done.
         if supervisor_stopped is not None and not supervisor_stopped.done():
@@ -303,8 +314,10 @@ async def _graceful_shutdown(
     store: Any,
     ledger: Any = None,
     case_store: Any = None,
+    decision_store: Any = None,
 ) -> None:
-    """Ordered graceful shutdown: drain HTTP → supervisor → ledger → case_store → store.
+    """Ordered graceful shutdown: drain HTTP -> supervisor -> ledger -> case_store
+    -> decision_store -> store.
 
     None-safe: called from cmd_run's finally block so it handles partial-startup
     (store inited but supervisor never started, or server never created).
@@ -314,7 +327,8 @@ async def _graceful_shutdown(
       2. supervisor.shutdown() — bounded-grace stop (ADR-0023 §E).
       3. ledger.close() — release the verdict-ledger connection (MK-2, ADR-0044).
       4. case_store.close() — release the case store connection (ADR-0053, #534).
-      5. store.close() — ALWAYS last (both API and supervisor must release connection first).
+      5. decision_store.close() — release the decision store connection (ADR-0072, #47).
+      6. store.close() — ALWAYS last (both API and supervisor must release connection first).
     """
     logger.info("run: shutdown — draining HTTP then supervisor")
 
@@ -352,7 +366,14 @@ async def _graceful_shutdown(
         except Exception:
             logger.warning("run: case_store.close() raised; ignoring", exc_info=True)
 
-    # 5. Close the store connection cleanly — always last.
+    # 5. Close the decision store connection (ADR-0072, issue #47) — before the store.
+    if decision_store is not None and hasattr(decision_store, "close"):
+        try:
+            await decision_store.close()
+        except Exception:
+            logger.warning("run: decision_store.close() raised; ignoring", exc_info=True)
+
+    # 6. Close the store connection cleanly — always last.
     if store is not None and hasattr(store, "close"):
         try:
             await store.close()

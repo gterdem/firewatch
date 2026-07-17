@@ -48,7 +48,7 @@
 import { useRef, useState } from 'react'
 import type { ThreatScore, HealthResponse } from '../../api/types'
 import type { OnAction } from '../../lib/triageActions'
-import { isDismissed } from '../../lib/triageActions'
+import { isSuppressed } from '../../lib/triageDecisions'
 import { buildRecommendationQueue } from '../../lib/recommendationQueue'
 import type { QueueItem, RecAction } from '../../lib/recommendationQueue'
 import { ProvenanceChip } from '../ds'
@@ -341,11 +341,13 @@ export default function RecommendationCards({ threats, onAction, health, compact
         : 'disabled'
   const aiOnline: boolean = aiState === 'active'
 
-  // Issue #564: pass isDismissed so dismissed actors are excluded from the queue.
-  // This keeps the card queue consistent with the triage banner (which also filters
-  // via isDismissed in deriveTriageActors). Optimistic update — re-renders on the
-  // next render after dismissVersion bumps in DashboardRoute (setDismissVersion).
-  const queue = buildRecommendationQueue(threats, aiOnline, isDismissed)
+  // Issue #564 / ADR-0072 D3: pass isSuppressed so server-decided actors are
+  // excluded from the queue. This keeps the card queue consistent with the
+  // triage banner (which also filters via isSuppressed in deriveTriageActors).
+  // The predicate reads the server-computed `triage_decision.suppressed`
+  // annotation on GET /threats — no client-side lifecycle logic (ADR-0072
+  // must-NOT criterion) and no localStorage.
+  const queue = buildRecommendationQueue(threats, aiOnline, isSuppressed)
 
   if (queue.length === 0) {
     return (

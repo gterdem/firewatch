@@ -17,6 +17,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T04:26:09.082222Z",
@@ -51,6 +52,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T23:16:05.486138Z",
@@ -85,6 +87,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T23:36:16.876094Z",
@@ -119,6 +122,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:51:53.409719Z",
@@ -153,6 +157,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:51:35.766544Z",
@@ -187,6 +192,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T00:08:09.412321Z",
@@ -221,6 +227,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:48:55.137152Z",
@@ -255,6 +262,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T01:27:16.151736Z",
@@ -289,6 +297,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T03:49:46.530242Z",
@@ -323,6 +332,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T01:06:50.766354Z",
@@ -357,6 +367,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T02:11:27.540104Z",
@@ -391,6 +402,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T05:43:15.638983Z",
@@ -425,6 +437,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T04:35:01.438908Z",
@@ -459,6 +472,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:41:10.988133Z",
@@ -493,6 +507,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T01:07:13.187246Z",
@@ -527,6 +542,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:03:51.555392Z",
@@ -561,6 +577,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:34:35.631399Z",
@@ -595,6 +612,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:39:22.168853Z",
@@ -629,6 +647,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T00:50:58.123788Z",
@@ -663,6 +682,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T01:54:56.381122Z",
@@ -697,6 +717,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T01:39:19.056661Z",
@@ -731,6 +752,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T23:05:09.887951Z",
@@ -765,6 +787,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T00:47:41.179790Z",
@@ -799,6 +822,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T23:54:45.072813Z",
@@ -833,6 +857,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:56:42.370018Z",
@@ -867,6 +892,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T23:11:59.173393Z",
@@ -901,6 +927,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:54:40.837345Z",
@@ -935,6 +962,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T01:47:08.087130Z",
@@ -969,6 +997,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T23:30:43.763222Z",
@@ -1003,6 +1032,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T00:36:07.520637Z",
@@ -1037,6 +1067,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 5 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T03:50:00Z",
@@ -1071,6 +1102,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T04:30:00Z",
@@ -1117,6 +1149,9 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 unconfirmed + 1 got through \u2014 mixed disposition \u2014 review individual events.",
+      "qualifying_rules": [
+        "ET WEB_SERVER SQL Injection Attempt"
+      ],
       "tier": 1
     },
     "first_seen": "2026-02-02T05:55:00Z",
@@ -1152,6 +1187,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T01:48:55.531691Z",
@@ -1208,6 +1244,9 @@
         "blocked": 10
       },
       "justification": "[RULE] campaign (auto-escalate): blocked 10 times \u2014 this attacker keeps coming back; consider a longer-term IP block.",
+      "qualifying_rules": [
+        "campaign"
+      ],
       "tier": 3
     },
     "first_seen": "2026-02-02T05:05:00Z",
@@ -1242,6 +1281,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:40:50.765823Z",
@@ -1276,6 +1316,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T04:09:04.963592Z",
@@ -1310,6 +1351,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T23:55:41.300560Z",
@@ -1344,6 +1386,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T23:12:14.779412Z",
@@ -1378,6 +1421,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:03:13.647058Z",
@@ -1412,6 +1456,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:08:39.071415Z",
@@ -1446,6 +1491,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T02:23:33.521512Z",
@@ -1480,6 +1526,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T02:37:18.551290Z",
@@ -1514,6 +1561,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:13:14.431307Z",
@@ -1548,6 +1596,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:15:05.047838Z",
@@ -1582,6 +1631,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T23:52:56.645141Z",
@@ -1616,6 +1666,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T00:46:31.478019Z",
@@ -1650,6 +1701,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T23:35:19.791345Z",
@@ -1684,6 +1736,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T05:26:55.543732Z",
@@ -1718,6 +1771,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T05:48:02.350743Z",
@@ -1752,6 +1806,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T02:11:01.505302Z",
@@ -1786,6 +1841,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T03:57:19.509265Z",
@@ -1820,6 +1876,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:23:45.594862Z",
@@ -1854,6 +1911,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T01:33:28.350136Z",
@@ -1888,6 +1946,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:06:21.404857Z",
@@ -1922,6 +1981,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T00:30:47.768095Z",
@@ -1956,6 +2016,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T04:02:30.043054Z",
@@ -1990,6 +2051,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:54:43.842015Z",
@@ -2024,6 +2086,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:02:22.643442Z",
@@ -2058,6 +2121,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T00:17:26.730255Z",
@@ -2092,6 +2156,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T01:12:50.838981Z",
@@ -2126,6 +2191,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:02:14.554615Z",
@@ -2160,6 +2226,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T01:35:16.107399Z",
@@ -2194,6 +2261,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:51:18.781262Z",
@@ -2228,6 +2296,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T02:12:31.893888Z",
@@ -2262,6 +2331,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T03:26:32.748739Z",
@@ -2296,6 +2366,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T23:46:09.097554Z",
@@ -2330,6 +2401,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T04:19:28.371879Z",
@@ -2364,6 +2436,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:43:52.943988Z",
@@ -2398,6 +2471,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T00:03:38.309916Z",
@@ -2432,6 +2506,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T23:09:26.008657Z",
@@ -2466,6 +2541,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T23:09:49.461904Z",
@@ -2500,6 +2576,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T03:00:27.899699Z",
@@ -2534,6 +2611,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T00:06:28.509217Z",
@@ -2568,6 +2646,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T23:28:34.534333Z",
@@ -2602,6 +2681,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:25:11.327852Z",
@@ -2636,6 +2716,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T00:06:57.552763Z",
@@ -2670,6 +2751,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T03:12:40.899696Z",
@@ -2704,6 +2786,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:35:48.820846Z",
@@ -2738,6 +2821,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T02:33:39.603808Z",
@@ -2772,6 +2856,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T01:03:26.883090Z",
@@ -2806,6 +2891,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T23:28:33.832551Z",
@@ -2840,6 +2926,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T02:01:40.358473Z",
@@ -2874,6 +2961,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T23:19:04.158451Z",
@@ -2908,6 +2996,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:52:18.844432Z",
@@ -2942,6 +3031,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T00:40:32.111282Z",
@@ -2976,6 +3066,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T23:47:50.767076Z",
@@ -3010,6 +3101,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T00:43:20.071544Z",
@@ -3044,6 +3136,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T03:29:13.686191Z",
@@ -3078,6 +3171,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:20:33.461167Z",
@@ -3112,6 +3206,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T02:43:40.894865Z",
@@ -3146,6 +3241,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T03:30:08.695904Z",
@@ -3180,6 +3276,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T02:11:39.069969Z",
@@ -3214,6 +3311,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T00:04:37.547001Z",
@@ -3248,6 +3346,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T02:09:39.994714Z",
@@ -3282,6 +3381,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:16:13.555773Z",
@@ -3316,6 +3416,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T23:33:22.047721Z",
@@ -3350,6 +3451,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:23:09.589440Z",
@@ -3384,6 +3486,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T00:16:25.151689Z",
@@ -3418,6 +3521,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:23:44.833493Z",
@@ -3452,6 +3556,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T00:25:43.009900Z",
@@ -3486,6 +3591,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T04:05:00.504500Z",
@@ -3520,6 +3626,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:50:52.727576Z",
@@ -3554,6 +3661,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T05:52:27.193959Z",
@@ -3588,6 +3696,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:58:26.813640Z",
@@ -3622,6 +3731,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T23:33:06.580718Z",
@@ -3656,6 +3766,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:26:16.556875Z",
@@ -3690,6 +3801,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T03:43:04.721570Z",
@@ -3724,6 +3836,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:58:07.505499Z",
@@ -3758,6 +3871,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T01:53:10.017752Z",
@@ -3792,6 +3906,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T00:10:19.437789Z",
@@ -3826,6 +3941,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T23:41:32.560563Z",
@@ -3860,6 +3976,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T02:08:57.774489Z",
@@ -3894,6 +4011,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T01:17:10.740158Z",
@@ -3928,6 +4046,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T01:40:05.979384Z",
@@ -3962,6 +4081,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:00:30.373624Z",
@@ -3996,6 +4116,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:17:07.620520Z",
@@ -4030,6 +4151,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T02:56:20.181043Z",
@@ -4064,6 +4186,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T00:10:29.254626Z",
@@ -4098,6 +4221,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:39:06.834914Z",
@@ -4132,6 +4256,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T02:21:06.272894Z",
@@ -4166,6 +4291,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:21:13.771058Z",
@@ -4200,6 +4326,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T02:23:17.138154Z",
@@ -4234,6 +4361,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T00:49:45.075441Z",
@@ -4268,6 +4396,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-01T22:33:55.250503Z",
@@ -4302,6 +4431,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T00:09:12.524735Z",
@@ -4336,6 +4466,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T01:10:12.098778Z",
@@ -4370,6 +4501,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T00:32:23.816083Z",
@@ -4404,6 +4536,7 @@
         "blocked": 0
       },
       "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "qualifying_rules": [],
       "tier": null
     },
     "first_seen": "2026-02-02T02:18:01.101136Z",

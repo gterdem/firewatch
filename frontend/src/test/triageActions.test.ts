@@ -1,14 +1,22 @@
 /**
- * Tests for frontend/src/lib/triageActions.ts — the action seam (ADR-0033, issue #158).
+ * Tests for frontend/src/lib/triageActions.ts — the action seam (ADR-0033, issue #158),
+ * shrunk per ADR-0072 D7's retire list (issue #47 Part 2/frontend).
  *
  * Updated for MH (issue #204, ADR-0037):
  *   investigate → openEntity({kind:'ip', value}) — opens the entity slide-over.
  *   No route navigation on investigate.
  *
- * Updated for issue #727 — localStorage persistence + Acknowledge/Dismiss distinction:
- *   - Acknowledge vs Dismiss two-state model and localStorage round-trip.
- *   - Material change detection (hasMaterialChange) and re-surface logic.
- *   - Bounded-cap + IP-format-guard invariants survive persistence.
+ * Updated for issue #47 (ADR-0072 D3/D6/D7) — server-side persistence:
+ *   - `acknowledge` is retired: removed from ThreatActionVerb, no branch, no
+ *     localStorage acknowledged-store semantics.
+ *   - `dismiss`/`block` persist via `POST /decisions` (createDecision,
+ *     mocked here) instead of a localStorage write — isDismissed,
+ *     reconcileAcknowledged, hasMaterialChange, snapshotOf, clearDismissed,
+ *     and both localStorage keys are RETIRED from this module (they survive
+ *     only inside lib/triageDecisions.ts's migration reader — see that
+ *     module's own tests).
+ *   - Persistence is best-effort: a rejected createDecision call is caught
+ *     and logged, never thrown back at the caller.
  *
  * EARS criteria mapped to tests:
  *
@@ -16,47 +24,39 @@
  *   → test: onAction is a function with arity 2, created by makeOnAction
  *
  * Event-driven: WHEN `onAction(actor, "investigate")` fires, the slide-over SHALL open
- * for that actor's IP (ADR-0037); no route navigation SHALL occur.
- *   → test: investigate calls openEntity with {kind:'ip', value:actor.source_ip};
- *            navigate is NOT called
+ * for that actor's IP (ADR-0037); no route navigation SHALL occur; no decision persists.
  *
- * Event-driven: WHEN `onAction(actor, "acknowledge")` fires, the actor is suppressed
- * from the triage queue but re-surfaces on material change (issue #727 EARS-1/2).
- *   → test: acknowledge marks actor as isDismissed → true;
- *            re-surfaces on score increase / block_status flip / tier decrease
- *
- * Event-driven: WHEN `onAction(actor, "dismiss")` fires, the actor SHALL be suppressed
- * and NOT re-surface on material change (stronger suppression, issue #727 EARS-3).
- *   → test: dismiss marks actor as isDismissed → true; does NOT re-surface; persists reload
+ * Event-driven: WHEN `onAction(actor, "dismiss")` fires, a `dismissed` decision SHALL be
+ * recorded via `POST /decisions {actor_ip, verb: 'dismissed'}` (ADR-0072 D3) — the client
+ * never self-reports decided_tier/decided_score.
  *
  * Event-driven: WHEN `onAction(actor, "block")` fires, the UI SHALL record the block
- * decision / raise the alert (SIEM) and SHALL NOT attempt to execute an enforcement action.
- *   → test: block fires onBlock callback; actor removed from triage queue (isDismissed);
- *            no external fetch or side-effectful call is made beyond the callback
+ * decision (persisted the same way as dismiss — ADR-0072's store vocabulary has no
+ * separate "block" verb) and SHALL NOT attempt to execute an enforcement action.
  *
- * Issue #727 EARS-4: WHILE persisting, the store SHALL keep bounded-cap + IP-format-guard.
- *   → tests: cap eviction survives localStorage round-trip; malformed IPs blocked at guard
+ * Event-driven: WHEN the `POST /decisions` call fails, the failure SHALL be swallowed
+ * (logged, not thrown) — a persistence failure must not break the SIEM action.
+ *
+ * N-2 (issue #171): malformed source_ip is rejected by the guard before any network call.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import {
-  makeOnAction,
-  isDismissed,
-  clearDismissed,
-  reconcileAcknowledged,
-  isValidIpFormat,
-  hasMaterialChange,
-  snapshotOf,
-  DISMISSED_ACTORS_CAP,
-  DISMISSED_ACTORS_KEY,
-  ACKNOWLEDGED_ACTORS_KEY,
-  MATERIAL_SCORE_DELTA,
-  type ThreatActionVerb,
-  type OnAction,
-  type AcknowledgedSnapshot,
-} from '../lib/triageActions'
+import { makeOnAction, isValidIpFormat, type ThreatActionVerb, type OnAction } from '../lib/triageActions'
 import type { ThreatScore } from '../api/types'
 import type { EntityRef } from '../components/entity/EntityPanelContext'
+
+// ---------------------------------------------------------------------------
+// Mock the decisions API client — triageActions.ts calls createDecision
+// directly for dismiss/block (ADR-0072 D3).
+// ---------------------------------------------------------------------------
+
+const { mockCreateDecision } = vi.hoisted(() => ({
+  mockCreateDecision: vi.fn(),
+}))
+
+vi.mock('../api/decisions', () => ({
+  createDecision: mockCreateDecision,
+}))
 
 // ---------------------------------------------------------------------------
 // Fixture actor
@@ -81,14 +81,23 @@ const ACTOR: ThreatScore = {
   asn: null,
   as_name: null,
   score_delta: null,
+  triage_decision: null,
 }
 
-// ---------------------------------------------------------------------------
-// Setup: clear dismiss state and mocks between tests
-// ---------------------------------------------------------------------------
-
 beforeEach(() => {
-  clearDismissed()
+  mockCreateDecision.mockReset()
+  mockCreateDecision.mockResolvedValue({
+    id: 1,
+    actor_ip: ACTOR.source_ip,
+    verb: 'dismissed',
+    rule_name: null,
+    decided_tier: null,
+    decided_score: 0,
+    decided_at: '2026-07-17T00:00:00Z',
+    revoked_at: null,
+    author: 'local operator',
+    note: null,
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -105,17 +114,14 @@ describe('triageActions — action seam entrypoint', () => {
   it('onAction accepts exactly (actor, verb) — arity 2', () => {
     const openEntity = vi.fn()
     const onAction = makeOnAction({ openEntity })
-    // Should not throw when called with both args
     expect(() => onAction(ACTOR, 'investigate')).not.toThrow()
   })
 
-  it('verb type is the union "block" | "investigate" | "acknowledge" | "dismiss"', () => {
-    // Compile-time assertion: ThreatActionVerb should accept all four verbs.
-    const verbs: ThreatActionVerb[] = ['block', 'investigate', 'acknowledge', 'dismiss']
-    expect(verbs).toHaveLength(4)
+  it('verb type is the union "block" | "investigate" | "dismiss" — acknowledge retired (ADR-0072 D6)', () => {
+    const verbs: ThreatActionVerb[] = ['block', 'investigate', 'dismiss']
+    expect(verbs).toHaveLength(3)
     expect(verbs).toContain('block')
     expect(verbs).toContain('investigate')
-    expect(verbs).toContain('acknowledge')
     expect(verbs).toContain('dismiss')
   })
 })
@@ -138,19 +144,7 @@ describe('triageActions — investigate verb', () => {
     })
   })
 
-  it('investigate openEntity call uses the correct IP value', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-
-    onAction(ACTOR, 'investigate')
-
-    const ref = openEntity.mock.calls[0][0] as EntityRef
-    expect(ref.kind).toBe('ip')
-    expect(ref.value).toBe('192.0.2.1')
-  })
-
   it('investigate does NOT navigate (no route navigation — issue #204)', () => {
-    // navigate is deprecated in the callbacks but we pass it to confirm it is not called.
     const openEntity = vi.fn()
     const navigate = vi.fn()
     const onAction = makeOnAction({ openEntity, navigate })
@@ -158,15 +152,6 @@ describe('triageActions — investigate verb', () => {
     onAction(ACTOR, 'investigate')
 
     expect(navigate).not.toHaveBeenCalled()
-  })
-
-  it('investigate does NOT add actor to dismissed set', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-
-    onAction(ACTOR, 'investigate')
-
-    expect(isDismissed(ACTOR)).toBe(false)
   })
 
   it('investigate does NOT call onDismiss or onBlock', () => {
@@ -180,201 +165,48 @@ describe('triageActions — investigate verb', () => {
     expect(onDismiss).not.toHaveBeenCalled()
     expect(onBlock).not.toHaveBeenCalled()
   })
-})
 
-// ---------------------------------------------------------------------------
-// 3. Event-driven: acknowledge → suppress with re-surface on material change (#727)
-// ---------------------------------------------------------------------------
-
-describe('triageActions — acknowledge verb (issue #727 EARS-1/2)', () => {
-  it('WHEN acknowledge fires, isDismissed returns true (actor is suppressed)', () => {
+  it('investigate does NOT persist any decision (no createDecision call)', () => {
     const openEntity = vi.fn()
     const onAction = makeOnAction({ openEntity })
 
-    expect(isDismissed(ACTOR)).toBe(false)
-    onAction(ACTOR, 'acknowledge')
-    expect(isDismissed(ACTOR)).toBe(true)
-  })
+    onAction(ACTOR, 'investigate')
 
-  it('WHEN acknowledge fires, the onDismiss callback is called with the actor', () => {
-    const openEntity = vi.fn()
-    const onDismiss = vi.fn()
-    const onAction = makeOnAction({ openEntity, onDismiss })
-
-    onAction(ACTOR, 'acknowledge')
-
-    expect(onDismiss).toHaveBeenCalledOnce()
-    expect(onDismiss).toHaveBeenCalledWith(ACTOR)
-  })
-
-  it('acknowledge does NOT call openEntity', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-
-    onAction(ACTOR, 'acknowledge')
-
-    expect(openEntity).not.toHaveBeenCalled()
-  })
-
-  it('acknowledge does NOT call onBlock', () => {
-    const openEntity = vi.fn()
-    const onBlock = vi.fn()
-    const onAction = makeOnAction({ openEntity, onBlock })
-
-    onAction(ACTOR, 'acknowledge')
-
-    expect(onBlock).not.toHaveBeenCalled()
-  })
-
-  // EARS-2: acknowledged actor re-surfaces on material score increase
-  it('EARS-2: acknowledged actor re-surfaces when score increases by >= MATERIAL_SCORE_DELTA', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-
-    onAction(ACTOR, 'acknowledge')
-    expect(isDismissed(ACTOR)).toBe(true)
-
-    // Simulate a material score increase.
-    const actorAfterEscalation: ThreatScore = {
-      ...ACTOR,
-      score: ACTOR.score + MATERIAL_SCORE_DELTA,
-    }
-    // reconcileAcknowledged runs the eviction on the data-refresh path (issue #755):
-    // it detects the material change and removes the actor from the acknowledged store.
-    reconcileAcknowledged([actorAfterEscalation])
-    // After reconciliation, isDismissed is now false (actor re-surfaces).
-    expect(isDismissed(actorAfterEscalation)).toBe(false)
-  })
-
-  it('EARS-2: acknowledged actor stays suppressed when score increases by < MATERIAL_SCORE_DELTA', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-
-    onAction(ACTOR, 'acknowledge')
-
-    const actorWithMinorIncrease: ThreatScore = {
-      ...ACTOR,
-      score: ACTOR.score + MATERIAL_SCORE_DELTA - 1,
-    }
-    expect(isDismissed(actorWithMinorIncrease)).toBe(true)
-  })
-
-  // EARS-2: acknowledged actor re-surfaces on block_status flip (blocked → allowed)
-  it('EARS-2: acknowledged actor re-surfaces when block_status flips blocked→allowed', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-
-    const actorBlocked: ThreatScore = {
-      ...ACTOR,
-      escalation: {
-        tier: 3,
-        disposition: 'blocked_persistent',
-        justification: '[RULE] Blocked',
-        block_status: 'blocked',
-      },
-    }
-    onAction(actorBlocked, 'acknowledge')
-    expect(isDismissed(actorBlocked)).toBe(true)
-
-    const actorNowAllowed: ThreatScore = {
-      ...actorBlocked,
-      escalation: {
-        ...actorBlocked.escalation!,
-        block_status: 'allowed',
-      },
-    }
-    // reconcileAcknowledged evicts the stale acknowledged entry on data-refresh (issue #755).
-    reconcileAcknowledged([actorNowAllowed])
-    expect(isDismissed(actorNowAllowed)).toBe(false)
-  })
-
-  // EARS-2: acknowledged actor re-surfaces on tier decrease
-  it('EARS-2: acknowledged actor re-surfaces when tier decreases (louder = more urgent)', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-
-    const actorTier3: ThreatScore = {
-      ...ACTOR,
-      escalation: {
-        tier: 3,
-        disposition: 'blocked_persistent',
-        justification: '[RULE] Blocked',
-        block_status: 'blocked',
-      },
-    }
-    onAction(actorTier3, 'acknowledge')
-    expect(isDismissed(actorTier3)).toBe(true)
-
-    const actorNowTier1: ThreatScore = {
-      ...actorTier3,
-      escalation: {
-        ...actorTier3.escalation!,
-        tier: 1,
-      },
-    }
-    // reconcileAcknowledged evicts the stale acknowledged entry on data-refresh (issue #755).
-    reconcileAcknowledged([actorNowTier1])
-    expect(isDismissed(actorNowTier1)).toBe(false)
-  })
-
-  // localStorage persistence: acknowledged actor survives a simulated reload
-  it('EARS-1: acknowledged state persists in localStorage (survives reload)', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-
-    onAction(ACTOR, 'acknowledge')
-
-    // Verify it's stored in localStorage
-    const raw = localStorage.getItem(ACKNOWLEDGED_ACTORS_KEY)
-    expect(raw).not.toBeNull()
-    const parsed: unknown = JSON.parse(raw!)
-    expect(parsed).toHaveProperty(ACTOR.source_ip)
-    // After "reload" isDismissed still returns true (reads localStorage)
-    expect(isDismissed(ACTOR)).toBe(true)
-  })
-
-  // Acknowledge with a snapshot captures the correct state
-  it('snapshotOf captures score, tier, and blockStatus correctly', () => {
-    const actorWithEsc: ThreatScore = {
-      ...ACTOR,
-      score: 80,
-      escalation: {
-        tier: 2,
-        disposition: 'block_status_unknown',
-        justification: '[RULE] Test',
-        block_status: 'unknown',
-      },
-    }
-    const snap: AcknowledgedSnapshot = snapshotOf(actorWithEsc)
-    expect(snap.score).toBe(80)
-    expect(snap.tier).toBe(2)
-    expect(snap.blockStatus).toBe('unknown')
-  })
-
-  it('snapshotOf returns null for tier and blockStatus when escalation is absent', () => {
-    const actorNoEsc: ThreatScore = { ...ACTOR, escalation: undefined }
-    const snap: AcknowledgedSnapshot = snapshotOf(actorNoEsc)
-    expect(snap.score).toBe(ACTOR.score)
-    expect(snap.tier).toBeNull()
-    expect(snap.blockStatus).toBeNull()
+    expect(mockCreateDecision).not.toHaveBeenCalled()
   })
 })
 
 // ---------------------------------------------------------------------------
-// 4. Event-driven: dismiss → stronger suppression, no re-surface (#727 EARS-3)
+// 3. Event-driven: dismiss → persists a 'dismissed' decision server-side
+//    (ADR-0072 D3, issue #47)
 // ---------------------------------------------------------------------------
 
-describe('triageActions — dismiss verb (issue #727 EARS-3)', () => {
-  it('WHEN dismiss fires, isDismissed returns true for that actor', () => {
+describe('triageActions — dismiss verb (ADR-0072 D3, issue #47)', () => {
+  it('WHEN dismiss fires, POST /decisions is called with {actor_ip, verb: "dismissed"}', async () => {
     const openEntity = vi.fn()
     const onAction = makeOnAction({ openEntity })
 
-    expect(isDismissed(ACTOR)).toBe(false)
-    onAction(ACTOR, 'dismiss')
-    expect(isDismissed(ACTOR)).toBe(true)
+    await onAction(ACTOR, 'dismiss')
+
+    expect(mockCreateDecision).toHaveBeenCalledOnce()
+    expect(mockCreateDecision).toHaveBeenCalledWith({
+      actor_ip: ACTOR.source_ip,
+      verb: 'dismissed',
+    })
   })
 
-  it('WHEN dismiss fires, the onDismiss callback is called with the actor', () => {
+  it('dismiss never sends decided_tier/decided_score (server is the sole snapshot authority)', async () => {
+    const openEntity = vi.fn()
+    const onAction = makeOnAction({ openEntity })
+
+    await onAction(ACTOR, 'dismiss')
+
+    const body = mockCreateDecision.mock.calls[0][0] as Record<string, unknown>
+    expect(body).not.toHaveProperty('decided_tier')
+    expect(body).not.toHaveProperty('decided_score')
+  })
+
+  it('WHEN dismiss fires, the onDismiss callback is called with the actor (synchronously)', () => {
     const openEntity = vi.fn()
     const onDismiss = vi.fn()
     const onAction = makeOnAction({ openEntity, onDismiss })
@@ -383,81 +215,6 @@ describe('triageActions — dismiss verb (issue #727 EARS-3)', () => {
 
     expect(onDismiss).toHaveBeenCalledOnce()
     expect(onDismiss).toHaveBeenCalledWith(ACTOR)
-  })
-
-  // EARS-3: dismiss does NOT re-surface on material change (stronger than acknowledge)
-  it('EARS-3: dismissed actor does NOT re-surface even after material score increase', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-
-    onAction(ACTOR, 'dismiss')
-
-    const actorWithBigScoreIncrease: ThreatScore = {
-      ...ACTOR,
-      score: ACTOR.score + MATERIAL_SCORE_DELTA * 10, // very large increase
-    }
-    // Dismissed (not acknowledged) — still suppressed regardless
-    expect(isDismissed(actorWithBigScoreIncrease)).toBe(true)
-  })
-
-  it('EARS-3: dismissed actor does NOT re-surface on block_status flip', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-
-    const actorBlocked: ThreatScore = {
-      ...ACTOR,
-      escalation: {
-        tier: 3,
-        disposition: 'blocked_persistent',
-        justification: '[RULE] Blocked',
-        block_status: 'blocked',
-      },
-    }
-    onAction(actorBlocked, 'dismiss')
-
-    const actorNowAllowed: ThreatScore = {
-      ...actorBlocked,
-      escalation: {
-        ...actorBlocked.escalation!,
-        block_status: 'allowed',
-      },
-    }
-    // dismiss = no re-surface
-    expect(isDismissed(actorNowAllowed)).toBe(true)
-  })
-
-  // localStorage persistence for dismiss
-  it('EARS-1: dismissed state persists in localStorage', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-
-    onAction(ACTOR, 'dismiss')
-
-    const raw = localStorage.getItem(DISMISSED_ACTORS_KEY)
-    expect(raw).not.toBeNull()
-    const arr = JSON.parse(raw!) as string[]
-    expect(arr).toContain(ACTOR.source_ip)
-    // Still suppressed (simulates reload)
-    expect(isDismissed(ACTOR)).toBe(true)
-  })
-
-  // Dismiss upgrades acknowledge: if acknowledged, dismiss removes from ack store
-  it('dismiss promotes an acknowledged actor to the dismissed store', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-
-    // First acknowledge
-    onAction(ACTOR, 'acknowledge')
-    // Now verify it's in the ack store
-    const ackRaw = localStorage.getItem(ACKNOWLEDGED_ACTORS_KEY)
-    expect(JSON.parse(ackRaw!)).toHaveProperty(ACTOR.source_ip)
-
-    // Now dismiss — should move out of ack and into dismissed
-    onAction(ACTOR, 'dismiss')
-    const ackAfter = localStorage.getItem(ACKNOWLEDGED_ACTORS_KEY)
-    expect(JSON.parse(ackAfter!)).not.toHaveProperty(ACTOR.source_ip)
-    const dismissRaw = localStorage.getItem(DISMISSED_ACTORS_KEY)
-    expect(JSON.parse(dismissRaw!) as string[]).toContain(ACTOR.source_ip)
   })
 
   it('dismiss does NOT call openEntity (no slide-over side-effect)', () => {
@@ -479,115 +236,44 @@ describe('triageActions — dismiss verb (issue #727 EARS-3)', () => {
     expect(onBlock).not.toHaveBeenCalled()
   })
 
-  it('a second dismiss on the same actor is idempotent (still dismissed)', () => {
+  it('a second dismiss on the same actor persists a second decision call (append-only, ADR-0072 D2)', async () => {
     const openEntity = vi.fn()
-    const onDismiss = vi.fn()
-    const onAction = makeOnAction({ openEntity, onDismiss })
+    const onAction = makeOnAction({ openEntity })
 
-    onAction(ACTOR, 'dismiss')
-    onAction(ACTOR, 'dismiss')
+    await onAction(ACTOR, 'dismiss')
+    await onAction(ACTOR, 'dismiss')
 
-    expect(isDismissed(ACTOR)).toBe(true)
+    expect(mockCreateDecision).toHaveBeenCalledTimes(2)
   })
 
-  it('dismiss is actor-scoped — a different IP remains undismissed', () => {
+  it('dismiss is actor-scoped — persists the correct source_ip per actor', async () => {
     const openEntity = vi.fn()
     const onAction = makeOnAction({ openEntity })
     const otherActor: ThreatScore = { ...ACTOR, source_ip: '10.0.0.99' }
 
-    onAction(ACTOR, 'dismiss')
+    await onAction(ACTOR, 'dismiss')
+    await onAction(otherActor, 'dismiss')
 
-    expect(isDismissed(ACTOR)).toBe(true)
-    expect(isDismissed(otherActor)).toBe(false)
+    expect(mockCreateDecision).toHaveBeenNthCalledWith(1, { actor_ip: '192.0.2.1', verb: 'dismissed' })
+    expect(mockCreateDecision).toHaveBeenNthCalledWith(2, { actor_ip: '10.0.0.99', verb: 'dismissed' })
+  })
+
+  it('a rejected createDecision is swallowed — dismiss does not throw', async () => {
+    mockCreateDecision.mockRejectedValueOnce(new Error('network error'))
+    const openEntity = vi.fn()
+    const onAction = makeOnAction({ openEntity })
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    await expect(onAction(ACTOR, 'dismiss')).resolves.toBeUndefined()
+    expect(warnSpy).toHaveBeenCalled()
+
+    warnSpy.mockRestore()
   })
 })
 
 // ---------------------------------------------------------------------------
-// 5. hasMaterialChange — material change detection unit tests (#727 EARS-2)
-// ---------------------------------------------------------------------------
-
-describe('hasMaterialChange (issue #727 EARS-2 — material change definition)', () => {
-  const BASE_SNAP: AcknowledgedSnapshot = {
-    score: 80,
-    tier: 3,
-    blockStatus: 'blocked',
-  }
-
-  it('returns false when actor is identical to the snapshot', () => {
-    const actor: ThreatScore = {
-      ...ACTOR,
-      score: 80,
-      escalation: { tier: 3, disposition: 'blocked_persistent', justification: '', block_status: 'blocked' },
-    }
-    expect(hasMaterialChange(actor, BASE_SNAP)).toBe(false)
-  })
-
-  it('returns true when score increases by exactly MATERIAL_SCORE_DELTA', () => {
-    const actor: ThreatScore = {
-      ...ACTOR,
-      score: 80 + MATERIAL_SCORE_DELTA,
-      escalation: { tier: 3, disposition: 'blocked_persistent', justification: '', block_status: 'blocked' },
-    }
-    expect(hasMaterialChange(actor, BASE_SNAP)).toBe(true)
-  })
-
-  it('returns false when score increases by less than MATERIAL_SCORE_DELTA', () => {
-    const actor: ThreatScore = {
-      ...ACTOR,
-      score: 80 + MATERIAL_SCORE_DELTA - 1,
-      escalation: { tier: 3, disposition: 'blocked_persistent', justification: '', block_status: 'blocked' },
-    }
-    expect(hasMaterialChange(actor, BASE_SNAP)).toBe(false)
-  })
-
-  it('returns true when block_status flips from blocked to allowed', () => {
-    const actor: ThreatScore = {
-      ...ACTOR,
-      score: 80,
-      escalation: { tier: 3, disposition: 'blocked_persistent', justification: '', block_status: 'allowed' },
-    }
-    expect(hasMaterialChange(actor, BASE_SNAP)).toBe(true)
-  })
-
-  it('returns true when block_status flips from allowed to blocked', () => {
-    const snapAllowed: AcknowledgedSnapshot = { ...BASE_SNAP, blockStatus: 'allowed' }
-    const actor: ThreatScore = {
-      ...ACTOR,
-      score: 80,
-      escalation: { tier: 3, disposition: 'blocked_persistent', justification: '', block_status: 'blocked' },
-    }
-    expect(hasMaterialChange(actor, snapAllowed)).toBe(true)
-  })
-
-  it('returns true when tier decreases (louder / more urgent)', () => {
-    const actor: ThreatScore = {
-      ...ACTOR,
-      score: 80,
-      escalation: { tier: 1, disposition: 'allowed_through', justification: '', block_status: 'allowed' },
-    }
-    // tier 3 → 1 = decrease = material change
-    expect(hasMaterialChange(actor, BASE_SNAP)).toBe(true)
-  })
-
-  it('returns false when tier increases (less urgent)', () => {
-    const actor: ThreatScore = {
-      ...ACTOR,
-      score: 80,
-      escalation: { tier: 4, disposition: 'blocked_one_off', justification: '', block_status: 'blocked' },
-    }
-    // tier 3 → 4 = increase = NOT material
-    expect(hasMaterialChange(actor, BASE_SNAP)).toBe(false)
-  })
-
-  it('returns false when snap has no tier and actor has no tier (no change)', () => {
-    const snapNoTier: AcknowledgedSnapshot = { score: 80, tier: null, blockStatus: null }
-    const actor: ThreatScore = { ...ACTOR, score: 80, escalation: null }
-    expect(hasMaterialChange(actor, snapNoTier)).toBe(false)
-  })
-})
-
-// ---------------------------------------------------------------------------
-// 6. Event-driven: block → record decision / raise alert (SIEM), NOT execute
+// 4. Event-driven: block → record decision / raise alert (SIEM), NOT execute
+//    (persisted the same way as dismiss — ADR-0072 has no separate "block" verb)
 // ---------------------------------------------------------------------------
 
 describe('triageActions — block verb', () => {
@@ -602,13 +288,16 @@ describe('triageActions — block verb', () => {
     expect(onBlock).toHaveBeenCalledWith(ACTOR)
   })
 
-  it('WHEN block fires, the actor is removed from triage (isDismissed → true)', () => {
+  it('WHEN block fires, POST /decisions is called with verb: "dismissed" (consumes the queue entry)', async () => {
     const openEntity = vi.fn()
     const onAction = makeOnAction({ openEntity })
 
-    expect(isDismissed(ACTOR)).toBe(false)
-    onAction(ACTOR, 'block')
-    expect(isDismissed(ACTOR)).toBe(true)
+    await onAction(ACTOR, 'block')
+
+    expect(mockCreateDecision).toHaveBeenCalledWith({
+      actor_ip: ACTOR.source_ip,
+      verb: 'dismissed',
+    })
   })
 
   it('block does NOT call openEntity (no slide-over opened on block)', () => {
@@ -620,8 +309,9 @@ describe('triageActions — block verb', () => {
     expect(openEntity).not.toHaveBeenCalled()
   })
 
-  it('block does NOT call global fetch (no enforcement API call in MH)', () => {
-    // Assert that no HTTP request is fired — enforcement is deferred to SOAR.
+  it('block does NOT call global fetch directly (enforcement deferred to SOAR)', () => {
+    // Assert no raw fetch is fired by triageActions itself — persistence goes
+    // through the mocked createDecision, never a direct fetch call.
     const openEntity = vi.fn()
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
     const onAction = makeOnAction({ openEntity })
@@ -640,187 +330,7 @@ describe('triageActions — block verb', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 7. isDismissed / clearDismissed utility
-// ---------------------------------------------------------------------------
-
-describe('triageActions — isDismissed / clearDismissed', () => {
-  it('isDismissed is false for a fresh actor', () => {
-    expect(isDismissed(ACTOR)).toBe(false)
-  })
-
-  it('clearDismissed resets state — isDismissed becomes false again after dismiss', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-
-    onAction(ACTOR, 'dismiss')
-    expect(isDismissed(ACTOR)).toBe(true)
-
-    clearDismissed()
-    expect(isDismissed(ACTOR)).toBe(false)
-  })
-
-  it('clearDismissed resets state — isDismissed becomes false again after acknowledge', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-
-    onAction(ACTOR, 'acknowledge')
-    expect(isDismissed(ACTOR)).toBe(true)
-
-    clearDismissed()
-    expect(isDismissed(ACTOR)).toBe(false)
-  })
-
-  it('clearDismissed removes both dismissed and acknowledged keys from localStorage', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-
-    onAction(ACTOR, 'acknowledge')
-    onAction({ ...ACTOR, source_ip: '10.0.0.1' }, 'dismiss')
-
-    clearDismissed()
-
-    expect(localStorage.getItem(DISMISSED_ACTORS_KEY)).toBeNull()
-    expect(localStorage.getItem(ACKNOWLEDGED_ACTORS_KEY)).toBeNull()
-  })
-})
-
-// ---------------------------------------------------------------------------
-// 7b. isDismissed purity (issue #755 EARS-1)
-//
-// After the in-memory cache is warm (first call initializes from localStorage),
-// subsequent calls to isDismissed MUST NOT touch localStorage at all.
-// ---------------------------------------------------------------------------
-
-describe('triageActions — isDismissed is pure after warm-up (issue #755 EARS-1)', () => {
-  it('isDismissed does not call localStorage.getItem after the cache is warm', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-
-    // Warm up the cache: dismiss an actor so both stores are initialized.
-    onAction(ACTOR, 'dismiss')
-    // The above write (addDismissed) calls setItem — reset spy AFTER the warm-up.
-    const getSpy = vi.spyOn(Storage.prototype, 'getItem')
-    const setSpy = vi.spyOn(Storage.prototype, 'setItem')
-
-    // isDismissed is now a pure in-memory lookup.
-    isDismissed(ACTOR)
-    isDismissed({ ...ACTOR, source_ip: '10.0.0.1' })
-
-    expect(getSpy).not.toHaveBeenCalled()
-    expect(setSpy).not.toHaveBeenCalled()
-
-    getSpy.mockRestore()
-    setSpy.mockRestore()
-  })
-
-  it('isDismissed does not call localStorage.getItem/setItem for an acknowledged actor', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-
-    // Warm up: acknowledge an actor (initializes acknowledged map + writes once).
-    onAction(ACTOR, 'acknowledge')
-    // Reset spy AFTER the warm-up mutation.
-    const getSpy = vi.spyOn(Storage.prototype, 'getItem')
-    const setSpy = vi.spyOn(Storage.prototype, 'setItem')
-
-    // Pure in-memory lookup — should hit neither getItem nor setItem.
-    isDismissed(ACTOR)
-
-    expect(getSpy).not.toHaveBeenCalled()
-    expect(setSpy).not.toHaveBeenCalled()
-
-    getSpy.mockRestore()
-    setSpy.mockRestore()
-  })
-})
-
-// ---------------------------------------------------------------------------
-// 7c. reconcileAcknowledged — material-change eviction on data-refresh path
-//     (issue #755: eviction moved OUT of isDismissed, into reconcile)
-// ---------------------------------------------------------------------------
-
-describe('triageActions — reconcileAcknowledged (issue #755)', () => {
-  it('returns false and makes no changes when no acknowledged actors are present', () => {
-    const result = reconcileAcknowledged([ACTOR])
-    expect(result).toBe(false)
-  })
-
-  it('returns false when acknowledged actor has NOT had a material change', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-    onAction(ACTOR, 'acknowledge')
-
-    const actorUnchanged: ThreatScore = { ...ACTOR, score: ACTOR.score + MATERIAL_SCORE_DELTA - 1 }
-    const result = reconcileAcknowledged([actorUnchanged])
-    expect(result).toBe(false)
-    // Actor still suppressed.
-    expect(isDismissed(actorUnchanged)).toBe(true)
-  })
-
-  it('returns true and evicts actor with material score increase', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-    onAction(ACTOR, 'acknowledge')
-
-    const actorEscalated: ThreatScore = { ...ACTOR, score: ACTOR.score + MATERIAL_SCORE_DELTA }
-    const result = reconcileAcknowledged([actorEscalated])
-    expect(result).toBe(true)
-    // Evicted — actor re-surfaces.
-    expect(isDismissed(actorEscalated)).toBe(false)
-  })
-
-  it('evicts actor with block_status flip and updates localStorage', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-    const actorBlocked: ThreatScore = {
-      ...ACTOR,
-      escalation: { tier: 3, disposition: 'blocked_persistent', justification: '', block_status: 'blocked' },
-    }
-    onAction(actorBlocked, 'acknowledge')
-
-    const actorAllowed: ThreatScore = {
-      ...actorBlocked,
-      escalation: { ...actorBlocked.escalation!, block_status: 'allowed' },
-    }
-    reconcileAcknowledged([actorAllowed])
-    expect(isDismissed(actorAllowed)).toBe(false)
-    // Confirm localStorage is updated too.
-    const raw = localStorage.getItem(ACKNOWLEDGED_ACTORS_KEY)
-    const parsed = JSON.parse(raw ?? '{}') as Record<string, unknown>
-    expect(Object.keys(parsed)).not.toContain(ACTOR.source_ip)
-  })
-
-  it('does not evict a dismissed (hard-dismissed) actor — reconcile only touches acknowledged', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-    onAction(ACTOR, 'dismiss')
-
-    // reconcileAcknowledged does not touch the dismissed set.
-    const actorEscalated: ThreatScore = { ...ACTOR, score: ACTOR.score + MATERIAL_SCORE_DELTA * 10 }
-    reconcileAcknowledged([actorEscalated])
-    // Still hard-dismissed.
-    expect(isDismissed(actorEscalated)).toBe(true)
-  })
-
-  it('only evicts actors with material changes — non-material ones remain acknowledged', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-    const actor2: ThreatScore = { ...ACTOR, source_ip: '10.0.0.2' }
-    onAction(ACTOR, 'acknowledge')
-    onAction(actor2, 'acknowledge')
-
-    // Only ACTOR has material change; actor2 stays below threshold.
-    const actorEscalated: ThreatScore = { ...ACTOR, score: ACTOR.score + MATERIAL_SCORE_DELTA }
-    const actor2Unchanged: ThreatScore = { ...actor2, score: actor2.score + MATERIAL_SCORE_DELTA - 1 }
-    reconcileAcknowledged([actorEscalated, actor2Unchanged])
-
-    expect(isDismissed(actorEscalated)).toBe(false) // re-surfaced
-    expect(isDismissed(actor2Unchanged)).toBe(true) // still suppressed
-  })
-})
-
-// ---------------------------------------------------------------------------
-// 8. N-2 — isValidIpFormat guard (issue #171)
+// 5. N-2 — isValidIpFormat guard (issue #171)
 // ---------------------------------------------------------------------------
 
 describe('triageActions — isValidIpFormat (N-2, issue #171)', () => {
@@ -861,8 +371,8 @@ describe('triageActions — isValidIpFormat (N-2, issue #171)', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 9. N-2 — malformed source_ip is rejected by the guard (issue #171)
-//    Verifies the guard fires in makeOnAction, not just in isValidIpFormat.
+// 6. N-2 — malformed source_ip is rejected at action time, before any network
+//    call (issue #171)
 // ---------------------------------------------------------------------------
 
 describe('triageActions — malformed source_ip rejected at action time (N-2)', () => {
@@ -876,19 +386,7 @@ describe('triageActions — malformed source_ip rejected at action time (N-2)', 
     expect(openEntity).not.toHaveBeenCalled()
   })
 
-  it('acknowledge is a no-op when source_ip is malformed — isDismissed stays false', () => {
-    const openEntity = vi.fn()
-    const onDismiss = vi.fn()
-    const onAction = makeOnAction({ openEntity, onDismiss })
-    const badActor: ThreatScore = { ...ACTOR, source_ip: 'evil.example.com' }
-
-    onAction(badActor, 'acknowledge')
-
-    expect(onDismiss).not.toHaveBeenCalled()
-    expect(isDismissed(badActor)).toBe(false)
-  })
-
-  it('dismiss is a no-op when source_ip is malformed — isDismissed stays false', () => {
+  it('dismiss is a no-op when source_ip is malformed — no createDecision call, no onDismiss', () => {
     const openEntity = vi.fn()
     const onDismiss = vi.fn()
     const onAction = makeOnAction({ openEntity, onDismiss })
@@ -897,10 +395,10 @@ describe('triageActions — malformed source_ip rejected at action time (N-2)', 
     onAction(badActor, 'dismiss')
 
     expect(onDismiss).not.toHaveBeenCalled()
-    expect(isDismissed(badActor)).toBe(false)
+    expect(mockCreateDecision).not.toHaveBeenCalled()
   })
 
-  it('block is a no-op when source_ip is malformed — onBlock is not called', () => {
+  it('block is a no-op when source_ip is malformed — onBlock is not called, no persistence', () => {
     const openEntity = vi.fn()
     const onBlock = vi.fn()
     const onAction = makeOnAction({ openEntity, onBlock })
@@ -909,96 +407,6 @@ describe('triageActions — malformed source_ip rejected at action time (N-2)', 
     onAction(badActor, 'block')
 
     expect(onBlock).not.toHaveBeenCalled()
-    expect(isDismissed(badActor)).toBe(false)
-  })
-
-  it('malformed IP not stored in localStorage after acknowledge', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-    const badActor: ThreatScore = { ...ACTOR, source_ip: 'not-an-ip' }
-
-    onAction(badActor, 'acknowledge')
-
-    const raw = localStorage.getItem(ACKNOWLEDGED_ACTORS_KEY)
-    if (raw != null) {
-      const parsed = JSON.parse(raw) as Record<string, unknown>
-      expect(Object.keys(parsed)).not.toContain('not-an-ip')
-    }
-    // Either null (never written) or doesn't contain the bad IP
-  })
-})
-
-// ---------------------------------------------------------------------------
-// 10. N-1 — boundedactor stores with FIFO eviction at DISMISSED_ACTORS_CAP (#171, #727)
-// ---------------------------------------------------------------------------
-
-describe('triageActions — capped dismissed-actors Set (N-1, issue #171 + #727)', () => {
-  it('dismissed store evicts the oldest entry when the cap is reached', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-
-    const firstIp = '10.0.0.0'
-    const firstActor: ThreatScore = { ...ACTOR, source_ip: firstIp }
-
-    // Add the first actor.
-    onAction(firstActor, 'dismiss')
-    expect(isDismissed(firstActor)).toBe(true)
-
-    // Fill the remaining cap - 1 slots with distinct IPs.
-    for (let i = 1; i < DISMISSED_ACTORS_CAP; i++) {
-      const a = Math.floor(i / (256 * 256)) % 256
-      const b = Math.floor(i / 256) % 256
-      const c = i % 256
-      const ip = `10.${a}.${b}.${c}`
-      onAction({ ...ACTOR, source_ip: ip }, 'dismiss')
-    }
-
-    // At this point firstActor is still present (set is exactly at cap).
-    expect(isDismissed(firstActor)).toBe(true)
-
-    // Adding one more entry should evict the oldest (firstActor).
-    const overflowActor: ThreatScore = { ...ACTOR, source_ip: '192.168.99.1' }
-    onAction(overflowActor, 'dismiss')
-
-    expect(isDismissed(firstActor)).toBe(false) // evicted
-    expect(isDismissed(overflowActor)).toBe(true) // newly added
-  })
-
-  it('dismissing the same actor twice does not grow the store past cap', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-
-    // Fill the store to the cap.
-    for (let i = 0; i < DISMISSED_ACTORS_CAP; i++) {
-      const a = Math.floor(i / (256 * 256)) % 256
-      const b = Math.floor(i / 256) % 256
-      const c = i % 256
-      onAction({ ...ACTOR, source_ip: `10.${a}.${b}.${c}` }, 'dismiss')
-    }
-
-    // Re-dismissing an existing actor should be a no-op (already in store).
-    const existingActor: ThreatScore = { ...ACTOR, source_ip: '10.0.0.0' }
-    onAction(existingActor, 'dismiss') // already present — should not evict anything
-
-    // The actor we just re-dismissed should still be tracked.
-    expect(isDismissed(existingActor)).toBe(true)
-  })
-
-  it('EARS-4: bounded-cap invariant is preserved across localStorage round-trip (persistence)', () => {
-    const openEntity = vi.fn()
-    const onAction = makeOnAction({ openEntity })
-
-    // Fill the store to cap via dismiss.
-    for (let i = 0; i < DISMISSED_ACTORS_CAP; i++) {
-      const a = Math.floor(i / (256 * 256)) % 256
-      const b = Math.floor(i / 256) % 256
-      const c = i % 256
-      onAction({ ...ACTOR, source_ip: `10.${a}.${b}.${c}` }, 'dismiss')
-    }
-
-    // The raw localStorage array should not exceed DISMISSED_ACTORS_CAP entries.
-    const raw = localStorage.getItem(DISMISSED_ACTORS_KEY)
-    const arr = JSON.parse(raw!) as string[]
-    expect(arr.length).toBeLessThanOrEqual(DISMISSED_ACTORS_CAP)
+    expect(mockCreateDecision).not.toHaveBeenCalled()
   })
 })

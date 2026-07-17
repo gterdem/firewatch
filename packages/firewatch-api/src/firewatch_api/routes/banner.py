@@ -31,12 +31,13 @@ from firewatch_core.detector import detect
 from firewatch_core.escalation.decider import decide
 from firewatch_core.pipeline import W_CAMPAIGN, W_STATE
 
+from firewatch_api import decision_annotator
 from firewatch_api.banner_assembler import (
     ActorAttemptStats,
     assemble_banner_attempt_summary,
     compute_actor_attempt_stats,
 )
-from firewatch_api.deps import get_event_store
+from firewatch_api.deps import get_decision_store, get_event_store
 from firewatch_api.schemas import BannerAttemptSummary, PressureEntry
 
 logger = logging.getLogger("firewatch.api.banner")
@@ -62,12 +63,22 @@ def _window_slice(
     ]
 
 
-async def _collect_actor_stats(store: Any, now: datetime) -> list[ActorAttemptStats]:
+async def _collect_actor_stats(
+    store: Any, now: datetime, decision_store: Any = None
+) -> list[ActorAttemptStats]:
     """Fetch every actor's lifetime events and derive its ActorAttemptStats.
 
     One store round-trip per actor (``get_by_ip``) — the same N+1 pattern
     ``GET /threats`` and ``GET /escalation/policy`` already use for
     per-actor aggregation; no new table, no persisted state.
+
+    ADR-0072 finding 2: when *decision_store* is wired, each actor's
+    suppression state is computed via the SAME evaluator
+    ``GET /threats``'s ``triage_decision`` annotation uses
+    (``firewatch_api.decision_annotator.is_suppressed`` over
+    ``firewatch_core.triage.suppression.evaluate``) so ``queue_size`` never
+    disagrees with the queue list it sits above. *decision_store*=None
+    (not wired) degrades to "nothing is suppressed" — today's behaviour.
     """
     ips: list[str] = await store.get_all_ips()
     stats: list[ActorAttemptStats] = []
@@ -90,6 +101,16 @@ async def _collect_actor_stats(store: Any, now: datetime) -> list[ActorAttemptSt
         detections = detect(campaign_events, now=now)
         verdict = decide(state_events, detections)
 
+        suppressed = False
+        if decision_store is not None:
+            try:
+                rows = await decision_store.get_active_for_actor(ip)
+                suppressed = decision_annotator.is_suppressed(rows, verdict)
+            except Exception:
+                logger.exception(
+                    "banner.summary: get_active_for_actor failed for ip=%s", ip
+                )
+
         stats.append(
             compute_actor_attempt_stats(
                 ip,
@@ -98,6 +119,7 @@ async def _collect_actor_stats(store: Any, now: datetime) -> list[ActorAttemptSt
                 detections=detections,
                 verdict=verdict,
                 now=now,
+                suppressed=suppressed,
             )
         )
     return stats
@@ -110,6 +132,7 @@ async def _collect_actor_stats(store: Any, now: datetime) -> list[ActorAttemptSt
 )
 async def get_banner_summary(
     store: Any = Depends(get_event_store),
+    decision_store: Any = Depends(get_decision_store),
 ) -> BannerAttemptSummary:
     """Return the additive banner-feed attempt summary (issue #55).
 
@@ -117,13 +140,18 @@ async def get_banner_summary(
     error) — the existing calm/all-clear banner state renders unchanged
     (EARS: WHEN no attempts exist, the calm state SHALL render unchanged).
 
+    ADR-0072 finding 2: ``queue_size`` excludes actors whose CURRENT verdict
+    is suppressed by an active triage decision — the SAME evaluator
+    ``GET /threats``'s ``triage_decision`` annotation uses, so this count
+    never disagrees with the queue list it headlines.
+
     Returns **503** when the event store is not available.
     """
     if store is None:
         raise HTTPException(status_code=503, detail="Event store not available")
 
     now = datetime.now(timezone.utc)
-    stats = await _collect_actor_stats(store, now)
+    stats = await _collect_actor_stats(store, now, decision_store)
     summary = assemble_banner_attempt_summary(stats)
 
     return BannerAttemptSummary(

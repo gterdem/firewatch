@@ -22,6 +22,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from firewatch_sdk import ThreatScore
+
 # ---------------------------------------------------------------------------
 # Ingest request / response shapes (ADR-0029 D7 — MC.3, issue #88)
 # ---------------------------------------------------------------------------
@@ -512,7 +514,12 @@ class BannerAttemptSummary(BaseModel):
         )
     )
     queue_size: int = Field(
-        description="K = actors carrying a Tier-1 or Tier-2 escalation verdict."
+        description=(
+            "K = actors carrying a Tier-1 or Tier-2 escalation verdict, EXCLUDING "
+            "those currently suppressed by an active triage decision (ADR-0072 "
+            "finding 2) — the same evaluator GET /threats' triage_decision "
+            "annotation uses."
+        )
     )
     top_pressure: list[PressureEntry] = Field(
         default_factory=list,
@@ -521,3 +528,114 @@ class BannerAttemptSummary(BaseModel):
     generated_at: str = Field(
         description="ISO-8601 UTC timestamp when this summary was generated."
     )
+
+
+# ---------------------------------------------------------------------------
+# Triage decisions (ADR-0072 D2/D3/D8, issue #47 Part 1/backend)
+# ---------------------------------------------------------------------------
+
+#: The three verbs an operator may record against an actor (or actor+rule).
+#: ``acknowledge`` is retired (ADR-0072 D6) — not part of this vocabulary.
+TriageVerbLiteral = Literal["expected", "dismissed", "false_positive"]
+
+# Same permissive-but-bounded IPv4/IPv6 pattern as routes/threats.py's IpParam
+# (duplicated per that module's own precedent in routes/ai_stream.py — no
+# cross-route-module import). Blocks CR/LF, spaces, and script-injection
+# strings with a clean 422 before any store/pipeline call runs.
+_ACTOR_IP_PATTERN = r"^([0-9a-fA-F:]+|(\d{1,3}\.){3}\d{1,3})$"
+
+
+class CreateDecisionRequest(BaseModel):
+    """Request body for ``POST /decisions`` (ADR-0072 D3).
+
+    ``decided_tier``/``decided_score`` are NEVER accepted here — the server
+    computes them by running the actor through the pipeline at decision time
+    (ADR-0072 D2 "snapshot authority is the server"; Alternatives considered:
+    "client-reported decision snapshots" rejected — a stale tab must not write
+    a stale re-entry baseline).
+
+    ``rule_name`` is required when ``verb='false_positive'`` and forbidden
+    otherwise — the route returns 422 on a mismatch (validated again at the
+    store layer as defense-in-depth).
+    """
+
+    actor_ip: str = Field(
+        ..., min_length=1, max_length=64, pattern=_ACTOR_IP_PATTERN,
+        description="The actor's IP (attacker-influenced value; stored verbatim).",
+    )
+    verb: TriageVerbLiteral = Field(..., description="expected | dismissed | false_positive")
+    rule_name: str | None = Field(
+        default=None, max_length=500,
+        description="Required iff verb='false_positive' — the targeted rule identity.",
+    )
+    note: str | None = Field(
+        default=None, max_length=2000, description="Optional operator prose.",
+    )
+
+
+class DecisionRecord(BaseModel):
+    """One ``triage_decisions`` row on the wire (ADR-0072 D2) — full history shape.
+
+    Returned by ``POST /decisions`` (201, the new row incl. server snapshot)
+    and as each item of ``GET /decisions``' cursor envelope.
+    """
+
+    id: int
+    actor_ip: str
+    verb: TriageVerbLiteral
+    rule_name: str | None = None
+    decided_tier: int | None = Field(
+        default=None, description="Verdict tier at decision time; null = observed stratum.",
+    )
+    decided_score: int
+    decided_at: str = Field(description="UTC ISO-8601 — server-stamped.")
+    revoked_at: str | None = Field(
+        default=None, description="Null = active; set by DELETE /decisions/{id} (soft-revoke).",
+    )
+    author: str = Field(description="Defaults to 'local operator' (ADR-0053 D3 seam).")
+    note: str | None = None
+
+
+class ListDecisionsResponse(BaseModel):
+    """``GET /decisions`` — ADR-0029 D2 cursor envelope, newest-first."""
+
+    items: list[DecisionRecord]
+    next_cursor: str | None = None
+    has_more: bool = False
+
+
+class TriageDecisionAnnotation(BaseModel):
+    """The additive ``triage_decision`` annotation on ``ThreatScore`` (ADR-0072 D3/D8).
+
+    ``None`` (the ``ThreatScoreWithDecision.triage_decision`` default) when the
+    actor carries no active actor-identity decision — ``false_positive`` rows
+    are rule-scoped and are not rendered in this slot (they only affect
+    ``suppressed`` below via ``firewatch_core.triage.suppression.evaluate``'s
+    ``suppressed_by_fp`` arm). Decided actors are NEVER removed from
+    ``GET /threats`` — this field only ANNOTATES (ADR-0072 finding 1).
+    """
+
+    verb: Literal["expected", "dismissed"]
+    decided_at: str
+    decided_tier: int | None = None
+    decided_score: int
+    suppressed: bool = Field(
+        description="OR of actor-identity and false-positive suppression (ADR-0072 D4).",
+    )
+    reentry: dict[str, Any] | None = Field(
+        default=None,
+        description="Always null until issue #56 implements re-entry (ADR-0072 D4 interim).",
+    )
+
+
+class ThreatScoreWithDecision(ThreatScore):
+    """``ThreatScore`` + the additive ``triage_decision`` annotation (ADR-0072 D3).
+
+    Added at the API SCHEMA layer (ADR-0029 D5 split) — NOT the SDK model —
+    because the decision store is a read-surface/API concern, not a domain
+    concern plugins or core produce (ADR-0072 D8). ``GET /threats`` and
+    ``GET /threats/{ip}`` serve this shape in place of the bare SDK
+    ``ThreatScore``; every existing field is unchanged (additive-only).
+    """
+
+    triage_decision: TriageDecisionAnnotation | None = None

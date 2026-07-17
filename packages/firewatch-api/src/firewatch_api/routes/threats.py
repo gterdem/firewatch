@@ -4,8 +4,11 @@ and GET /threats/{ip}/score-history.
 Thin controllers: all scoring logic lives in Pipeline (ADR-0029 D1 / EARS ubiquitous).
 
 Response shapes:
-- ``/threats`` → ``list[ThreatScore]`` (SDK model, as-is — ADR-0029 D3).
-- ``/threats/{ip}`` → ``ThreatScore`` or **404** when no events exist (ADR-0029 D3).
+- ``/threats`` → ``list[ThreatScoreWithDecision]`` — the SDK ``ThreatScore``
+  (ADR-0029 D3) plus the additive ``triage_decision`` annotation (ADR-0072 D3;
+  added at the API schema layer, not the SDK model — ADR-0029 D5 split).
+- ``/threats/{ip}`` → ``ThreatScoreWithDecision`` or **404** when no events
+  exist (ADR-0029 D3).
 - ``/threats/{ip}/detailed`` → augmented dict from ``pipeline.analyze_ip_detailed``.
 - ``/threats/{ip}/events`` → ``IPEventTimelineResponse`` — per-event cross-source
   timeline (issue #118 / OD-3).  Returns 404 when the IP has no events.
@@ -34,14 +37,17 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from firewatch_sdk import ThreatScore
 
-from firewatch_api.deps import get_event_store, get_pipeline
+from firewatch_api import decision_annotator
+from firewatch_api.deps import get_decision_store, get_event_store, get_pipeline
 from firewatch_api.schemas import (
     DEFAULT_TIMELINE_CAP,
     CounterfactualResponse,
     EvidenceChainResponse,
     IPEventTimelineResponse,
     NarrationResponse,
+    ThreatScoreWithDecision,
     TimelineEventItem,
+    TriageDecisionAnnotation,
 )
 
 # NB-1: Regex that accepts both IPv4 (dotted-decimal) and IPv6 (colon-hex,
@@ -76,19 +82,49 @@ logger = logging.getLogger("firewatch.api.threats")
 router = APIRouter(prefix="/threats", tags=["threats"])
 
 
+async def _annotate_score(score: ThreatScore, decision_store: Any) -> ThreatScoreWithDecision:
+    """Attach the additive ``triage_decision`` annotation to *score* (ADR-0072 D3/D8).
+
+    When *decision_store* is None (not wired) every actor renders as
+    undecided — degrades to today's behaviour, never a 503 (the annotation
+    is additive; its absence must not break the read surface).
+    """
+    rows: list[dict[str, Any]] = []
+    if decision_store is not None:
+        rows = await decision_store.get_active_for_actor(score.source_ip)
+    annotated = decision_annotator.annotate(rows, score.escalation)
+    triage_decision = (
+        TriageDecisionAnnotation(
+            verb=annotated.verb,  # type: ignore[arg-type]
+            decided_at=annotated.decided_at,
+            decided_tier=annotated.decided_tier,
+            decided_score=annotated.decided_score,
+            suppressed=annotated.suppressed,
+            reentry=annotated.reentry,
+        )
+        if annotated is not None
+        else None
+    )
+    return ThreatScoreWithDecision(**score.model_dump(), triage_decision=triage_decision)
+
+
 @router.get(
     "",
     summary="List all IP threat scores",
-    response_model=list[ThreatScore],
+    response_model=list[ThreatScoreWithDecision],
 )
 async def list_threats(
     pipeline: Any = Depends(get_pipeline),
     store: Any = Depends(get_event_store),
-) -> list[ThreatScore]:
-    """Return a ThreatScore for every IP that has events.
+    decision_store: Any = Depends(get_decision_store),
+) -> list[ThreatScoreWithDecision]:
+    """Return a ThreatScore (+ triage_decision annotation) for every IP with events.
 
     Fetches distinct IPs from the store then scores each via the pipeline.
     Returns an empty list when no events exist (200 OK — not an error).
+    Decided actors are NEVER excluded from this list (ADR-0072 finding 1) —
+    ``triage_decision.suppressed`` tells the client whether the actor is
+    queue-worthy; the row itself always renders (feeds the entity panel).
     """
     if store is None:
         raise HTTPException(status_code=503, detail="Event store not available")
@@ -96,31 +132,33 @@ async def list_threats(
         raise HTTPException(status_code=503, detail="Pipeline not available")
 
     ips: list[str] = await store.get_all_ips()
-    scores: list[ThreatScore] = []
+    scores: list[ThreatScoreWithDecision] = []
     for ip in ips:
         score = await pipeline.analyze_ip(ip, use_ai=False)
         # Only include IPs that have events (analyze_ip returns score=0/total=0
         # for unknown IPs — filter those out of the list endpoint).
         if score.total_events > 0:
-            scores.append(score)
+            scores.append(await _annotate_score(score, decision_store))
     return scores
 
 
 @router.get(
     "/{ip}",
     summary="Get threat score for a specific IP",
-    response_model=ThreatScore,
+    response_model=ThreatScoreWithDecision,
 )
 async def get_threat(
     ip: IpParam,
     pipeline: Any = Depends(get_pipeline),
     store: Any = Depends(get_event_store),
-) -> ThreatScore:
-    """Return the ThreatScore for *ip*.
+    decision_store: Any = Depends(get_decision_store),
+) -> ThreatScoreWithDecision:
+    """Return the ThreatScore (+ triage_decision annotation) for *ip*.
 
     Returns **404** (not an empty ThreatScore) when the IP has no events
     (ADR-0029 D3 — RFC 9110 §15.5.5 resource semantics; unknown IP is not a
-    resource, it is a missing resource).
+    resource, it is a missing resource). A DECIDED actor is never 404'd by
+    virtue of being decided — the annotation only ever adds information.
     """
     if store is None:
         raise HTTPException(status_code=503, detail="Event store not available")
@@ -133,7 +171,7 @@ async def get_threat(
             status_code=404,
             detail="No events found for the requested IP",
         )
-    return score
+    return await _annotate_score(score, decision_store)
 
 
 @router.get(

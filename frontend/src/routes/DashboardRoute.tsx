@@ -77,8 +77,9 @@ import { useRefreshSignal } from '../app/refresh/RefreshContext'
 import { fetchStats, fetchTimeline, fetchCategories, fetchThreats, fetchHealth, fetchBannerSummary, getRuntimeConfig, ApiError } from '../api/client'
 import { fetchAttackDispositions } from '../api/analytics'
 import type { StatsResponse, TimelineBucket, CategoryCount, AiStatus, ThreatScore, HealthResponse, AttackDispositionRow, BannerAttemptSummary } from '../api/types'
-import { makeOnAction, isDismissed, reconcileAcknowledged } from '../lib/triageActions'
+import { makeOnAction } from '../lib/triageActions'
 import type { OnAction } from '../lib/triageActions'
+import { migrateLocalStorageDecisions, isSuppressed } from '../lib/triageDecisions'
 import { deriveTriageActors, deriveObservedRecord } from '../lib/triageBand'
 import { toDatetimeLocalValue } from '../lib/timelineDateRange'
 import KpiStripBase from '../components/dashboard/KpiStrip'
@@ -166,9 +167,6 @@ export default function DashboardRoute() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [logsSearch, setLogsSearch] = useState('')
-  // Dismissed actors trigger a re-render to recompute the triage banner count.
-  // dismissVersion is exposed (not just setter) so useMemo can key on it (issue #755).
-  const [dismissVersion, setDismissVersion] = useState(0)
 
   /**
    * Triage threshold — band gate for the triage banner's severity half (ADR-0059 D1 / #650).
@@ -293,14 +291,6 @@ export default function DashboardRoute() {
     ])
       .then(([stats, timeline, categories, threats, attackDispositions]) => {
         if (!cancelled) {
-          // Issue #755: run material-change eviction on the data-refresh path,
-          // not inside isDismissed (which must stay pure). If any acknowledged
-          // actor has had a material change, bump dismissVersion so the derived
-          // triage lists re-compute with the evicted actors re-surfaced.
-          const anyEvicted = reconcileAcknowledged(threats)
-          if (anyEvicted) {
-            setDismissVersion((v) => v + 1)
-          }
           setData({ stats, timeline, categories, threats, attackDispositions })
           setAiStatus(deriveAiStatus(threats))
           setLoading(false)
@@ -381,37 +371,44 @@ export default function DashboardRoute() {
     }
   }, [dataVersion])
 
+  // ADR-0072 D3/D6 (issue #47): one-shot, best-effort migration of pre-#47
+  // localStorage `dismissed` decisions into the server-side decision store.
+  // Runs once on mount (NOT keyed on dataVersion) — migrateLocalStorageDecisions
+  // is internally idempotent (a completion sentinel guards re-runs), so this
+  // effect is a belt-and-suspenders "call it once" trigger, not the source of
+  // the one-shot guarantee.
+  useEffect(() => {
+    void migrateLocalStorageDecisions()
+  }, [])
+
   // Action seam (ADR-0033): single implementation for all triage verbs.
   // useCallback so the reference is stable across renders.
   //
   // MH (#204, ADR-0037): investigate → openEntity (slide-over); no route navigation.
+  // ADR-0072 (issue #47): dismiss/block persist server-side; queue membership
+  // is computed by the server and re-read on the next /threats fetch — no
+  // local dismissVersion bump is needed (retired per D7).
   const onAction: OnAction = useCallback(
     (actor, verb) => {
-      return makeOnAction({
-        openEntity,
-        onDismiss: () => {
-          // Bump version to re-render after a dismiss clears an actor from the triage count
-          setDismissVersion((v) => v + 1)
-        },
-        onBlock: () => {
-          setDismissVersion((v) => v + 1)
-        },
-      })(actor, verb)
+      return makeOnAction({ openEntity })(actor, verb)
     },
     [openEntity],
   )
 
-  // Issue #755: memoize both triage derivations so isDismissed runs once per actor
-  // per data-change (not 3× per render across the three call sites). Hooks must be
-  // called unconditionally (before any early return), so we fall back to an empty
-  // array when data is not yet loaded — those code-paths return early anyway.
+  // Issue #755: memoize both triage derivations so the suppression predicate runs
+  // once per actor per data-change (not 3× per render across the three call sites).
+  // Hooks must be called unconditionally (before any early return), so we fall back
+  // to an empty array when data is not yet loaded — those code-paths return early
+  // anyway.
   //
-  // dismissVersion is a deliberate invalidation signal: isDismissed reads module-level
-  // in-memory state that React cannot track via its normal dep-analysis, so we use
-  // this counter to force a re-computation whenever a dismiss/acknowledge action fires.
+  // ADR-0072 D3 (issue #47): isSuppressed reads the server-computed
+  // `triage_decision.suppressed` annotation on each ThreatScore — a pure function
+  // of `data` alone. No module-level in-memory invalidation signal is needed
+  // (dismissVersion is retired per D7): a dismiss/block persists server-side and
+  // the updated annotation arrives on the next GET /threats.
   const pendingActors = useMemo(
     () => (data != null ? deriveTriageActors(data.threats, triageThreshold) : []),
-    [data, triageThreshold, dismissVersion], // eslint-disable-line react-hooks/exhaustive-deps
+    [data, triageThreshold],
   )
 
   // Issue #43 (ADR-0067 D5(2)): the observed-stratum aggregate record line.
@@ -423,8 +420,8 @@ export default function DashboardRoute() {
   )
 
   const activeThreats = useMemo(
-    () => (data != null ? data.threats.filter((t) => !isDismissed(t)) : []),
-    [data, dismissVersion], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (data != null ? data.threats.filter((t) => !isSuppressed(t)) : []),
+    [data],
   )
 
   if (loading) {

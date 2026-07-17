@@ -1,0 +1,4423 @@
+[
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T04:26:09.082222Z",
+    "last_seen": "2026-02-02T04:26:09.082222Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.10",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T23:16:05.486138Z",
+    "last_seen": "2026-02-02T04:39:16.253602Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.100",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T23:36:16.876094Z",
+    "last_seen": "2026-02-02T04:09:32.082778Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.101",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:51:53.409719Z",
+    "last_seen": "2026-02-02T04:34:28.999336Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.102",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:51:35.766544Z",
+    "last_seen": "2026-02-01T22:51:35.766544Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.103",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T00:08:09.412321Z",
+    "last_seen": "2026-02-02T02:44:51.449081Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.104",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:48:55.137152Z",
+    "last_seen": "2026-02-01T22:48:55.137152Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.105",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T01:27:16.151736Z",
+    "last_seen": "2026-02-02T01:27:16.151736Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.106",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T03:49:46.530242Z",
+    "last_seen": "2026-02-02T03:49:46.530242Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.107",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T01:06:50.766354Z",
+    "last_seen": "2026-02-02T02:59:36.604209Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.108",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T02:11:27.540104Z",
+    "last_seen": "2026-02-02T03:29:20.069056Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.109",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T05:43:15.638983Z",
+    "last_seen": "2026-02-02T05:43:15.638983Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.11",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T04:35:01.438908Z",
+    "last_seen": "2026-02-02T04:40:27.843801Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.110",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:41:10.988133Z",
+    "last_seen": "2026-02-01T22:41:10.988133Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.111",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T01:07:13.187246Z",
+    "last_seen": "2026-02-02T05:54:26.640757Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.112",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:03:51.555392Z",
+    "last_seen": "2026-02-02T04:46:10.873752Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.113",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:34:35.631399Z",
+    "last_seen": "2026-02-01T22:34:35.631399Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.114",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:39:22.168853Z",
+    "last_seen": "2026-02-02T03:49:24.930428Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.115",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T00:50:58.123788Z",
+    "last_seen": "2026-02-02T01:03:46.136887Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.116",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T01:54:56.381122Z",
+    "last_seen": "2026-02-02T03:07:38.555591Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.117",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T01:39:19.056661Z",
+    "last_seen": "2026-02-02T01:39:19.056661Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.118",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T23:05:09.887951Z",
+    "last_seen": "2026-02-02T03:44:39.223155Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.119",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T00:47:41.179790Z",
+    "last_seen": "2026-02-02T03:39:00.076150Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.12",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T23:54:45.072813Z",
+    "last_seen": "2026-02-02T05:05:45.497562Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.120",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:56:42.370018Z",
+    "last_seen": "2026-02-02T00:19:00.840825Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.121",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T23:11:59.173393Z",
+    "last_seen": "2026-02-02T02:52:04.586697Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.122",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:54:40.837345Z",
+    "last_seen": "2026-02-02T02:50:09.658829Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.123",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T01:47:08.087130Z",
+    "last_seen": "2026-02-02T04:34:17.959697Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.124",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T23:30:43.763222Z",
+    "last_seen": "2026-02-02T04:59:10.099315Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.125",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T00:36:07.520637Z",
+    "last_seen": "2026-02-02T00:36:07.520637Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.126",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 5,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 5 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T03:50:00Z",
+    "last_seen": "2026-02-02T04:00:00Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.127",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 5
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T04:30:00Z",
+    "last_seen": "2026-02-02T05:00:00Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.128",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [
+      "sql_injection"
+    ],
+    "blocked_events": 0,
+    "detections": [
+      {
+        "auto_escalate": false,
+        "matched_event_ids": [],
+        "reason": "Events from 2 sources (suricata, syslog_cef) within 1 min",
+        "rule_name": "multi_source_attack",
+        "score_delta": 10,
+        "severity": "medium",
+        "source_ip": "203.0.113.129"
+      }
+    ],
+    "escalation": {
+      "block_status": "partial",
+      "disposition": "allowed_through",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 1,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 unconfirmed + 1 got through \u2014 mixed disposition \u2014 review individual events.",
+      "tier": 1
+    },
+    "first_seen": "2026-02-02T05:55:00Z",
+    "last_seen": "2026-02-02T05:56:00Z",
+    "location": null,
+    "score": 40,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.129",
+    "source_types": [
+      "suricata",
+      "syslog_cef"
+    ],
+    "threat_level": "MEDIUM",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T01:48:55.531691Z",
+    "last_seen": "2026-02-02T03:41:31.551283Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.13",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [
+      "brute_force",
+      "port_scan"
+    ],
+    "blocked_events": 10,
+    "detections": [
+      {
+        "auto_escalate": false,
+        "matched_event_ids": [],
+        "reason": "10 hostile attempts within the trailing 24h \u2014 pressure threshold reached",
+        "rule_name": "attempt_pressure",
+        "score_delta": 15,
+        "severity": "medium",
+        "source_ip": "203.0.113.130"
+      },
+      {
+        "auto_escalate": true,
+        "matched_event_ids": [],
+        "reason": "1 categories, 10 distinct ports within the trailing 7d \u2014 sustained campaign",
+        "rule_name": "campaign",
+        "score_delta": 20,
+        "severity": "high",
+        "source_ip": "203.0.113.130"
+      }
+    ],
+    "escalation": {
+      "block_status": "blocked",
+      "disposition": "blocked_persistent",
+      "disposition_counts": {
+        "alert_unknown": 0,
+        "allowed": 0,
+        "blocked": 10
+      },
+      "justification": "[RULE] campaign (auto-escalate): blocked 10 times \u2014 this attacker keeps coming back; consider a longer-term IP block.",
+      "tier": 3
+    },
+    "first_seen": "2026-02-02T05:05:00Z",
+    "last_seen": "2026-02-02T05:50:00Z",
+    "location": null,
+    "score": 95,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.130",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "CRITICAL",
+    "total_events": 10
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:40:50.765823Z",
+    "last_seen": "2026-02-02T01:25:07.589989Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.14",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T04:09:04.963592Z",
+    "last_seen": "2026-02-02T04:09:04.963592Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.15",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T23:55:41.300560Z",
+    "last_seen": "2026-02-02T05:22:24.825208Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.16",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T23:12:14.779412Z",
+    "last_seen": "2026-02-02T02:01:21.275176Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.17",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:03:13.647058Z",
+    "last_seen": "2026-02-02T00:16:03.473840Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.18",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:08:39.071415Z",
+    "last_seen": "2026-02-01T23:06:24.188523Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.19",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T02:23:33.521512Z",
+    "last_seen": "2026-02-02T04:22:09.662090Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.2",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T02:37:18.551290Z",
+    "last_seen": "2026-02-02T05:33:19.917938Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.20",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:13:14.431307Z",
+    "last_seen": "2026-02-02T04:45:14.690181Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.21",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:15:05.047838Z",
+    "last_seen": "2026-02-02T01:18:57.749918Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.22",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T23:52:56.645141Z",
+    "last_seen": "2026-02-02T01:52:57.364772Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.23",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T00:46:31.478019Z",
+    "last_seen": "2026-02-02T01:21:49.764042Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.24",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T23:35:19.791345Z",
+    "last_seen": "2026-02-01T23:35:19.791345Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.25",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T05:26:55.543732Z",
+    "last_seen": "2026-02-02T05:26:55.543732Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.26",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T05:48:02.350743Z",
+    "last_seen": "2026-02-02T05:48:02.350743Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.27",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T02:11:01.505302Z",
+    "last_seen": "2026-02-02T05:58:34.836773Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.28",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T03:57:19.509265Z",
+    "last_seen": "2026-02-02T04:37:41.719293Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.29",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:23:45.594862Z",
+    "last_seen": "2026-02-02T05:34:20.886033Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.3",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T01:33:28.350136Z",
+    "last_seen": "2026-02-02T05:36:30.475395Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.30",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:06:21.404857Z",
+    "last_seen": "2026-02-02T05:47:20.858702Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.31",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T00:30:47.768095Z",
+    "last_seen": "2026-02-02T04:06:02.916332Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.32",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T04:02:30.043054Z",
+    "last_seen": "2026-02-02T04:02:30.043054Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.33",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:54:43.842015Z",
+    "last_seen": "2026-02-02T03:29:44.012009Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.34",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:02:22.643442Z",
+    "last_seen": "2026-02-02T05:32:00.412282Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.35",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T00:17:26.730255Z",
+    "last_seen": "2026-02-02T02:57:51.303231Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.36",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T01:12:50.838981Z",
+    "last_seen": "2026-02-02T03:39:02.658041Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.37",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:02:14.554615Z",
+    "last_seen": "2026-02-02T02:45:33.980347Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.38",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T01:35:16.107399Z",
+    "last_seen": "2026-02-02T01:35:16.107399Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.39",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:51:18.781262Z",
+    "last_seen": "2026-02-02T02:06:34.133061Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.4",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T02:12:31.893888Z",
+    "last_seen": "2026-02-02T04:47:57.127851Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.40",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T03:26:32.748739Z",
+    "last_seen": "2026-02-02T03:26:32.748739Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.41",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T23:46:09.097554Z",
+    "last_seen": "2026-02-02T04:23:42.714108Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.42",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T04:19:28.371879Z",
+    "last_seen": "2026-02-02T04:19:28.371879Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.43",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:43:52.943988Z",
+    "last_seen": "2026-02-01T22:43:52.943988Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.44",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T00:03:38.309916Z",
+    "last_seen": "2026-02-02T01:49:13.721571Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.45",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T23:09:26.008657Z",
+    "last_seen": "2026-02-02T05:05:39.936583Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.46",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T23:09:49.461904Z",
+    "last_seen": "2026-02-02T02:35:48.794712Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.47",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T03:00:27.899699Z",
+    "last_seen": "2026-02-02T04:41:56.246017Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.48",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T00:06:28.509217Z",
+    "last_seen": "2026-02-02T00:06:28.509217Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.49",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T23:28:34.534333Z",
+    "last_seen": "2026-02-02T05:10:51.998679Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.5",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:25:11.327852Z",
+    "last_seen": "2026-02-02T05:42:13.276247Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.50",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T00:06:57.552763Z",
+    "last_seen": "2026-02-02T05:34:49.422471Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.51",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T03:12:40.899696Z",
+    "last_seen": "2026-02-02T05:56:47.544087Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.52",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:35:48.820846Z",
+    "last_seen": "2026-02-01T23:59:05.457220Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.53",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T02:33:39.603808Z",
+    "last_seen": "2026-02-02T04:17:01.980302Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.54",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T01:03:26.883090Z",
+    "last_seen": "2026-02-02T03:33:14.775031Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.55",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T23:28:33.832551Z",
+    "last_seen": "2026-02-02T05:58:59.955343Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.56",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T02:01:40.358473Z",
+    "last_seen": "2026-02-02T02:01:40.358473Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.57",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T23:19:04.158451Z",
+    "last_seen": "2026-02-02T02:37:04.908778Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.58",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:52:18.844432Z",
+    "last_seen": "2026-02-02T05:54:09.217938Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.59",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T00:40:32.111282Z",
+    "last_seen": "2026-02-02T05:20:57.582165Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.6",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T23:47:50.767076Z",
+    "last_seen": "2026-02-02T05:38:01.184326Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.60",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T00:43:20.071544Z",
+    "last_seen": "2026-02-02T04:31:05.533342Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.61",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T03:29:13.686191Z",
+    "last_seen": "2026-02-02T03:29:13.686191Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.62",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:20:33.461167Z",
+    "last_seen": "2026-02-02T03:26:02.467239Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.63",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T02:43:40.894865Z",
+    "last_seen": "2026-02-02T02:58:25.679221Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.64",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T03:30:08.695904Z",
+    "last_seen": "2026-02-02T05:22:09.500686Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.65",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T02:11:39.069969Z",
+    "last_seen": "2026-02-02T05:27:49.793001Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.66",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T00:04:37.547001Z",
+    "last_seen": "2026-02-02T03:56:01.237485Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.67",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T02:09:39.994714Z",
+    "last_seen": "2026-02-02T03:10:36.715863Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.68",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:16:13.555773Z",
+    "last_seen": "2026-02-02T03:44:45.030630Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.69",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T23:33:22.047721Z",
+    "last_seen": "2026-02-02T04:20:43.111408Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.7",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:23:09.589440Z",
+    "last_seen": "2026-02-02T04:43:41.322763Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.70",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T00:16:25.151689Z",
+    "last_seen": "2026-02-02T02:25:42.943117Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.71",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:23:44.833493Z",
+    "last_seen": "2026-02-02T05:15:59.140717Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.72",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T00:25:43.009900Z",
+    "last_seen": "2026-02-02T02:36:54.052124Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.73",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T04:05:00.504500Z",
+    "last_seen": "2026-02-02T05:29:38.427467Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.74",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:50:52.727576Z",
+    "last_seen": "2026-02-02T03:23:01.950668Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.75",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T05:52:27.193959Z",
+    "last_seen": "2026-02-02T05:52:27.193959Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.76",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:58:26.813640Z",
+    "last_seen": "2026-02-02T04:58:23.727389Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.77",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T23:33:06.580718Z",
+    "last_seen": "2026-02-02T02:53:00.780721Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.78",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:26:16.556875Z",
+    "last_seen": "2026-02-02T01:36:28.983054Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.79",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T03:43:04.721570Z",
+    "last_seen": "2026-02-02T04:44:22.997395Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.8",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:58:07.505499Z",
+    "last_seen": "2026-02-02T05:28:04.262301Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.80",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T01:53:10.017752Z",
+    "last_seen": "2026-02-02T04:54:35.940644Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.81",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T00:10:19.437789Z",
+    "last_seen": "2026-02-02T00:10:19.437789Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.82",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T23:41:32.560563Z",
+    "last_seen": "2026-02-02T05:55:33.071986Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.83",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T02:08:57.774489Z",
+    "last_seen": "2026-02-02T02:08:57.774489Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.84",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T01:17:10.740158Z",
+    "last_seen": "2026-02-02T01:17:10.740158Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.85",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T01:40:05.979384Z",
+    "last_seen": "2026-02-02T05:50:07.860820Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.86",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:00:30.373624Z",
+    "last_seen": "2026-02-02T05:08:58.475988Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.87",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:17:07.620520Z",
+    "last_seen": "2026-02-01T22:17:07.620520Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.88",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T02:56:20.181043Z",
+    "last_seen": "2026-02-02T02:56:20.181043Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.89",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T00:10:29.254626Z",
+    "last_seen": "2026-02-02T01:09:26.493713Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.9",
+    "source_types": [
+      "suricata"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:39:06.834914Z",
+    "last_seen": "2026-02-02T02:26:05.504836Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.90",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T02:21:06.272894Z",
+    "last_seen": "2026-02-02T04:34:13.368830Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.91",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:21:13.771058Z",
+    "last_seen": "2026-02-02T05:54:35.327671Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.92",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T02:23:17.138154Z",
+    "last_seen": "2026-02-02T04:58:34.298361Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.93",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T00:49:45.075441Z",
+    "last_seen": "2026-02-02T05:39:06.031088Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.94",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-01T22:33:55.250503Z",
+    "last_seen": "2026-02-02T04:41:24.474567Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.95",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 4,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 4 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T00:09:12.524735Z",
+    "last_seen": "2026-02-02T04:59:39.924159Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.96",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 4
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 3,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 3 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T01:10:12.098778Z",
+    "last_seen": "2026-02-02T05:21:06.668697Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.97",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 3
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 1,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 1 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T00:32:23.816083Z",
+    "last_seen": "2026-02-02T00:32:23.816083Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.98",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 1
+  },
+  {
+    "ai_confidence": 0.0,
+    "ai_insights": [],
+    "ai_status": "disabled",
+    "as_name": null,
+    "asn": null,
+    "attack_types": [],
+    "blocked_events": 0,
+    "detections": [],
+    "escalation": {
+      "block_status": "unknown",
+      "disposition": "observed",
+      "disposition_counts": {
+        "alert_unknown": 2,
+        "allowed": 0,
+        "blocked": 0
+      },
+      "justification": "[RULE] 2 ALERT/LOG event(s) observed \u2014 no qualifying detection or declared high/critical severity; on the record only.",
+      "tier": null
+    },
+    "first_seen": "2026-02-02T02:18:01.101136Z",
+    "last_seen": "2026-02-02T03:37:31.976001Z",
+    "location": null,
+    "score": 0,
+    "score_breakdown": [],
+    "score_delta": null,
+    "score_derivation": "rule",
+    "source_ip": "203.0.113.99",
+    "source_types": [
+      "syslog"
+    ],
+    "threat_level": "LOW",
+    "total_events": 2
+  }
+]

@@ -1,7 +1,7 @@
 # ADR-0069: Canonical Severity Semantics — Sigma-Anchored Behavioral Definitions for `SecurityEvent.severity` and the Per-Source Mapping Discipline
 
 **Date:** 2026-07-15
-**Status:** Proposed (coupled with ADR-0070 — see ADR-0070 D8 for the landing order)
+**Status:** Accepted 2026-07-16 (coupled with ADR-0070 — see ADR-0070 D8 for the landing order; maintainer-approved alongside its coupled ADR)
 
 **Relates to / honours:** ADR-0067 (assertion-gated triage entry — D1(b) made severity a routing
 input, which is what forces this definition to exist), ADR-0068 (the volume oracle — its fact 4

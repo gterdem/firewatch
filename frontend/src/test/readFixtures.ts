@@ -246,6 +246,55 @@ export const THREATS_AI_UNAVAILABLE_FIXTURE: ThreatScore[] = [
   },
 ]
 
+/**
+ * GET /threats fixture — a decided actor that has RE-ENTERED the queue
+ * (issue #56, ADR-0072 D4): dismissed at the observed stratum
+ * (`decided_tier: null`), now carries a Tier 2 verdict — `suppressed: false`,
+ * `reentry` non-null with the decided->current engine integers.
+ */
+export const THREATS_REENTRY_FIXTURE: ThreatScore[] = [
+  {
+    source_ip: '192.0.2.30',
+    threat_level: 'MEDIUM',
+    score: 61,
+    total_events: 40,
+    blocked_events: 5,
+    attack_types: ['Port Scan'],
+    first_seen: '2026-06-30T08:00:00Z',
+    last_seen: '2026-07-01T09:00:00Z',
+    source_types: ['suricata'],
+    detections: [],
+    ai_insights: null,
+    ai_confidence: null,
+    ai_status: 'unavailable',
+    location: null,
+    score_breakdown: [],
+    asn: null,
+    as_name: null,
+    score_delta: null,
+    escalation: {
+      tier: 2,
+      disposition: 'block_status_unknown',
+      justification: '[RULE] Suricata ALERT fired — terminating disposition not asserted',
+      block_status: 'unknown',
+    },
+    triage_decision: {
+      verb: 'dismissed',
+      decided_at: '2026-07-01T00:00:00Z',
+      decided_tier: null,
+      decided_score: 12,
+      suppressed: false,
+      reentry: {
+        decided_tier: null,
+        decided_score: 12,
+        current_tier: 2,
+        current_score: 61,
+        decided_at: '2026-07-01T00:00:00Z',
+      },
+    },
+  },
+]
+
 /** GET /logs/timeline fixture — 4 hourly buckets. */
 export const TIMELINE_FIXTURE: TimelineBucket[] = [
   { hour: '2026-06-04T06:00:00Z', total: 120, blocked: 80, granularity: 'hourly' },

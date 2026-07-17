@@ -32,7 +32,7 @@ import type { EntityPanelContextValue } from '../components/entity/EntityPanelCo
 import type { ThreatScore, EscalationVerdict, BannerAttemptSummary } from '../api/types'
 import type { OnAction } from '../lib/triageActions'
 import type { ObservedRecordSummary } from '../lib/triageBand'
-import { BANNER_SUMMARY_ACTIVE, BANNER_SUMMARY_EMPTY } from './readFixtures'
+import { BANNER_SUMMARY_ACTIVE, BANNER_SUMMARY_EMPTY, THREATS_REENTRY_FIXTURE } from './readFixtures'
 
 // ---------------------------------------------------------------------------
 // Mock react-router-dom useNavigate (issue #43 — the observed-record link)
@@ -1311,5 +1311,66 @@ describe('TriageBanner — attempts headline supersedes the #43 line (issue #55)
     )
     expect(screen.getByTestId('triage-observed-record')).toBeInTheDocument()
     expect(screen.queryByTestId('attempts-headline')).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Re-entry flag chip (issue #56, ADR-0072 D4) — PR-3 minimal slice.
+//
+// EARS:
+//   - WHEN triage_decision.reentry is non-null → the chip renders, with the
+//     decided->current tier engine integers from the payload (never a raw
+//     float, never client-recomputed).
+//   - WHILE triage_decision.reentry is null → the chip does NOT render,
+//     whether the actor was never decided or was decided and stays
+//     suppressed (out of the queue — see triageDecisions.test.ts /
+//     DashboardRoute.test.tsx for the queue-membership predicate this
+//     component does not itself compute).
+// ---------------------------------------------------------------------------
+
+describe('TriageBanner — re-entry flag chip (issue #56, ADR-0072 D4)', () => {
+  /** Decided (dismissed at tier=null, the observed stratum) then re-entered at Tier 2 —
+   * shared fixture (readFixtures.ts) so this test never re-derives the payload shape. */
+  const ACTOR_REENTERED: ThreatScore = THREATS_REENTRY_FIXTURE[0]
+
+  /** Decided ('expected' at tier 3) and NOT re-entered — still suppressed, reentry null. */
+  const ACTOR_DECIDED_NOT_REENTERED: ThreatScore = {
+    ...ACTOR_HIGH,
+    source_ip: '192.0.2.31',
+    triage_decision: {
+      verb: 'expected',
+      decided_at: '2026-07-01T00:00:00Z',
+      decided_tier: 3,
+      decided_score: 20,
+      suppressed: true,
+      reentry: null,
+    },
+  }
+
+  it('renders the flag chip with the decided->current tier engine integers when reentry is non-null', () => {
+    render(<TriageBanner pendingActors={[ACTOR_REENTERED]} onAction={vi.fn()} />)
+
+    const chip = screen.getByTestId('triage-chip-reentry')
+    expect(chip).toBeInTheDocument()
+    expect(chip).toHaveTextContent('no tier')
+    expect(chip).toHaveTextContent('Tier 2')
+    expect(chip).toHaveTextContent('Returned')
+  })
+
+  it('does NOT render the flag chip for a decided-but-not-re-entered actor (reentry null)', () => {
+    // ACTOR_DECIDED_NOT_REENTERED is suppressed:true / reentry:null. TriageBanner
+    // itself does not filter by suppression (that is the caller's job via
+    // isSuppressed — see triageBand.ts/DashboardRoute.tsx); this asserts the
+    // chip-rendering predicate in isolation: no reentry payload => no chip,
+    // regardless of what pendingActors the caller happens to pass in.
+    render(<TriageBanner pendingActors={[ACTOR_DECIDED_NOT_REENTERED]} onAction={vi.fn()} />)
+
+    expect(screen.queryByTestId('triage-chip-reentry')).toBeNull()
+  })
+
+  it('does NOT render the flag chip for a never-decided actor (triage_decision absent)', () => {
+    render(<TriageBanner pendingActors={[ACTOR_ESCALATED_TIER1]} onAction={vi.fn()} />)
+
+    expect(screen.queryByTestId('triage-chip-reentry')).toBeNull()
   })
 })

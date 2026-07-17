@@ -165,6 +165,33 @@ export interface EscalationVerdict {
 }
 
 /**
+ * Re-entry payload (ADR-0072 D4, issue #56). Mirrors the API schema
+ * `ReentryAnnotation` (packages/firewatch-api/src/firewatch_api/schemas.py).
+ *
+ * Populated when the actor's CURRENT verdict tier is newly present
+ * (`decided_tier` was `null`) or numerically lower (louder) than
+ * `decided_tier` was at decision time — i.e. the actor has re-entered the
+ * queue since the operator decided it. `decided_score`/`current_score` are
+ * carried as a #49 (novelty memory) input; a score increase ALONE is never
+ * itself a re-entry trigger (ADR-0072 D4 boundary 2) — the UI must never
+ * recompute re-entry from these, only render the engine integers it is
+ * handed. Engine integers only, never a raw float; RULE-tagged provenance
+ * (ADR-0035).
+ */
+export interface ReentryAnnotation {
+  /** Verdict tier recorded at decision time; null = observed stratum. */
+  decided_tier: number | null
+  /** Engine score recorded at decision time. */
+  decided_score: number
+  /** The actor's CURRENT verdict tier; null = observed stratum. */
+  current_tier: number | null
+  /** The actor's CURRENT engine score. */
+  current_score: number
+  /** UTC ISO-8601 — when the baseline decision was made. */
+  decided_at: string
+}
+
+/**
  * The additive `triage_decision` annotation on `ThreatScore` (ADR-0072 D3/D8,
  * issue #47). Mirrors the API schema `TriageDecisionAnnotation`
  * (packages/firewatch-api/src/firewatch_api/schemas.py).
@@ -195,10 +222,12 @@ export interface TriageDecisionAnnotation {
    */
   suppressed: boolean
   /**
-   * Always null until issue #56 implements re-entry (ADR-0072 D4 interim).
-   * Engine-integer payload when populated; never attacker-controlled text.
+   * Non-null when the actor was decided (`expected`/`dismissed`) and has
+   * since re-entered the queue (issue #56, ADR-0072 D4) — a tier appeared or
+   * loudened since the decision. `null` when no re-entry has occurred
+   * (including when the actor is still suppressed, or was never decided).
    */
-  reentry: Record<string, unknown> | null
+  reentry: ReentryAnnotation | null
 }
 
 /**

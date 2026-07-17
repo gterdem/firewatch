@@ -7,10 +7,17 @@
  *     pill renders in the KPI strip right slot (#254 will dock it natively).
  *
  *   EARS-2: WHEN engine healthy, pill shows model name + status dot (active).
- *     WHEN degraded/offline, pill shows "AI offline".
+ *     WHEN health.ai='unreachable', pill shows "AI unreachable" (amber, attention).
+ *     WHEN health.ai='disabled', pill shows "AI off" (neutral, non-alarming).
  *
  *   EARS-3: health=null fallback — falls back to threat-derived aiStatus.
  *     WHEN both null → pill hidden (no flash during load).
+ *
+ *   Issue #93 (fast-follow to #41 / ADR-0066): the pill branches on the tri-state
+ *   `health.ai` (active/disabled/unreachable) rather than the deprecated
+ *   `ollama_connected` boolean, which collapsed "off by choice" and "unreachable"
+ *   into one ambiguous state. 'unreachable' and 'disabled' must never render the
+ *   same treatment.
  *
  *   EARS-4 (Security): click disclosure shows model name + status.
  *     Inference endpoint host NEVER rendered (PR #191 topology-leak posture).
@@ -45,6 +52,14 @@ const HEALTH_OFFLINE: HealthResponse = {
   ollama_model: null,
   db_ok: true,
   ai: 'unreachable',
+}
+
+const HEALTH_DISABLED: HealthResponse = {
+  status: 'ok',
+  ollama_connected: false,
+  ollama_model: null,
+  db_ok: true,
+  ai: 'disabled',
 }
 
 const HEALTH_ONLINE_DIFFERENT_MODEL: HealthResponse = {
@@ -88,12 +103,38 @@ describe('AiEnginePill — engine state (EARS-2)', () => {
     expect(pill).toHaveTextContent('active')
   })
 
-  it('shows "AI offline" when disconnected', () => {
+  it('shows "AI unreachable" (amber, attention) when health.ai=unreachable', () => {
     render(<AiEnginePill health={HEALTH_OFFLINE} />)
     const pill = screen.getByTestId('ai-engine-pill')
-    expect(pill).toHaveTextContent('AI offline')
+    expect(pill).toHaveTextContent('AI unreachable')
     // Should NOT contain "active"
     expect(pill.textContent).not.toContain('active')
+    // Amber — soc-watch-fg token, NOT the muted/neutral disabled color
+    expect(pill.style.color).toBe('var(--soc-watch-fg)')
+  })
+
+  it('shows "AI off" (neutral, non-alarming) when health.ai=disabled — issue #93', () => {
+    render(<AiEnginePill health={HEALTH_DISABLED} />)
+    const pill = screen.getByTestId('ai-engine-pill')
+    expect(pill).toHaveTextContent('AI off')
+    expect(pill.textContent).not.toContain('active')
+    expect(pill.textContent).not.toContain('unreachable')
+    // Neutral muted color — NOT the amber attention color
+    expect(pill.style.color).toBe('var(--fw-t3)')
+  })
+
+  it('never collapses unreachable and disabled into the same treatment (issue #93 honesty)', () => {
+    const { unmount } = render(<AiEnginePill health={HEALTH_OFFLINE} />)
+    const unreachablePill = screen.getByTestId('ai-engine-pill')
+    const unreachableColor = unreachablePill.style.color
+    const unreachableText = unreachablePill.textContent
+    unmount()
+
+    render(<AiEnginePill health={HEALTH_DISABLED} />)
+    const disabledPill = screen.getByTestId('ai-engine-pill')
+
+    expect(disabledPill.style.color).not.toBe(unreachableColor)
+    expect(disabledPill.textContent).not.toBe(unreachableText)
   })
 
   it('shows "AI · active" (no model name) when connected but ollama_model=null', () => {
@@ -124,17 +165,19 @@ describe('AiEnginePill — health=null fallback (EARS-3)', () => {
     expect(pill.textContent).toContain('active')
   })
 
-  it('renders with aiStatus=unavailable fallback when health=null → offline state', () => {
+  it('renders with aiStatus=unavailable fallback when health=null → disabled (neutral) state', () => {
     render(<AiEnginePill health={null} aiStatus="unavailable" />)
     const pill = screen.getByTestId('ai-engine-pill')
-    // 'unavailable' → connected=false → offline label
-    expect(pill.textContent).toContain('AI offline')
+    // health=null fallback is conservative: any non-'active' threat-derived status
+    // degrades to 'disabled' (neutral) — never asserts 'unreachable' from threat
+    // data alone (mirrors AiPanel.tsx's fallback, issue #93).
+    expect(pill.textContent).toContain('AI off')
   })
 
-  it('renders with aiStatus=disabled → offline state', () => {
+  it('renders with aiStatus=disabled → disabled (neutral) state', () => {
     render(<AiEnginePill health={null} aiStatus="disabled" />)
     const pill = screen.getByTestId('ai-engine-pill')
-    expect(pill.textContent).toContain('AI offline')
+    expect(pill.textContent).toContain('AI off')
   })
 })
 
@@ -181,10 +224,16 @@ describe('AiEnginePill — click disclosure (EARS-4, Security)', () => {
     expect(screen.getByTestId('ai-engine-pill-status')).toHaveTextContent('connected')
   })
 
-  it('disclosure shows "offline" when disconnected', () => {
+  it('disclosure shows "unreachable" when health.ai=unreachable (issue #93)', () => {
     render(<AiEnginePill health={HEALTH_OFFLINE} />)
     fireEvent.click(screen.getByTestId('ai-engine-pill'))
-    expect(screen.getByTestId('ai-engine-pill-status')).toHaveTextContent('offline')
+    expect(screen.getByTestId('ai-engine-pill-status')).toHaveTextContent('unreachable')
+  })
+
+  it('disclosure shows "off" when health.ai=disabled (issue #93)', () => {
+    render(<AiEnginePill health={HEALTH_DISABLED} />)
+    fireEvent.click(screen.getByTestId('ai-engine-pill'))
+    expect(screen.getByTestId('ai-engine-pill-status')).toHaveTextContent('off')
   })
 
   it('SECURITY: inference endpoint host NEVER rendered in disclosure (PR #191 topology-leak)', () => {
@@ -212,11 +261,18 @@ describe('AiEnginePill — accessibility (EARS-5)', () => {
     expect(label.toLowerCase()).toContain('active')
   })
 
-  it('pill button has aria-label for offline state', () => {
+  it('pill button has aria-label for unreachable state (issue #93)', () => {
     render(<AiEnginePill health={HEALTH_OFFLINE} />)
     const btn = screen.getByTestId('ai-engine-pill')
     const label = btn.getAttribute('aria-label') ?? ''
-    expect(label.toLowerCase()).toContain('offline')
+    expect(label.toLowerCase()).toContain('unreachable')
+  })
+
+  it('pill button has aria-label for disabled state (issue #93)', () => {
+    render(<AiEnginePill health={HEALTH_DISABLED} />)
+    const btn = screen.getByTestId('ai-engine-pill')
+    const label = btn.getAttribute('aria-label') ?? ''
+    expect(label.toLowerCase()).toContain('off')
   })
 
   it('pill button has aria-expanded=false initially', () => {

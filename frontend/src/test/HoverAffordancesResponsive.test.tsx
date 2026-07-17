@@ -198,6 +198,7 @@ const HEALTH_CONNECTED: HealthResponse = {
   ollama_connected: true,
   ollama_model: 'llama3.1:70b-instruct-q4_K_M',
   db_ok: true,
+  ai: 'active',
 }
 
 describe('#578 — AiEnginePill responsive fix @1280', () => {

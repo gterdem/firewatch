@@ -55,20 +55,40 @@ export const STATS_EMPTY_FIXTURE: StatsResponse = {
   last_updated: null,
 }
 
-/** GET /health fixture — AI online. */
+/** GET /health fixture — AI online (ADR-0066 tri-state: ai='active'). */
 export const HEALTH_AI_ONLINE: HealthResponse = {
   status: 'ok',
   ollama_connected: true,
   ollama_model: 'llama3.2',
   db_ok: true,
+  ai: 'active',
 }
 
-/** GET /health fixture — AI offline (graceful degradation). */
+/**
+ * GET /health fixture — AI unreachable (ADR-0066 tri-state: ai='unreachable', the
+ * FAULT state — attention-worthy, not the neutral "off by choice" state). Named
+ * "OFFLINE" for historical continuity with pre-#41 tests that used it to mean
+ * "not connected"; semantically this is the fault/unreachable bucket. Use
+ * HEALTH_AI_DISABLED below for the deliberate-choice ("off") state.
+ */
 export const HEALTH_AI_OFFLINE: HealthResponse = {
   status: 'ok',
   ollama_connected: false,
   ollama_model: null,
   db_ok: true,
+  ai: 'unreachable',
+}
+
+/**
+ * GET /health fixture — AI off BY CHOICE (ADR-0066 tri-state: ai='disabled').
+ * The operator turned AI off; nothing is wrong — neutral, non-alarming presentation.
+ */
+export const HEALTH_AI_DISABLED: HealthResponse = {
+  status: 'ok',
+  ollama_connected: false,
+  ollama_model: null,
+  db_ok: true,
+  ai: 'disabled',
 }
 
 /** GET /threats fixture — two IPs, one with AI active, one degraded. */

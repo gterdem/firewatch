@@ -22,9 +22,10 @@
  *   — Error state renders on fetch failure.
  *   — Empty state renders when no threats returned.
  *
- * MF-3 (#160) EARS additions:
- *   — WHILE Local AI enabled (health.ollama_connected=true) → "AI active" chip.
- *   — WHILE Local AI disabled (health.ollama_connected=false) → "AI offline" chip.
+ * MF-3 (#160) EARS additions (tri-state rework: issue #41 / ADR-0066):
+ *   — WHILE health.ai='active' → "AI active" chip (green).
+ *   — WHILE health.ai='unreachable' (fault) → "AI unreachable · rules-only" chip (amber).
+ *   — WHILE health.ai='disabled' (choice) → "AI off · rules-only" chip (neutral grey).
  *   — Health fetch failure does NOT crash the page (ADR-0015 graceful degradation).
  *   — WHEN location present → shown in location column.
  *   — WHEN location null → neutral "—" placeholder, no crash.
@@ -459,9 +460,9 @@ describe('AIRoute — MF-3 restyle (issue #160; P4 #115 base)', () => {
     expect(screen.getByText('192.0.2.10')).toBeInTheDocument()
   })
 
-  it('shows "AI offline · rules-only" chip when health says AI is disconnected', async () => {
+  it('shows "AI unreachable · rules-only" chip when health says AI is unreachable (ADR-0066 fault state)', async () => {
     mockFetchThreats.mockResolvedValue(THREATS_AI_UNAVAILABLE_FIXTURE)
-    // Override: health says AI offline — chip derives from health (MF-3 #160 EARS).
+    // Override: health says AI unreachable — chip derives from health (MF-3 #160 EARS).
     mockFetchHealth.mockResolvedValue(HEALTH_AI_OFFLINE)
 
     renderRoute()
@@ -469,7 +470,7 @@ describe('AIRoute — MF-3 restyle (issue #160; P4 #115 base)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('ai-status-chip')).toBeInTheDocument()
     })
-    expect(screen.getByTestId('ai-status-chip')).toHaveTextContent('AI offline · rules-only')
+    expect(screen.getByTestId('ai-status-chip')).toHaveTextContent('AI unreachable · rules-only')
     expect(screen.getByTestId('ai-status-chip').className).not.toContain('soc-enforced')
   })
 
@@ -583,14 +584,15 @@ describe('AIRoute — MF-3 restyle (issue #160; P4 #115 base)', () => {
   })
 
   // -------------------------------------------------------------------------
-  // MF-3 (#160): Local AI status — chip reflects health.ollama_connected
+  // MF-3 (#160): Local AI status — chip reflects health.ai (tri-state, ADR-0066
+  // / issue #41; the deprecated ollama_connected boolean is not branched on).
   // EARS: "WHILE Local AI engine enabled/disabled, the AI page status SHALL
   //        reflect that state (no separate AI-status source of truth)."
   // -------------------------------------------------------------------------
 
-  it('shows "AI active" chip when health.ollama_connected=true (Local AI enabled)', async () => {
+  it('shows "AI active" chip when health.ai=active (Local AI enabled)', async () => {
     mockFetchThreats.mockResolvedValue(THREATS_FIXTURE)
-    mockFetchHealth.mockResolvedValue(HEALTH_AI_ONLINE) // ollama_connected: true
+    mockFetchHealth.mockResolvedValue(HEALTH_AI_ONLINE) // ai: 'active'
 
     renderRoute()
 
@@ -601,9 +603,9 @@ describe('AIRoute — MF-3 restyle (issue #160; P4 #115 base)', () => {
     expect(screen.getByTestId('ai-status-chip')).toHaveTextContent('AI active')
   })
 
-  it('shows "AI offline" chip when health.ollama_connected=false (Local AI disabled)', async () => {
+  it('shows "AI unreachable" chip when health.ai=unreachable (ADR-0066 fault state)', async () => {
     mockFetchThreats.mockResolvedValue(THREATS_FIXTURE)
-    mockFetchHealth.mockResolvedValue(HEALTH_AI_OFFLINE) // ollama_connected: false
+    mockFetchHealth.mockResolvedValue(HEALTH_AI_OFFLINE) // ai: 'unreachable'
 
     renderRoute()
 
@@ -611,9 +613,9 @@ describe('AIRoute — MF-3 restyle (issue #160; P4 #115 base)', () => {
       expect(screen.getByTestId('ai-status-chip')).toBeInTheDocument()
     })
 
-    // When health says disconnected, chip must show the offline label —
+    // When health says unreachable, chip must show the fault label —
     // even if some per-row ai_status is 'active' in the threats payload.
-    expect(screen.getByTestId('ai-status-chip')).toHaveTextContent('AI offline')
+    expect(screen.getByTestId('ai-status-chip')).toHaveTextContent('AI unreachable')
   })
 
   it('does not crash when health fetch fails (ADR-0015 graceful degradation)', async () => {

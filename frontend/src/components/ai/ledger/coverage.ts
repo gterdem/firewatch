@@ -173,20 +173,25 @@ export function formatCoverageHeadline(rollup: CoverageRollup): string {
 /**
  * Map the ThreatScore ai_status enum to a plain, honest user-facing label.
  *
- * ThreatScore.ai_status reflects the REAL-TIME (fast-path) score pipeline:
+ * ThreatScore.ai_status reflects the per-analysis (Layer 2) vocabulary (ADR-0066):
  *   'active'      — AI actually ran on this actor's real-time score and produced a verdict.
  *   'disabled'    — AI was NOT run (use_ai=False / rules-only path). The default for ALL
  *                   actors in the live /threats payload. It does NOT mean "AI ran but was
  *                   below a threshold" — it means AI was not invoked at all. Honest label: "Rules-only".
- *   'unavailable' — AI was attempted but the engine was unreachable → rules-only score.
- *   'degraded'    — AI ran in a degraded state.
- *   'error'       — AI pipeline raised an error.
+ *   'unavailable' — AI was attempted but the engine was unreachable → rules-only score
+ *                   (the only per-analysis state that means "go fix something" — ADR-0066).
+ *   'no_input'    — there was nothing to send to the AI; rules scored this (non-event,
+ *                   NOT a fault and NOT a choice — issue #41 / ADR-0066).
  *   'skipped'     — Caller passed ?ai=false (issue #268 fast-path, no AI ran).
+ *   'degraded'    — AI ran in a degraded state (legacy value; dead per ADR-0066).
+ *   'error'       — AI pipeline raised an error (legacy value).
  *
  * 'ok' is a LEDGER ai_status (AnalysisSummary.ai_status), NEVER a ThreatScore value.
  *
  * NEVER renders the raw enum string as user-facing text (ADR-0029 D3).
  * Tone is non-alarming per ADR-0015: rules-only is the normal floor, not an error.
+ * 'skipped'/'no_input' are per-analysis annotations only — they NEVER drive the
+ * global AI-status chip (see dashboard/aiEngineStatus.ts `deriveAiStatus`).
  */
 export function formatAiStatus(aiStatus: string): string {
   switch (aiStatus) {
@@ -194,10 +199,12 @@ export function formatAiStatus(aiStatus: string): string {
       return 'AI-analyzed'
     case 'unavailable':
       return 'AI unavailable'
+    case 'no_input':
+      return 'AI not run — nothing to analyze'
     case 'degraded':
       return 'AI degraded'
-    // 'disabled', 'error', 'skipped', and any future/unknown value all mean AI did not run
-    // on this actor → the honest label is "Rules-only". Never imply AI reviewed a
+    // 'disabled', 'skipped', 'error', and any future/unknown value all mean AI did not
+    // run on this actor → the honest label is "Rules-only". Never imply AI reviewed a
     // rules-only actor.
     default:
       return 'Rules-only'

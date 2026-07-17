@@ -36,6 +36,7 @@ import {
   THREATS_AI_UNAVAILABLE_FIXTURE,
   HEALTH_AI_ONLINE,
   HEALTH_AI_OFFLINE,
+  HEALTH_AI_DISABLED,
 } from './readFixtures'
 import type { AnalysisSummary } from '../api/types'
 
@@ -174,8 +175,9 @@ describe('BUG-1a (#447) — AiSummaryPanel headline never says "AI offline or di
     expect(coverage.textContent).not.toContain('offline or disabled')
   })
 
-  it('EARS-1a-3: engine offline → headline says "rules-only" (honest offline message)', async () => {
+  it('EARS-1a-3: engine unreachable (fault) → headline says "AI unreachable · rules-only" (ADR-0066)', async () => {
     mockFetchThreats.mockResolvedValue(THREATS_AI_UNAVAILABLE_FIXTURE)
+    // HEALTH_AI_OFFLINE now carries ai='unreachable' (the fault word) — ADR-0066 three-state.
     mockFetchHealth.mockResolvedValue(HEALTH_AI_OFFLINE)
     mockFetchAnalyses.mockResolvedValue({ items: [], next_cursor: null, has_more: false })
 
@@ -187,9 +189,27 @@ describe('BUG-1a (#447) — AiSummaryPanel headline never says "AI offline or di
     })
 
     const coverage = screen.getByTestId('ai-summary-coverage')
-    // Engine offline → honest: 'AI engine offline · all N actors are rules-only'
-    expect(coverage.textContent).toContain('AI engine offline')
+    // Fault (unreachable) → honest: 'AI unreachable · all N actors are rules-only'
+    expect(coverage.textContent).toContain('AI unreachable')
     expect(coverage.textContent).toContain('rules-only')
+  })
+
+  it('EARS-1a-3b: engine disabled (choice) → headline says "AI off · rules-only", never "unreachable" (ADR-0066)', async () => {
+    mockFetchThreats.mockResolvedValue(THREATS_AI_UNAVAILABLE_FIXTURE)
+    mockFetchHealth.mockResolvedValue(HEALTH_AI_DISABLED)
+    mockFetchAnalyses.mockResolvedValue({ items: [], next_cursor: null, has_more: false })
+
+    renderRoute()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ai-summary-coverage')).toBeInTheDocument()
+    })
+
+    const coverage = screen.getByTestId('ai-summary-coverage')
+    // Deliberate off (choice) → honest neutral wording, never the fault word.
+    expect(coverage.textContent).toContain('AI off')
+    expect(coverage.textContent).toContain('rules-only')
+    expect(coverage.textContent).not.toContain('unreachable')
   })
 
   it('EARS-1a-4: health=null (loading) → neutral loading message, never asserts "offline"', async () => {
@@ -261,6 +281,11 @@ describe('BUG-1b (#448) — CoverageLedger: formatAiStatus maps raw enum to plai
 
   it('maps "active" → "AI-analyzed" (the real AI-ran value)', () => {
     expect(formatAiStatus('active')).toBe('AI-analyzed')
+  })
+
+  it('maps "no_input" → "AI not run — nothing to analyze" (issue #41 / ADR-0066)', () => {
+    // no_input is a non-event, NOT a fault and NOT a choice — distinct honest copy.
+    expect(formatAiStatus('no_input')).toBe('AI not run — nothing to analyze')
   })
 
   it('maps "disabled" → "Rules-only" (NEVER implies AI reviewed the actor)', () => {
@@ -354,6 +379,94 @@ describe('BUG-1b (#448) — CoverageLedger: formatAiStatus maps raw enum to plai
     // 'AI unavailable' is the label — it contains 'unavailable' as part of a phrase, which is fine.
     // The raw bare enum must not appear alone.
     expect(statuses[0].textContent).not.toBe('unavailable')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #41 / ADR-0066 — three-state /health.ai global chip presentation
+//
+// Consumer-level regression: each real `/health.ai` value renders the correct
+// chip treatment end-to-end through AIRoute → AiSummaryPanel → AiStatusChip.
+//   - ai='active'      → green "AI active"
+//   - ai='disabled'     → neutral grey "AI off · rules-only" (never amber/attention)
+//   - ai='unreachable'  → attention amber "AI unreachable · rules-only" (never grey-only)
+// ---------------------------------------------------------------------------
+
+describe('Issue #41 / ADR-0066 — three-state /health.ai global chip presentation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockFetchAnalyses.mockResolvedValue({ items: [], next_cursor: null, has_more: false })
+    mockFetchFeedbackSummary.mockResolvedValue(null)
+  })
+
+  it('ai="active" → chip renders green "AI active"', async () => {
+    mockFetchThreats.mockResolvedValue(THREATS_FIXTURE)
+    mockFetchHealth.mockResolvedValue(HEALTH_AI_ONLINE)
+
+    renderRoute()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ai-status-chip')).toBeInTheDocument()
+    })
+    const chip = screen.getByTestId('ai-status-chip')
+    expect(chip).toHaveTextContent('AI active')
+    expect(chip.className).toContain('soc-ok')
+    expect(chip.className).not.toContain('soc-watch')
+  })
+
+  it('ai="disabled" → chip renders neutral grey "AI off · rules-only", never amber (ADR-0066)', async () => {
+    mockFetchThreats.mockResolvedValue(THREATS_AI_UNAVAILABLE_FIXTURE)
+    mockFetchHealth.mockResolvedValue(HEALTH_AI_DISABLED)
+
+    renderRoute()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ai-status-chip')).toBeInTheDocument()
+    })
+    const chip = screen.getByTestId('ai-status-chip')
+    expect(chip).toHaveTextContent('AI off · rules-only')
+    // Neutral/muted tokens only — never the attention/watch tone or an alarming token.
+    expect(chip.className).toContain('muted')
+    expect(chip.className).not.toContain('soc-watch')
+    expect(chip.className).not.toContain('soc-enforced')
+  })
+
+  it('ai="unreachable" → chip renders attention-amber "AI unreachable · rules-only", never plain grey (ADR-0066)', async () => {
+    mockFetchThreats.mockResolvedValue(THREATS_AI_UNAVAILABLE_FIXTURE)
+    mockFetchHealth.mockResolvedValue(HEALTH_AI_OFFLINE) // ai: 'unreachable'
+
+    renderRoute()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ai-status-chip')).toBeInTheDocument()
+    })
+    const chip = screen.getByTestId('ai-status-chip')
+    expect(chip).toHaveTextContent('AI unreachable · rules-only')
+    // Attention-worthy amber (soc-watch), NOT critical/red, NOT the same neutral
+    // "muted" bucket as the disabled state — a real fault must look different.
+    expect(chip.className).toContain('soc-watch')
+    expect(chip.className).not.toContain('soc-enforced')
+    expect(chip.className).not.toContain('destructive')
+  })
+
+  it('disabled and unreachable render visually distinct chips (no more collapsed "offline" bucket)', async () => {
+    mockFetchThreats.mockResolvedValue(THREATS_AI_UNAVAILABLE_FIXTURE)
+
+    mockFetchHealth.mockResolvedValue(HEALTH_AI_DISABLED)
+    const { unmount } = renderRoute()
+    await waitFor(() => expect(screen.getByTestId('ai-status-chip')).toBeInTheDocument())
+    const disabledText = screen.getByTestId('ai-status-chip').textContent
+    const disabledClass = screen.getByTestId('ai-status-chip').className
+    unmount()
+
+    mockFetchHealth.mockResolvedValue(HEALTH_AI_OFFLINE)
+    renderRoute()
+    await waitFor(() => expect(screen.getByTestId('ai-status-chip')).toBeInTheDocument())
+    const unreachableText = screen.getByTestId('ai-status-chip').textContent
+    const unreachableClass = screen.getByTestId('ai-status-chip').className
+
+    expect(disabledText).not.toBe(unreachableText)
+    expect(disabledClass).not.toBe(unreachableClass)
   })
 })
 

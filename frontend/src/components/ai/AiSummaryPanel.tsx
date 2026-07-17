@@ -28,10 +28,16 @@
  *   - Coverage sentence SHALL be templated from real ai_status counts.
  *   - Block recommendation SHALL be advisory with a RULE chip.
  *
- * Health is the authoritative source for chip status (MF-3 EARS):
- *   health provided + ollama_connected=true  → chip shows "AI active"
- *   health provided + ollama_connected=false → chip shows "AI offline · rules-only"
- *   health=null (loading / fetch failed)     → falls back to threat-derived aiStatus
+ * Health is the authoritative source for chip status (MF-3 EARS; three-state
+ * rework issue #41 / ADR-0066 — `health.ai` tri-state, NOT the deprecated
+ * `ollama_connected` boolean, which collapses "off by choice" and "unreachable"
+ * into one ambiguous value):
+ *   health provided + health.ai='active'      → chip shows "AI active"
+ *   health provided + health.ai='disabled'    → chip shows "AI off · rules-only" (neutral)
+ *   health provided + health.ai='unreachable' → chip shows "AI unreachable · rules-only" (amber)
+ *   health=null (loading / fetch failed)      → falls back to threat-derived aiStatus
+ *                                                (boolean `ollama_connected` used ONLY
+ *                                                as this loading-time fallback path)
  *
  * ADR-0029 D3: all attacker-controlled fields (ai_insights, IPs) rendered as text nodes.
  */
@@ -39,6 +45,7 @@
 import type { ThreatScore, AiStatus, HealthResponse, AnalysisSummary } from '../../api/types'
 import { Panel, Badge, ProvenanceChip } from '../ds'
 import AiStatusChip from '../AiStatusChip'
+import { resolveHealthAiState } from '../aiStatusCopy'
 import { computeCoverageRollup } from './ledger/coverage'
 import ClickableIp from '../entity/ClickableIp'
 
@@ -85,17 +92,14 @@ export default function AiSummaryPanel({
   health,
   analyses,
 }: AiSummaryPanelProps) {
-  // Derive chip status from health (authoritative Local AI state, MF-3 #160 EARS).
-  // health.ollama_connected is the same source that LocalAiPanel uses — single truth.
-  // Fallback to threat-derived aiStatus when health is not yet available.
-  const chipStatus: AiStatus | null =
-    health != null
-      ? health.ollama_connected
-        ? 'active'
-        : 'unavailable'
-      : aiStatus
+  // Derive chip status from health.ai (authoritative tri-state, ADR-0066 / issue #41).
+  // Fallback to threat-derived aiStatus only while health is not yet available
+  // (health === null, i.e. the request is still in flight or failed).
+  const healthAiState = health != null ? resolveHealthAiState(health) : null
+  const chipStatus: AiStatus | null = healthAiState ?? aiStatus
 
   const isAiOffline = chipStatus !== 'active'
+  const isAiUnreachable = healthAiState === 'unreachable'
 
   // BUG-1a fix (#447): derive coverage counts from the verdict ledger via
   // computeCoverageRollup — the same source CoverageLedger uses (single source of truth).
@@ -142,7 +146,10 @@ export default function AiSummaryPanel({
         interesting ones — and shows you its work.
       </p>
 
-      {/* AI offline informational banner (ADR-0015: rules-only is the floor) */}
+      {/* AI-not-active informational banner (ADR-0015: rules-only is the floor).
+          Copy + tone differ by WHY, per ADR-0066: a deliberate "off" is neutral;
+          "unreachable" is attention-worthy amber (never critical/red — detection
+          continues either way). */}
       {isAiOffline && (
         <p
           data-testid="ai-degradation-notice"
@@ -150,13 +157,15 @@ export default function AiSummaryPanel({
             marginBottom: 12,
             padding: '8px 12px',
             borderRadius: 'var(--fw-r-sm)',
-            background: 'var(--fw-bg-input)',
-            border: '1px solid var(--fw-border)',
+            background: isAiUnreachable ? 'var(--soc-watch-bg)' : 'var(--fw-bg-input)',
+            border: `1px solid ${isAiUnreachable ? 'var(--soc-watch-border)' : 'var(--fw-border)'}`,
             fontSize: 'var(--fw-fs-xs)',
-            color: 'var(--fw-t2)',
+            color: isAiUnreachable ? 'var(--soc-watch-fg)' : 'var(--fw-t2)',
           }}
         >
-          AI engine offline — showing rule-based detection scores only (ADR-0015).
+          {isAiUnreachable
+            ? 'AI unreachable — showing rule-based detection scores only. Detection continues (ADR-0015).'
+            : 'AI off — showing rule-based detection scores only (ADR-0015).'}
         </p>
       )}
 
@@ -175,22 +184,26 @@ export default function AiSummaryPanel({
             {/* BUG-1a fix (#447) + MM semantics fix: coverage derived from verdict ledger.
                 ai_status='disabled' is the default for ALL actors (AI is on-demand, not a sweep).
                 AI analysis is on-demand (deep analysis) — never implies an automatic background crawl.
-                Honest wording separates ENGINE state from per-actor coverage:
+                Honest wording separates ENGINE state from per-actor coverage (ADR-0066 tri-state):
                   - engine active + verdicts recorded → "AI engine active · N of M actors have an AI verdict"
                   - engine active + no verdicts yet   → "AI engine active · 0 of N actors have an AI verdict yet"
-                  - engine offline (health says so)   → "AI engine offline · all scores are rules-only"
-                Never says "AI offline or disabled" when health.ollama_connected is true. */}
+                  - engine off by choice              → "AI off · all N actors are rules-only"
+                  - engine unreachable (fault)         → "AI unreachable · all N actors are rules-only"
+                Never says "AI offline or disabled" when health.ai === 'active'. */}
             <span data-testid="ai-summary-coverage">
               {health === null
                 // health=null means still loading — neutral, never assert "offline"
                 ? `${threats.length} actors scored. AI status loading…`
                 : !isAiOffline
-                  // Engine is reachable (health.ollama_connected=true or fallback)
+                  // Engine is active (health.ai === 'active', or threat-derived fallback)
                   ? aiAnalysedCount > 0
                     ? `AI engine active · ${aiAnalysedCount} of ${threats.length} actors have an AI verdict · ${rulesOnlyCount} are rules-only (open an actor → Run deep analysis to add one).`
                     : `AI engine active · 0 of ${threats.length} actors have an AI verdict yet · all are rules-only (open an actor → Run deep analysis to add one).`
-                  // Engine is offline (health.ollama_connected=false)
-                  : `AI engine offline · all ${threats.length} actors are rules-only.`
+                  // Engine is not active — differentiate WHY (ADR-0066): a deliberate
+                  // "off" is neutral wording; "unreachable" is the fault wording.
+                  : isAiUnreachable
+                    ? `AI unreachable · all ${threats.length} actors are rules-only.`
+                    : `AI off · all ${threats.length} actors are rules-only.`
               }
             </span>{' '}
             {criticalCount > 0 && (

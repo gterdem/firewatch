@@ -457,11 +457,16 @@ describe('AiStatusChip — SOC token styling (issue #96/#97)', () => {
     expect(chip.className).not.toContain('soc-enforced')
   })
 
-  it('unavailable status chip is non-alarming muted', () => {
+  it('unavailable (fault) status chip is attention-worthy amber (soc-watch), never critical/red (issue #41 / ADR-0066)', () => {
+    // ADR-0066 three-state rework: a real fault ("unavailable"/"unreachable") is no
+    // longer collapsed into the same muted bucket as a deliberate "disabled" choice —
+    // it renders the soc-watch (amber) attention tokens instead, still never
+    // soc-enforced/red since detection continues (ADR-0015 floor).
     render(<AiStatusChip status="unavailable" />)
     const chip = screen.getByTestId('ai-status-chip')
-    expect(chip.className).toContain('muted')
+    expect(chip.className).toContain('soc-watch')
     expect(chip.className).not.toContain('soc-enforced')
+    expect(chip.className).not.toContain('destructive')
   })
 
   it('null status → chip hidden (no flash during load)', () => {

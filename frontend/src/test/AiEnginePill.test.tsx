@@ -36,6 +36,7 @@ const HEALTH_ONLINE: HealthResponse = {
   ollama_connected: true,
   ollama_model: 'llama3.2',
   db_ok: true,
+  ai: 'active',
 }
 
 const HEALTH_OFFLINE: HealthResponse = {
@@ -43,6 +44,7 @@ const HEALTH_OFFLINE: HealthResponse = {
   ollama_connected: false,
   ollama_model: null,
   db_ok: true,
+  ai: 'unreachable',
 }
 
 const HEALTH_ONLINE_DIFFERENT_MODEL: HealthResponse = {
@@ -50,6 +52,7 @@ const HEALTH_ONLINE_DIFFERENT_MODEL: HealthResponse = {
   ollama_connected: true,
   ollama_model: 'mistral:7b',
   db_ok: true,
+  ai: 'active',
 }
 
 // ---------------------------------------------------------------------------

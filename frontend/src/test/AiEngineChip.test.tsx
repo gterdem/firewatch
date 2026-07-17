@@ -7,6 +7,10 @@
  *
  * This file retains the deriveAiStatus unit tests because that module is still
  * used by both DashboardRoute and AIRoute.
+ *
+ * Priority reordered by issue #41 / ADR-0066: active > unavailable > disabled —
+ * the FAULT state now outranks the deliberate-choice state (previously
+ * disabled > unavailable, which under-alarmed a genuinely broken engine).
  */
 
 import { describe, it, expect } from 'vitest'
@@ -46,8 +50,13 @@ describe('deriveAiStatus', () => {
     expect(deriveAiStatus(threats)).toBe('active')
   })
 
-  it('returns "disabled" when no active but some disabled', () => {
+  it('returns "unavailable" (fault) when both disabled and unavailable are present — fault outranks choice (ADR-0066)', () => {
     const threats = [makeThreat('unavailable'), makeThreat('disabled')]
+    expect(deriveAiStatus(threats)).toBe('unavailable')
+  })
+
+  it('returns "disabled" when no active/unavailable but some disabled', () => {
+    const threats = [makeThreat('disabled'), makeThreat('disabled')]
     expect(deriveAiStatus(threats)).toBe('disabled')
   })
 
@@ -59,5 +68,15 @@ describe('deriveAiStatus', () => {
   it('returns first threat status as fallback for unknown values', () => {
     const threats = [makeThreat('error')]
     expect(deriveAiStatus(threats)).toBe('error')
+  })
+
+  it('degrades "skipped" to "disabled" — per-analysis annotations never drive the global chip (ADR-0066)', () => {
+    const threats = [makeThreat('skipped')]
+    expect(deriveAiStatus(threats)).toBe('disabled')
+  })
+
+  it('degrades "no_input" to "disabled" — per-analysis annotations never drive the global chip (ADR-0066)', () => {
+    const threats = [makeThreat('no_input')]
+    expect(deriveAiStatus(threats)).toBe('disabled')
   })
 })

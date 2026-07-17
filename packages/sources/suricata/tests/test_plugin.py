@@ -658,26 +658,29 @@ class TestNormalizeBasic:
         event = self.plugin.normalize(raw, source_id="pi-home")
         assert event.action == "ALERT"
 
-    def test_severity_mapping_critical(self) -> None:
-        """Suricata severity=1 → critical."""
-        raw = _raw(_make_eve_alert(severity=1))
-        event = self.plugin.normalize(raw, source_id="pi-home")
-        assert event.severity == "critical"
-
     def test_severity_mapping_high(self) -> None:
-        raw = _raw(_make_eve_alert(severity=2))
+        """ADR-0069 D4(a): Suricata severity=1 → high (was critical)."""
+        raw = _raw(_make_eve_alert(severity=1))
         event = self.plugin.normalize(raw, source_id="pi-home")
         assert event.severity == "high"
 
     def test_severity_mapping_medium(self) -> None:
-        raw = _raw(_make_eve_alert(severity=3))
+        """ADR-0069 D4(a): Suricata severity=2 → medium (was high) — ambient recon/misc-attack."""
+        raw = _raw(_make_eve_alert(severity=2))
         event = self.plugin.normalize(raw, source_id="pi-home")
         assert event.severity == "medium"
 
     def test_severity_mapping_low(self) -> None:
-        raw = _raw(_make_eve_alert(severity=4))
+        """ADR-0069 D4(a): Suricata severity=3 → low (was medium) — ET INFO."""
+        raw = _raw(_make_eve_alert(severity=3))
         event = self.plugin.normalize(raw, source_id="pi-home")
         assert event.severity == "low"
+
+    def test_severity_mapping_info(self) -> None:
+        """ADR-0069 D4(a): Suricata severity=4 → info (was low)."""
+        raw = _raw(_make_eve_alert(severity=4))
+        event = self.plugin.normalize(raw, source_id="pi-home")
+        assert event.severity == "info"
 
     def test_rule_id_from_signature_id(self) -> None:
         raw = _raw(_make_eve_alert(signature_id=2012345))
@@ -1167,12 +1170,18 @@ class TestSSHKeyErrorMessages:
 
 
 # ---------------------------------------------------------------------------
-# NB-4: String severity falls back to medium without raising
+# NB-4 / ADR-0069 D3 rule 4: String/missing severity fails quiet to "low"
 # ---------------------------------------------------------------------------
 
 
 class TestStringSeverityFallback:
-    """NB-4 — non-integer severity values do not raise ValueError; fall back to 3 (medium)."""
+    """NB-4 — non-integer severity values do not raise ValueError.
+
+    ADR-0069 D3 rule 4 (fail quiet): missing/unparseable severity maps to "low" —
+    never fabricated upward to a level that could qualify the actor for Tier-2
+    triage on its own (ADR-0067 D1(b)). This replaces the old ``or 3`` -> medium
+    fallback.
+    """
 
     def _normalize_with_severity(self, severity: Any) -> Any:
         from firewatch_suricata.plugin import SuricataSource
@@ -1185,25 +1194,35 @@ class TestStringSeverityFallback:
     def test_string_severity_critical_does_not_raise(self) -> None:
         """severity='critical' (string) must not raise ValueError."""
         event = self._normalize_with_severity("critical")
-        # Falls back to default medium
-        assert event.severity == "medium"
+        # Fails quiet to "low" (ADR-0069 D3 rule 4) — never fabricated upward.
+        assert event.severity == "low"
 
-    def test_string_severity_falls_back_to_medium(self) -> None:
-        """Any non-integer severity string falls back to the medium severity (sev_int=3)."""
+    def test_string_severity_falls_back_to_low(self) -> None:
+        """Any non-integer severity string fails quiet to "low" (ADR-0069 D3 rule 4)."""
         for bad_val in ("critical", "HIGH", "unknown", "3.5"):
             event = self._normalize_with_severity(bad_val)
-            assert event.severity == "medium", (
-                f"Expected 'medium' fallback for severity={bad_val!r}; got {event.severity!r}"
+            assert event.severity == "low", (
+                f"Expected 'low' fail-quiet fallback for severity={bad_val!r}; "
+                f"got {event.severity!r}"
             )
 
-    def test_none_severity_falls_back_to_medium(self) -> None:
-        """severity=None (missing or null) uses fallback 3 → medium."""
+    def test_none_severity_falls_back_to_low(self) -> None:
+        """severity=None (missing or null) fails quiet to "low" (ADR-0069 D3 rule 4)."""
         event = self._normalize_with_severity(None)
-        assert event.severity == "medium"
+        assert event.severity == "low"
+
+    def test_out_of_range_integer_severity_falls_back_to_low(self) -> None:
+        """An out-of-range integer (e.g. 0, 5) is parseable but unrecognized -> "low"."""
+        for bad_int in (0, 5, 99):
+            event = self._normalize_with_severity(bad_int)
+            assert event.severity == "low", (
+                f"Expected 'low' fail-quiet fallback for severity={bad_int!r}; "
+                f"got {event.severity!r}"
+            )
 
     def test_integer_severity_still_maps_correctly(self) -> None:
-        """Regression: normal integer severities must still map correctly after the fix."""
-        for sev, expected in [(1, "critical"), (2, "high"), (3, "medium"), (4, "low")]:
+        """Regression: normal integer severities map per ADR-0069 D4(a) after the fix."""
+        for sev, expected in [(1, "high"), (2, "medium"), (3, "low"), (4, "info")]:
             event = self._normalize_with_severity(sev)
             assert event.severity == expected, (
                 f"Integer severity {sev} should map to {expected!r}; got {event.severity!r}"

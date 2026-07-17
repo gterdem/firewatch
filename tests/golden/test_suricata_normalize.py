@@ -69,7 +69,7 @@ def _normalize(eve_filename: str) -> SecurityEvent:
 _ORACLE_01 = {
     "action": "ALERT",
     "category": "Web Attack (IDS)",
-    "severity": "high",
+    "severity": "medium",  # ADR-0069 D4(a) re-bless: EVE sev=2, high -> medium
     "rule_id": "2012345",
     "rule_name": "ET WEB_SERVER SQL Injection Attempt",
     "payload_snippet": "10.0.0.1/admin?id=1 OR 1=1",
@@ -109,7 +109,7 @@ _ORACLE_01 = {
 _ORACLE_02 = {
     "action": "BLOCK",   # alert.action='blocked' -> BLOCK (ADR-0012)
     "category": "Port Scan (IDS)",
-    "severity": "critical",
+    "severity": "high",  # ADR-0069 D4(a) re-bless: EVE sev=1, critical -> high
     "rule_id": "2000537",
     "rule_name": "ET SCAN Nmap Scripting Engine User-Agent Detected",
     "payload_snippet": None,
@@ -145,7 +145,7 @@ _ORACLE_02 = {
 _ORACLE_03 = {
     "action": "ALERT",
     "category": "Trojan (IDS)",
-    "severity": "high",
+    "severity": "medium",  # ADR-0069 D4(a) re-bless: EVE sev=2, high -> medium
     "rule_id": "2019020",
     "rule_name": "ET TROJAN Generic - IPS Dropper Command",
     "payload_snippet": None,
@@ -181,7 +181,7 @@ _ORACLE_03 = {
 _ORACLE_04 = {
     "action": "ALERT",
     "category": "Privilege Escalation (IDS)",
-    "severity": "critical",
+    "severity": "high",  # ADR-0069 D4(a) re-bless: EVE sev=1, critical -> high
     "rule_id": "2034567",
     "rule_name": "ET EXPLOIT Privilege Escalation via Environment Variable",
     "payload_snippet": "10.0.0.4/cgi-bin/admin?cmd=id",
@@ -221,7 +221,7 @@ _ORACLE_04 = {
 _ORACLE_05 = {
     "action": "ALERT",
     "category": "Recon (IDS)",
-    "severity": "medium",
+    "severity": "low",  # ADR-0069 D4(a) re-bless: EVE sev=3, medium -> low
     "rule_id": "2012008",
     "rule_name": "ET POLICY Sensitive Info in URI",
     "payload_snippet": "10.0.0.5/etc/passwd",
@@ -365,10 +365,10 @@ class TestFixture04PrivescMitre:
         event = _normalize("eve_04_privesc_mitre.json")
         assert event.attack_tactic == "TA0004"
 
-    def test_severity_critical_for_severity_1(self) -> None:
-        """Suricata severity=1 (highest priority) -> 'critical'."""
+    def test_severity_high_for_severity_1(self) -> None:
+        """Suricata severity=1 (highest priority) -> 'high' (ADR-0069 D4(a); was 'critical')."""
         event = _normalize("eve_04_privesc_mitre.json")
-        assert event.severity == "critical"
+        assert event.severity == "high"
 
 
 class TestFixture05ReconAlert:
@@ -407,10 +407,10 @@ class TestMappingDriftDetection:
         # If someone changes the map to return something else, the test fails.
         assert _ORACLE_01["category"] == "Web Attack (IDS)"
         assert _ORACLE_01["action"] == "ALERT"
-        assert _ORACLE_01["severity"] == "high"
+        assert _ORACLE_01["severity"] == "medium"  # ADR-0069 D4(a): EVE sev=2 -> medium
         assert _ORACLE_02["action"] == "BLOCK"
         assert _ORACLE_02["category"] == "Port Scan (IDS)"
-        assert _ORACLE_02["severity"] == "critical"
+        assert _ORACLE_02["severity"] == "high"  # ADR-0069 D4(a): EVE sev=1 -> high
         assert _ORACLE_04["attack_technique"] == "T1059"
         assert _ORACLE_04["attack_tactic"] == "TA0004"
 

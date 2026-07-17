@@ -11,7 +11,7 @@
   "protocol": "TCP",
   "action": "ALERT",
   "category": "Suspicious (IDS)",
-  "severity": "high",
+  "severity": "medium",
   "rule_id": "2025901",
   "rule_name": "ET POLICY TLS Suspicious SNI - Command and Control",
   "payload_snippet": null,

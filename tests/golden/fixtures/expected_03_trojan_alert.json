@@ -11,7 +11,7 @@
   "protocol": "TCP",
   "action": "ALERT",
   "category": "Trojan (IDS)",
-  "severity": "high",
+  "severity": "medium",
   "rule_id": "2019020",
   "rule_name": "ET TROJAN Generic - IPS Dropper Command",
   "payload_snippet": null,

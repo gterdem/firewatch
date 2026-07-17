@@ -11,7 +11,7 @@
   "protocol": "TCP",
   "action": "BLOCK",
   "category": "Port Scan (IDS)",
-  "severity": "critical",
+  "severity": "high",
   "rule_id": "2000537",
   "rule_name": "ET SCAN Nmap Scripting Engine User-Agent Detected",
   "payload_snippet": null,

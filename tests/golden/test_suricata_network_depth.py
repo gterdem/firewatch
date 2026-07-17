@@ -175,9 +175,13 @@ class TestFixture06EnrichedTlsDnsFlow:
     # ── Scores / severity / action unchanged ──────────────────────────────────
 
     def test_severity_and_action_unchanged(self) -> None:
-        """ADR-0048: new fields don't feed scoring — severity/action must be correct."""
+        """ADR-0048: new fields don't feed scoring — severity/action must be correct.
+
+        ADR-0069 D4(a) re-bless: EVE sev=2 now maps to 'medium' (was 'high') —
+        the same expected_06 artifact enumerated in ADR-0069 D7.
+        """
         event = _normalize("eve_06_tls_dns_flow_enriched.json")
-        assert event.severity == "high"    # severity=2 -> 'high'
+        assert event.severity == "medium"  # severity=2 -> 'medium' (ADR-0069 D4(a))
         assert event.action == "ALERT"     # action='allowed' -> ALERT
 
     def test_ocsf_class_for_suspicious(self) -> None:

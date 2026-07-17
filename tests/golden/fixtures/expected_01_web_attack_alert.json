@@ -11,7 +11,7 @@
   "protocol": "TCP",
   "action": "ALERT",
   "category": "Web Attack (IDS)",
-  "severity": "high",
+  "severity": "medium",
   "rule_id": "2012345",
   "rule_name": "ET WEB_SERVER SQL Injection Attempt",
   "payload_snippet": "10.0.0.1/admin?id=1 OR 1=1",

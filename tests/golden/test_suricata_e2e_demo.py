@@ -226,10 +226,10 @@ class TestCanonicalNormalization:
         e = self._by_flow(1000000001)
         assert e.category == "Web Attack (IDS)"
 
-    def test_event1_web_attack_severity_high(self) -> None:
-        """Event 1: Suricata severity=2 → FireWatch severity='high'."""
+    def test_event1_web_attack_severity_medium(self) -> None:
+        """Event 1: Suricata severity=2 → FireWatch severity='medium' (ADR-0069 D4(a))."""
         e = self._by_flow(1000000001)
-        assert e.severity == "high"
+        assert e.severity == "medium"
 
     def test_event1_web_attack_ocsf_class(self) -> None:
         """Event 1: Web Attack (IDS) → ocsf_class=2004 (OCSF Detection Finding, ADR-0020).
@@ -297,10 +297,11 @@ class TestCanonicalNormalization:
         e = self._by_flow(1000000002)
         assert e.category == "Port Scan (IDS)"
 
-    def test_event2_port_scan_severity_critical(self) -> None:
-        """Event 2: Suricata severity=1 (highest priority) → FireWatch severity='critical'."""
+    def test_event2_port_scan_severity_high(self) -> None:
+        """Event 2: Suricata severity=1 (highest priority) → FireWatch severity='high'
+        (ADR-0069 D4(a); was 'critical')."""
         e = self._by_flow(1000000002)
-        assert e.severity == "critical"
+        assert e.severity == "high"
 
     def test_event2_port_scan_ocsf_class(self) -> None:
         """Events 2-6: Port Scan (IDS) → ocsf_class=4001 (OCSF Network Activity, ADR-0020).
@@ -368,10 +369,10 @@ class TestCanonicalNormalization:
         e = self._by_flow(1000000007)
         assert e.action == "ALERT"
 
-    def test_event7_trojan_severity_high(self) -> None:
-        """Event 7: Suricata severity=2 → severity='high'."""
+    def test_event7_trojan_severity_medium(self) -> None:
+        """Event 7: Suricata severity=2 → severity='medium' (ADR-0069 D4(a); was 'high')."""
         e = self._by_flow(1000000007)
-        assert e.severity == "high"
+        assert e.severity == "medium"
 
     def test_event7_trojan_ocsf_class(self) -> None:
         """Event 7: Trojan (IDS) → ocsf_class=4001 (OCSF Network Activity, ADR-0020).
@@ -413,10 +414,10 @@ class TestCanonicalNormalization:
         e = self._by_flow(1000000008)
         assert e.action == "ALERT"
 
-    def test_event8_privesc_severity_critical(self) -> None:
-        """Event 8: Suricata severity=1 → severity='critical'."""
+    def test_event8_privesc_severity_high(self) -> None:
+        """Event 8: Suricata severity=1 → severity='high' (ADR-0069 D4(a); was 'critical')."""
         e = self._by_flow(1000000008)
-        assert e.severity == "critical"
+        assert e.severity == "high"
 
     def test_event8_privesc_ocsf_class(self) -> None:
         """Event 8: Privilege Escalation (IDS) → ocsf_class=2004 (Detection Finding, ADR-0020).

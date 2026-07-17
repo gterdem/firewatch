@@ -675,13 +675,30 @@ class TestGoldenNormalize:
         assert event.rule_name == "ET WEB_SERVER SQL Injection Attempt"
 
     def test_golden_blocked_alert_severity_from_suricata_int(self) -> None:
-        """Suricata integer severity: 1=critical, 2=high, 3=medium, 4=low (ADR-0048)."""
-        for sev_int, expected in [(1, "critical"), (2, "high"), (3, "medium"), (4, "low")]:
+        """Suricata integer severity: 1=high, 2=medium, 3=low, 4=info (ADR-0069 D4a).
+
+        Identical to firewatch_suricata's map — AWS NFW's stateful engine IS
+        Suricata (same shipped classification.config, same Sigma justification).
+        """
+        for sev_int, expected in [(1, "high"), (2, "medium"), (3, "low"), (4, "info")]:
             record = _make_nfw_stateful_alert_record(severity=sev_int)
             raw = _make_raw_event(record)
             event = self.plugin.normalize(raw, "test")
             assert event.severity == expected, (
                 f"severity={sev_int} should map to {expected!r}; got {event.severity!r}"
+            )
+
+    def test_missing_or_unparseable_severity_fails_quiet_to_low(self) -> None:
+        """ADR-0069 D3 rule 4 (fail quiet): missing/unparseable severity -> "low",
+        never fabricated upward to a level that could qualify the actor for
+        Tier-2 triage on its own (ADR-0067 D1(b))."""
+        for bad_val in (None, "critical", "unknown", 0, 99):
+            record = _make_nfw_stateful_alert_record()
+            record["event"]["alert"]["severity"] = bad_val
+            raw = _make_raw_event(record)
+            event = self.plugin.normalize(raw, "test")
+            assert event.severity == "low", (
+                f"severity={bad_val!r} should fail quiet to 'low'; got {event.severity!r}"
             )
 
     def test_golden_blocked_alert_ocsf_detection_finding(self) -> None:

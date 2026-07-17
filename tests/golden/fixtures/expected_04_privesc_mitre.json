@@ -11,7 +11,7 @@
   "protocol": "TCP",
   "action": "ALERT",
   "category": "Privilege Escalation (IDS)",
-  "severity": "critical",
+  "severity": "high",
   "rule_id": "2034567",
   "rule_name": "ET EXPLOIT Privilege Escalation via Environment Variable",
   "payload_snippet": "10.0.0.4/cgi-bin/admin?cmd=id",

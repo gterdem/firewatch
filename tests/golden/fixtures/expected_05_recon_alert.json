@@ -11,7 +11,7 @@
   "protocol": "TCP",
   "action": "ALERT",
   "category": "Recon (IDS)",
-  "severity": "medium",
+  "severity": "low",
   "rule_id": "2012008",
   "rule_name": "ET POLICY Sensitive Info in URI",
   "payload_snippet": "10.0.0.5/etc/passwd",

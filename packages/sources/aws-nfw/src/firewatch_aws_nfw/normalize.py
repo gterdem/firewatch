@@ -20,7 +20,7 @@ Field mapping (docs/contract-stress-2026-06.md §Source 1 normalize table):
   event.alert.action               → action (blocked→BLOCK, alert→ALERT, ADR-0012)
   event.alert.signature_id         → rule_id
   event.alert.signature            → rule_name
-  event.alert.severity             → severity (1=critical…4=low, same as Suricata)
+  event.alert.severity             → severity (1=high...4=info, ADR-0069 D4a, same as Suricata)
   event.alert.category             → category (via SURICATA_CATEGORY_MAP)
   event.alert.metadata.mitre_*     → attack_technique / attack_tactic (ADR-0014)
   event.flow_id                    → source_event_id
@@ -87,13 +87,53 @@ SURICATA_CATEGORY_MAP: dict[str, str] = {
     "Misc activity":                           "IDS Alert",
 }
 
-# Suricata integer severity (1=highest) → FireWatch severity string.
+# ADR-0069 D4(a) — recalibrated against Sigma's behavioral `level` vocabulary
+# (SigmaHQ/sigma-specification, `specification/sigma-rules-specification.md`) and
+# Suricata's shipped `classification.config`
+# (https://raw.githubusercontent.com/OISF/suricata/master/etc/classification.config,
+# quoted in ADR-0068/ADR-0069). AWS NFW's stateful engine IS Suricata, so this map
+# MUST stay identical to firewatch_suricata's — a shared test asserts that.
+# Suricata integer severity (1=highest priority) → FireWatch severity string.
 _SEVERITY_MAP: dict[int, str] = {
-    1: "critical",
-    2: "high",
-    3: "medium",
-    4: "low",
+    # "should trigger an internal alert and requires a prompt review" (Sigma high) —
+    # not `critical`: Sigma reserves that for "probability borders certainty," and a
+    # single ET signature match is well-documented as FP-prone.
+    1: "high",
+    # "Relevant event that should be reviewed manually on a more frequent basis"
+    # (Sigma medium) — this class (attempted-recon/misc-attack) is ambient at volume
+    # on every internet-exposed sensor (ADR-0068 fact 1); the D1 distribution
+    # corollary makes anything higher than `medium` definitionally wrong here.
+    2: "medium",
+    # "Notable event but rarely an incident... relevant in high numbers or
+    # combination with others" (Sigma low) — ET INFO (misc-activity) verbatim.
+    3: "low",
+    # "expected that a huge amount of events will match" (Sigma informational) —
+    # the below-low ordinal floor; unused by the shipped classification.config
+    # (reachable via custom classifications only).
+    4: "info",
 }
+
+# ADR-0069 D3 rule 4 (fail quiet): missing/unparseable/unrecognized severity maps
+# to "low" (telemetry-grade) — never fabricated upward to a level that would
+# qualify the actor for Tier-2 triage on its own (ADR-0067 D1(b)).
+_FAIL_QUIET_SEVERITY = "low"
+
+
+def _map_severity(raw_severity: Any) -> str:
+    """Translate Suricata's integer priority into a FireWatch severity level.
+
+    ADR-0069 D4(a): see ``_SEVERITY_MAP`` for the per-value Sigma justification.
+    Missing (``None``) or unparseable (non-integer) values fail quiet to "low"
+    (D3 rule 4) rather than defaulting to a mid-scale value that could still
+    qualify for triage.
+    """
+    if raw_severity is None:
+        return _FAIL_QUIET_SEVERITY
+    try:
+        sev_int = int(raw_severity)
+    except (ValueError, TypeError):
+        return _FAIL_QUIET_SEVERITY
+    return _SEVERITY_MAP.get(sev_int, _FAIL_QUIET_SEVERITY)
 
 # Action map: AWS NFW Suricata alert.action values → FireWatch action (ADR-0012).
 # "blocked" = IPS mode (packet dropped); "alert" = IDS mode (detected, not dropped).
@@ -176,13 +216,9 @@ def normalize(raw: RawEvent, source_id: str) -> SecurityEvent:
         str(alert.get("category") or ""), "IDS Alert"
     )
 
-    # ── Severity ─────────────────────────────────────────────────────────────
+    # ── Severity (ADR-0069 D4a) ───────────────────────────────────────────────
     # Guard against non-integer severity values (same as Suricata NB-4 fix).
-    try:
-        sev_int = int(alert.get("severity") or 3)
-    except (ValueError, TypeError):
-        sev_int = 3
-    severity: str = _SEVERITY_MAP.get(sev_int, "medium")
+    severity: str = _map_severity(alert.get("severity"))
 
     # ── Rule ─────────────────────────────────────────────────────────────────
     sig_id = alert.get("signature_id")

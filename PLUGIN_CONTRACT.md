@@ -1,4 +1,4 @@
-# PLUGIN_CONTRACT.md — Telemetry Source Plugin Contract (v1.2)
+# PLUGIN_CONTRACT.md — Telemetry Source Plugin Contract (v1.4)
 
 > **Architect-owned.** Implementation work does not edit this file. A needed change is
 > raised as a `contract-change` issue and, if it alters a settled decision, a new ADR in
@@ -161,7 +161,8 @@ plugin supplies the human prose; the UI renders it verbatim plus a stale highlig
 Map raw → `SecurityEvent` and MUST set:
 - `source_type` **and** `source_id`
 - `action` with correct semantics — IDS detections → `ALERT`, WAF/IPS blocks → `BLOCK` (ADR-0012)
-- `severity`, `category`, `rule_id`, `rule_name`, `payload_snippet`
+- `severity` (see **Severity semantics** below — the levels have defined meanings), `category`,
+  `rule_id`, `rule_name`, `payload_snippet`
 - **`attack_technique` / `attack_tactic` / `kill_chain_phase` / `capec_id`** where derivable from
   source metadata — Suricata ET Open `mitre_*` tags, OWASP CRS CAPEC tags (ADR-0014)
 
@@ -169,6 +170,66 @@ Unmapped vendor fields stay in `RawEvent.data` — never invent new top-level fi
 ECS/OCSF "extension attributes overlay one schema" model — not parallel storage (see Database
 contract below). Never fabricate transport fields you do not have (no placeholder
 `destination_port`/`protocol`); leave them unset and keep the raw in `RawEvent.data`.
+
+### Severity semantics (ADR-0069) — what the five levels mean
+
+`severity` is a **routing input, not decoration**: an `ALERT` whose source-declared severity is
+`high` or `critical` qualifies its actor for the triage queue on its own (ADR-0067 D1(b)). Your
+mapping therefore carries a contract obligation, defined here.
+
+**Normative vocabulary.** FireWatch adopts the Sigma `level` definitions as the meaning of the
+five levels (FireWatch's `info` = Sigma's `informational`; the SDK literal keeps the short
+spelling). Quoted verbatim from the Sigma specification
+(<https://github.com/SigmaHQ/sigma-specification/blob/main/specification/sigma-rules-specification.md>):
+
+> "The level field contains one of five string values. It describes the criticality of a
+> triggered rule. While `low` and `medium` level events have an informative character, events
+> with `high` and `critical` level should lead to immediate reviews by security analysts.
+>
+> - `informational`: Rule is intended for enrichment of events, e.g. by tagging them. No case or
+>   alerting should be triggered by such rules because it is expected that a huge amount of
+>   events will match these rules.
+> - `low`: Notable event but rarely an incident. Low rated events can be relevant in high numbers
+>   or combination with others. Immediate reaction shouldn't be necessary, but a regular review
+>   is recommended.
+> - `medium`: Relevant event that should be reviewed manually on a more frequent basis.
+> - `high`: Relevant event that should trigger an internal alert and requires a prompt review.
+> - `critical`: Highly relevant event that indicates an incident. Critical events should be
+>   reviewed immediately. It is used only for cases in which probability borders certainty."
+
+**The operational clause (ADR-0069 D1) — how a mapping is judged:**
+
+> **`severity ∈ {high, critical}` on an ALERT is an assertion that this event, on its own,
+> belongs in the triage queue (ADR-0067 D1(b)).** A mapping is therefore correct only if the
+> events it labels `high`+ are ones an operator should promptly review one at a time.
+> **Corollary (the distribution rule): any event class that is ambient at volume on a healthy
+> deployment maps to at most `medium` — by definition, not by tuning.** Escalation of ambient
+> classes is the job of the correlation rules (ADR-0067 D1(a)) and the band axis (ADR-0067 D5),
+> which exist precisely to turn volume and combination into a claim.
+
+**The mapping discipline (ADR-0069 D3) — what every plugin author MUST do:**
+
+1. **Translate the vendor's own published scale where one exists; cite it.** If the source
+   declares severity (Suricata priority, CEF 0–10, Windows Event level, Zeek notice…), the
+   normalizer *translates* that scale per the vendor's published semantics into the Sigma-defined
+   levels — it never re-scores individual events. (syslog_cef's CEF 0–10 banding per the ArcSight
+   spec is the reference implementation of this pattern.)
+2. **Justify every band against the definitions above** — in the mapping-table comment, with the
+   vendor doc URL.
+3. **State the distribution.** The plugin's PR must say what the source's *ambient mass* (what a
+   healthy, internet-exposed deployment generates continuously) maps to and what its *genuine
+   assertions* (events an operator should see one at a time) map to, and show the ambient mass
+   lands ≤ `medium` (the corollary above). "What does a healthy night look like?" is an
+   acceptance question, not an afterthought.
+4. **Fail quiet.** Missing/unparseable vendor severity maps to `low` (telemetry-grade), never to
+   a gate-qualifying level, and never fabricated upward. (Consistent with ADR-0067 D3:
+   undeclared severity never queues.)
+5. **Contested calls are adjudicated by the volume oracle** (ADR-0068 / `tests/volume/`): if a
+   mapping floods the queue under a realistic manifest, the mapping is wrong — mechanically.
+
+**OCSF note (ADR-0069 D2):** OCSF 1.8.0 `severity_id` stays the *export encoding*
+(info=1 … critical=5, ADR-0040); FireWatch maps to OCSF's identifiers, not its level prose.
+Where OCSF's prose diverges from Sigma's (notably `medium`), Sigma governs the internal meaning.
 
 ## Config (ADR-0006)
 `config_schema` is a Pydantic model. Resolution precedence: **env vars > `firewatch_config.json` > defaults.**
@@ -235,6 +296,30 @@ The architect owns this contract. Changes are a `contract-change` issue plus a n
 decision is affected. See `docs/adr/`.
 
 ## Changelog
+
+### v1.4 — ADR-0069 D5 severity semantics become contract surface (issue #70)
+
+**No model or signature change.** `SecurityEvent.severity` has carried the five-level
+`SeverityLiteral` (`info`/`low`/`medium`/`high`/`critical`) since v1.0 with no stated meaning;
+ADR-0067 D1(b) made it a triage-routing input, so the levels now have **defined, normative
+semantics** — the new "Severity semantics" subsection under `normalize()` responsibilities:
+
+- The Sigma `level` vocabulary is normative (quoted verbatim there, with source URL);
+  FireWatch's `info` = Sigma's `informational` (the SDK literal spelling stands — ADR-0069 D1).
+- The operational clause: `high`+ on an ALERT asserts the event belongs in the triage queue on
+  its own; anything ambient at volume on a healthy deployment maps to at most `medium`.
+- The five-rule mapping discipline (translate-and-cite the vendor scale, justify each band,
+  state the ambient/assertion distribution, fail quiet to `low`, volume-oracle adjudication)
+  — ADR-0069 D3.
+
+**Plugin author impact: normative for every mapping.** Existing plugins' signatures are
+untouched; in-tree severity recalibrations to these semantics are tracked in their own issues
+(#68 suricata/aws-nfw, #69 syslog/syslog_cef fallback; Azure WAF in M3 — ADR-0069 D4).
+
+Standard anchors: Sigma specification `level` —
+https://github.com/SigmaHQ/sigma-specification/blob/main/specification/sigma-rules-specification.md;
+OCSF 1.8.0 `severity_id` (export encoding only, identifiers not prose — ADR-0069 D2, ADR-0040) —
+https://schema.ocsf.io/api/1.8.0/classes/detection_finding.
 
 ### v1.3 — ADR-0058 §D3 per-detection severity + escalation metadata (issue #NNN)
 

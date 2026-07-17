@@ -69,7 +69,9 @@ async def _serve(
 
     This coroutine is invoked via a single ``asyncio.run(_serve(...))``.
     """
-    pipeline = _build_pipeline()
+    # Issue #75 (ADR-0067 D6): pass registry so the pipeline can wire each
+    # loaded plugin's declared enforcement-posture default.
+    pipeline = _build_pipeline(registry=registry)
     store = pipeline.store  # type: ignore[attr-defined]
     # MK-2 (ADR-0044): same verdict-ledger instance the pipeline writes to, born on
     # THIS loop (ADR-0023 §F) so the read API / attestation strip see live data.

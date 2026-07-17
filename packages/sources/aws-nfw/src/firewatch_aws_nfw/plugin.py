@@ -80,6 +80,13 @@ class AwsNetworkFirewallSource:
             display_name="AWS Network Firewall",
             version=_VERSION,
             flavor="pull",
+            # ADR-0067 D6 + Amendment 1 (issue #75): declared enforcement-posture
+            # default. AWS Network Firewall is an inline, enforcing control — stateful
+            # rule groups can DROP/REJECT/ALERT. A qualified Tier-2 verdict with zero
+            # BLOCK/DROP events from this actor gets the honest "not blocked — this
+            # control was enforcing and did not block it" label (Amendment 1 A1.1)
+            # rather than the generic "block status unknown".
+            enforcement="enforce",
         )
 
     def config_schema(self) -> type[BaseModel]:

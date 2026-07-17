@@ -10,8 +10,12 @@
  *   - Evidence link: ClickableIp → entity slide-over (#202).
  *   - Per-card dismiss/done via onAction(actor, "dismiss") — no local state.
  *   - Copy affordance: paste-ready snippet via navigator.clipboard.writeText().
- *   - AI-offline fallback: queue header gains "Rules-only mode · AI engine offline"
- *     badge; rule-derived cards always show; queue never goes blank.
+ *   - AI-offline fallback: queue header gains a rules-only badge when AI is not
+ *     active; rule-derived cards always show; queue never goes blank. Badge tone
+ *     differentiates WHY (issue #93, ADR-0066 tri-state): health.ai='unreachable'
+ *     shows attention-worthy amber ("AI unreachable · rules-only"); health.ai=
+ *     'disabled' shows the neutral RULES_ONLY_DEGRADED_WORDING. The two are never
+ *     collapsed into the same treatment (the honesty bug #41 fixes elsewhere).
  *   - Actions are phrased as recommendations — "Consider blocking …" (ADR-0033).
  *   - Block/Investigate/Dismiss buttons call onAction(actor, verb) — zero per-verb
  *     logic in this component (ADR-0033 action seam).
@@ -49,6 +53,7 @@ import { buildRecommendationQueue } from '../../lib/recommendationQueue'
 import type { QueueItem, RecAction } from '../../lib/recommendationQueue'
 import { ProvenanceChip } from '../ds'
 import { RULES_ONLY_DEGRADED_WORDING } from '../../lib/provenance'
+import { AI_STATUS_COPY, resolveHealthAiState } from '../aiStatusCopy'
 import ClickableIp from '../entity/ClickableIp'
 
 // ---------------------------------------------------------------------------
@@ -322,12 +327,19 @@ export default function RecommendationCards({ threats, onAction, health, compact
   // Starts collapsed; user expands inline (no inner scrollbar; no route navigation).
   const [expanded, setExpanded] = useState(false)
 
-  // Determine AI engine state — health is authoritative; fall back to
-  // any threat having ai_status=active when health fetch has not resolved yet.
-  const aiOnline: boolean =
+  // Determine AI engine state (issue #93, ADR-0066 tri-state) — health.ai is
+  // authoritative via resolveHealthAiState; fall back to any threat having
+  // ai_status=active when health fetch has not resolved yet (health=null).
+  // The fallback mirrors AiPanel.tsx: any non-'active' threat-derived signal
+  // degrades to the conservative 'disabled' bucket (never asserts a fault from
+  // threat data alone).
+  const aiState: 'active' | 'disabled' | 'unreachable' =
     health != null
-      ? health.ollama_connected
+      ? resolveHealthAiState(health)
       : threats.some((t) => t.ai_status === 'active')
+        ? 'active'
+        : 'disabled'
+  const aiOnline: boolean = aiState === 'active'
 
   // Issue #564: pass isDismissed so dismissed actors are excluded from the queue.
   // This keeps the card queue consistent with the triage banner (which also filters
@@ -384,12 +396,15 @@ export default function RecommendationCards({ threats, onAction, health, compact
           <span
             style={{
               fontSize: 11,
-              color: 'var(--fw-t3)',
-              fontStyle: 'italic',
+              // Issue #93 / ADR-0066: 'unreachable' (a real fault) reads amber and
+              // attention-worthy — NEVER the same neutral treatment as 'disabled'
+              // (a deliberate choice). Never collapse the two.
+              color: aiState === 'unreachable' ? 'var(--soc-watch-fg)' : 'var(--fw-t3)',
+              fontStyle: aiState === 'unreachable' ? 'normal' : 'italic',
             }}
             data-testid="rec-queue-offline-badge"
           >
-            {RULES_ONLY_DEGRADED_WORDING}
+            {aiState === 'unreachable' ? AI_STATUS_COPY.unreachable : RULES_ONLY_DEGRADED_WORDING}
           </span>
         )}
       </div>

@@ -44,6 +44,7 @@ from firewatch_api.routes.ai_baseline import router as ai_baseline_router
 from firewatch_api.routes.ai_ledger import router as ai_ledger_router
 from firewatch_api.routes.ai_stream import router as ai_stream_router
 from firewatch_api.routes.analytics import router as analytics_router
+from firewatch_api.routes.banner import router as banner_router
 from firewatch_api.routes.cases import router as cases_router
 from firewatch_api.routes.config import router as config_router
 from firewatch_api.routes.discovery import router as discovery_router
@@ -196,6 +197,9 @@ def create_app(
 
     # Escalation policy registry + 24h hit-counts (issue #650, ADR-0058 D1/D6, ADR-0059 D6):
     app.include_router(escalation_router)  # GET /escalation/policy
+
+    # Banner attempts summary (issue #55 Part 1/backend, ADR-0070 D1/D3/D5):
+    app.include_router(banner_router)      # GET /banner/summary
 
     # ── Backward-compat re-export for tests that call config_routes helpers ──
     # The existing test_config_routes.py imports config_routes helpers directly

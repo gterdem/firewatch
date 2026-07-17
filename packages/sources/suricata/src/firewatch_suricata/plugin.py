@@ -146,6 +146,13 @@ class SuricataSource:
             display_name="Suricata IDS/IPS",
             version=_VERSION,
             flavor="pull",
+            # ADR-0067 D6 (issue #75): declared enforcement-posture default.
+            # Suricata ships M1 as a watch-only IDS sensor. Posture is per-instance,
+            # not per-plugin (an operator can flip a sensor to inline IPS) — this
+            # default is what Phase B's per-instance override (issue #44) exists to
+            # correct; until then every instance reads the honest IDS-mode label.
+            # See docs/escalation-and-triage-model.md for the IPS mis-label note.
+            enforcement="observe",
             actions=(
                 SourceAction(
                     id="fetch_ruleset",

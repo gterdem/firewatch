@@ -111,6 +111,13 @@ export default defineConfig({
         // route, but keep the SPA bypass for consistency.
         bypass: (req) => (isHtmlNavigation(req) ? '/index.html' : undefined),
       },
+      '/banner': {
+        target: 'http://127.0.0.1:8000',
+        // GET /banner/summary — the attempts headline + pressure-strip banner
+        // feed (issue #55 Part 1/backend). API-only (Accept: application/json);
+        // no bare route, but keep the SPA bypass for consistency.
+        bypass: (req) => (isHtmlNavigation(req) ? '/index.html' : undefined),
+      },
     },
   },
   test: {

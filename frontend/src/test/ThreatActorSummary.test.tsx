@@ -9,8 +9,14 @@
  *   EARS-2 (ADR-0035): Rule-templated summaries SHALL carry a RULE chip
  *     and a non-AI title.
  *
- *   EARS-3 (ADR-0035): WHEN ai_status != ok, the block SHALL render
- *     RULES_ONLY_DEGRADED_WORDING and confidence "n/a (AI off)".
+ *   EARS-3 (ADR-0035): WHEN ai_status != ok, the block SHALL render the
+ *     degraded wording and confidence "n/a (AI off)".
+ *
+ *   Issue #93 (fast-follow to #41 / ADR-0066): the degraded wording tone/text
+ *   differentiates WHY — health.ai='unreachable' (a real fault) renders
+ *   attention-worthy amber (AI_STATUS_COPY.unreachable); health.ai='disabled'
+ *   (a deliberate choice) renders the neutral RULES_ONLY_DEGRADED_WORDING. The
+ *   two are never collapsed into the same treatment.
  *
  *   EARS-4 (ADR-0036): Scores SHALL render via ScoreBadge (banded: "Risk N · BAND").
  *     Confidence SHALL never render as a percentage.
@@ -43,6 +49,7 @@ import { EntityPanelContext } from '../components/entity/EntityPanelContext'
 import type { EntityPanelContextValue } from '../components/entity/EntityPanelContext'
 import type { ThreatScore, HealthResponse } from '../api/types'
 import { RULES_ONLY_DEGRADED_WORDING } from '../lib/provenance'
+import { AI_STATUS_COPY } from '../components/aiStatusCopy'
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -86,6 +93,15 @@ const HEALTH_OFFLINE: HealthResponse = {
   ollama_model: null,
   db_ok: true,
   ai: 'unreachable',
+}
+
+/** Deliberately disabled (ai_enabled=false) — neutral, non-alarming (issue #93). */
+const HEALTH_DISABLED: HealthResponse = {
+  status: 'ok',
+  ollama_connected: false,
+  ollama_model: null,
+  db_ok: true,
+  ai: 'disabled',
 }
 
 /**
@@ -188,12 +204,38 @@ describe('ThreatActorSummary — RULE provenance chip (EARS-2, ADR-0035)', () =>
 // ---------------------------------------------------------------------------
 
 describe('ThreatActorSummary — AI offline degraded state (EARS-3, ADR-0035 §4)', () => {
-  it('shows RULES_ONLY_DEGRADED_WORDING when health is offline', () => {
+  // Issue #93: health.ai='unreachable' is a real fault — attention-worthy amber,
+  // distinct wording (AI_STATUS_COPY.unreachable), never the neutral collapsed text.
+  it('shows AI_STATUS_COPY.unreachable (amber) when health.ai=unreachable', () => {
     const threats = [makeThreat({ ai_status: 'unavailable' })]
     renderSummary(threats, HEALTH_OFFLINE)
-    expect(screen.getByTestId('tas-degraded-wording')).toHaveTextContent(
-      RULES_ONLY_DEGRADED_WORDING,
-    )
+    const wording = screen.getByTestId('tas-degraded-wording')
+    expect(wording).toHaveTextContent(AI_STATUS_COPY.unreachable)
+    expect(wording.style.color).toBe('var(--soc-watch-fg)')
+  })
+
+  // Issue #93: health.ai='disabled' is a deliberate choice — neutral, non-alarming.
+  it('shows RULES_ONLY_DEGRADED_WORDING (neutral) when health.ai=disabled', () => {
+    const threats = [makeThreat({ ai_status: 'disabled' })]
+    renderSummary(threats, HEALTH_DISABLED)
+    const wording = screen.getByTestId('tas-degraded-wording')
+    expect(wording).toHaveTextContent(RULES_ONLY_DEGRADED_WORDING)
+    expect(wording.style.color).toBe('var(--fw-t3)')
+  })
+
+  // Issue #93: never collapse unreachable and disabled into the same treatment.
+  it('never collapses unreachable and disabled into the same treatment', () => {
+    const threats = [makeThreat({ ai_status: 'unavailable' })]
+    const { unmount } = renderSummary(threats, HEALTH_OFFLINE)
+    const unreachableWording = screen.getByTestId('tas-degraded-wording')
+    const unreachableColor = unreachableWording.style.color
+    const unreachableText = unreachableWording.textContent
+    unmount()
+
+    renderSummary([makeThreat({ ai_status: 'disabled' })], HEALTH_DISABLED)
+    const disabledWording = screen.getByTestId('tas-degraded-wording')
+    expect(disabledWording.style.color).not.toBe(unreachableColor)
+    expect(disabledWording.textContent).not.toBe(unreachableText)
   })
 
   it('shows RULES_ONLY_DEGRADED_WORDING when health=null and ai_status=disabled', () => {

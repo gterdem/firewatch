@@ -271,11 +271,20 @@ class FilterSpec(BaseModel):
 
 ScoreDerivationLiteral = Literal["rule", "ai+rule"]
 
+# ADR-0067 D6 — enforcement posture: what a source's producing control COULD have
+# done to the traffic it observed. Plugin-declared default (`SourceMetadata.enforcement`,
+# firewatch_sdk/metadata.py); Phase A (issue #75) resolves it via
+# `firewatch_core.escalation.posture` into a per-instance map consumed by the decider.
+# Anchors OCSF `action_id` 3 Observed (`observe`) / 2 Denied (`enforce`); `detect_only`
+# is FireWatch's label for a host control that detects without removing (e.g. ClamAV).
+EnforcementPostureLiteral = Literal["observe", "enforce", "detect_only"]
+
 # Escalation disposition literals — ADR-0058 §D2 / §D3.
 # Four deterministic labels derived from the action axis (ActionLiteral).
 EscalationDispositionLiteral = Literal[
     "allowed_through",       # ALLOW  — request passed; possible success (Tier 1)
-    "block_status_unknown",  # qualified Tier 2 — enforcement posture undeclared (ADR-0067 D6); narrows at #44
+    "block_status_unknown",  # qualified Tier 2 — posture undeclared, or mixed across the
+                              # contributing instances (ADR-0067 D6 + Amendment 1, issue #75)
     "blocked_persistent",    # BLOCK/DROP, persistent / high-volume (Tier 3)
     "blocked_one_off",       # BLOCK/DROP, one-off (Tier 4)
     # ADR-0067 D2 — additive: the observed stratum. Emitted when an actor's
@@ -285,6 +294,19 @@ EscalationDispositionLiteral = Literal[
     # (ADR-0067 D2: a number would force a false ordering against Tier 4).
     # Anchors OCSF 1.8.0 ``action_id=3 Observed``.
     "observed",
+    # ADR-0067 D6 + Amendment 1 (issue #75) — additive, posture-derived Tier-2 labels.
+    # Replace the generic ``block_status_unknown`` for a qualified Tier-2 verdict whose
+    # contributing instance(s) declare a SINGLE, uniform enforcement posture:
+    "not_blocked_passive",    # posture `observe`     — a watch-only sensor; per-sensor fact.
+    "detected_no_action",     # posture `detect_only` — detected, no removal action taken.
+    "not_blocked_enforcing",  # posture `enforce` AND zero BLOCK/DROP events from this actor
+                              # (Amendment 1 A1.1) — an inline control alerted but let it
+                              # through; genuinely a fact, not an unknown (OCSF disposition_id
+                              # 19 Alert: "resulted in a notification but request was not
+                              # blocked"). `enforce` WITH a BLOCK/DROP present, undeclared
+                              # posture, or postures that differ across contributing
+                              # instances all keep ``block_status_unknown`` (still genuinely
+                              # unknown — see `firewatch_core.escalation.posture`).
 ]
 # ADR-0058 Amendment 1 (A1): adds ``"partial"`` for actors whose events span more than
 # one terminal disposition class (e.g. some ALERT/LOG AND some BLOCK/DROP).
@@ -329,10 +351,13 @@ class EscalationVerdict(BaseModel):
                              ``int | None`` — additive per the ADR-0048/0055 pattern; every
                              consumer that compares ``tier`` MUST null-guard first
                              (``worthiness.py`` / ``triageBand.ts``).
-    ``disposition``        — machine-readable action label (one of five
-                             ``EscalationDispositionLiteral`` values, including the additive
-                             ``"observed"`` — ADR-0067 D2). Safe for programmatic routing
-                             (e.g. banner logic).
+    ``disposition``        — machine-readable action label, one of the
+                             ``EscalationDispositionLiteral`` values: the four ranked tiers,
+                             the additive ``"observed"`` stratum (ADR-0067 D2), and the
+                             additive posture-derived Tier-2 labels ``"not_blocked_passive"``
+                             / ``"detected_no_action"`` / ``"not_blocked_enforcing"``
+                             (ADR-0067 D6 + Amendment 1, issue #75). Safe for programmatic
+                             routing (e.g. banner logic).
     ``justification``      — human-readable, ``RULE``-tagged sentence (ADR-0035) safe to render
                              as a plain text node (e.g.
                              "sqli_rule matched, and the request got through — this may have

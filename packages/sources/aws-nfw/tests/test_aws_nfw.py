@@ -884,6 +884,13 @@ class TestEntryPointDiscovery:
         assert meta.type_key == "aws_network_firewall"
         assert meta.flavor == "pull"
 
+    def test_metadata_enforcement_default_is_enforce(self) -> None:
+        """ADR-0067 D6 + Amendment 1 (issue #75): AWS NFW is an inline, enforcing control."""
+        from firewatch_aws_nfw.plugin import AwsNetworkFirewallSource
+
+        plugin = AwsNetworkFirewallSource()
+        assert plugin.metadata().enforcement == "enforce"
+
     def test_zero_core_edits_via_loader(self) -> None:
         """The core loader discovers aws_network_firewall with zero core edits."""
         from firewatch_core.loader import load_source_plugins

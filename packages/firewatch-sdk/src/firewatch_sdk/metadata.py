@@ -13,6 +13,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 # in the `actions` field at class-build time.  actions.py only imports PluginContext
 # under TYPE_CHECKING, so there is no circular import at runtime.
 from firewatch_sdk.actions import SourceAction  # noqa: E402 — must follow __future__
+# ADR-0067 D6 (issue #75): the enforcement-posture literal lives in models.py
+# alongside the other escalation-adjacent literals (SeverityLiteral, etc.).
+# models.py imports nothing from metadata.py, so this module-level import carries
+# no circular-import risk (same reasoning as the SourceAction import above).
+from firewatch_sdk.models import EnforcementPostureLiteral  # noqa: E402 — must follow __future__
 
 FlavorLiteral = Literal["pull", "push"]
 
@@ -55,6 +60,16 @@ class SourceMetadata(BaseModel):
     compatibility.  A source opts in to column-hiding by declaring its set.
     Members are validated against ``SecurityEvent.model_fields`` at construction;
     an unknown member (e.g. a typo) fails construction immediately (fail-closed).
+
+    `enforcement` is an optional declared default for the ADR-0067 D6 enforcement-posture
+    axis — what this source's producing control COULD have done to traffic it observed
+    (`observe` / `enforce` / `detect_only`).  Additive, defaulted to ``None``
+    ("undeclared") so every existing plugin stays byte-compatible.  Core resolves this
+    per-instance default (`firewatch_core.escalation.posture`) into the posture map the
+    decider consumes to replace the generic "block status unknown" Tier-2 label with an
+    honest, posture-specific one (issue #75).  Posture is core's interpretation knob, not
+    plugin config — declaring it here is the *plugin-declared default* half only; the
+    per-instance override (Phase B, issue #44) is core-owned and lives elsewhere.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -73,6 +88,10 @@ class SourceMetadata(BaseModel):
     # Each member is validated against SecurityEvent.model_fields at construction
     # (fail-closed: an unknown name → ValidationError, catching typos early).
     produces: frozenset[str] = frozenset()
+    # ADR-0067 D6 (issue #75, Phase A): declared enforcement-posture default.
+    # None (the default) = "undeclared" → the decider keeps the conservative
+    # block_status_unknown label for this source's qualified Tier-2 verdicts.
+    enforcement: EnforcementPostureLiteral | None = None
 
     @field_validator("produces", mode="before")
     @classmethod

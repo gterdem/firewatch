@@ -62,6 +62,11 @@ class TestMetadata:
     def test_display_name_is_set(self) -> None:
         assert self.meta.display_name
 
+    def test_enforcement_default_is_detect_only(self) -> None:
+        """ADR-0067 D6 (issue #75): ClamAV detects malware but takes no removal
+        action — the declared enforcement default is 'detect_only'."""
+        assert self.meta.enforcement == "detect_only"
+
     def test_produces_excludes_source_ip(self) -> None:
         """ClamAV never populates a real source_ip (host-based, always "") — the
         column-hiding declaration must not claim it can (ADR-0060)."""

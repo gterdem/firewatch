@@ -8,8 +8,21 @@
  * Capabilities added in #135:
  *   - Model selector: dropdown populated from GET /ai/models.
  *     Pre-selects the `current` value; on change persists via PUT /config/runtime.
- *   - Connection status: reads ollama_connected + ollama_model from GET /health.
+ *   - Connection status: reads the tri-state health.ai + ollama_model from GET /health
+ *     (issue #93 fast-follow to #41 / ADR-0066 — see "Connection status" below).
  *   - Empty models (endpoint unreachable): shows a status message, no crash.
+ *
+ * Connection status tri-state (issue #93, ADR-0066): branches on `health.ai`
+ * via `resolveHealthAiState` rather than the deprecated `ollama_connected`
+ * boolean, which collapsed "off by choice" (disabled) and "unreachable" (fault)
+ * into one ambiguous value:
+ *   health.ai='active'      → "● Connected" + model name (green)
+ *   health.ai='unreachable' → "● Unreachable" (amber — attention, not critical;
+ *                              detection continues on the rules-only floor, ADR-0015)
+ *   health.ai='disabled'    → "● Off" (muted — deliberate choice, non-alarming)
+ *   health=null             → "● Disconnected" (unknown — no data at all; the
+ *                              boolean-style safe default, distinct from the
+ *                              'disabled'/'unreachable' health.ai values)
  *
  * Capabilities formerly in #131 (moved to NotificationsPanel in #661):
  *   - Alert threshold, webhook URL, alert_on_sync have been moved to the global
@@ -46,6 +59,7 @@ import { useTheme } from '../app/useTheme'
 import type { Theme } from '../app/ThemeContext'
 import { capModelName } from '../lib/modelName'
 import { useApiKeyVersion } from '../hooks/useApiKeyVersion'
+import { resolveHealthAiState } from './aiStatusCopy'
 
 interface LocalAiPanelProps {
   /** Health data from GET /health — null while loading or on error. */
@@ -193,9 +207,13 @@ export default function LocalAiPanel({ health, healthLoading = false }: LocalAiP
   // geo_provider — "offline" (zero-egress MMDB) or "online" (ip-api.com); ADR-0039
   const [geoProvider, setGeoProvider] = useState<'offline' | 'online'>('offline')
 
-  // Connection status from health prop.
+  // Connection status from health prop (issue #93, ADR-0066 tri-state).
+  // health is authoritative via `health.ai`; when health itself hasn't arrived
+  // yet (null), aiState is null — the loading/unknown bucket, rendered
+  // separately below (never conflated with the real 'disabled' state).
+  const aiState = health != null ? resolveHealthAiState(health) : null
+  const aiConnected = aiState === 'active'
   // NB-2 (issue #306): cap model name to 64 chars to guard against layout breaks.
-  const aiConnected = health?.ollama_connected ?? false
   const aiModelFromHealth = capModelName(health?.ollama_model)
 
   function showToast(tone: ToastTone, message: string) {
@@ -591,10 +609,13 @@ export default function LocalAiPanel({ health, healthLoading = false }: LocalAiP
               {/* #579: show a neutral "Checking…" state while the first /health
                   request is in flight so the operator never sees a brief false
                   "Disconnected" flash on page load.  Once healthLoading resolves,
-                  the actual connected/disconnected state is displayed. */}
+                  the actual tri-state is displayed.
+                  Issue #93 / ADR-0066: branches on health.ai (tri-state) — never
+                  collapses 'unreachable' (amber, a real fault) and 'disabled'
+                  (neutral, a deliberate choice) into the same treatment. */}
               {healthLoading ? (
                 <span style={{ color: 'var(--fw-t3)' }}>○ Checking…</span>
-              ) : aiConnected ? (
+              ) : aiState === 'active' ? (
                 <span style={{ color: 'var(--fw-green)' }}>
                   ● Connected
                   {aiModelFromHealth ? (
@@ -603,7 +624,13 @@ export default function LocalAiPanel({ health, healthLoading = false }: LocalAiP
                     </span>
                   ) : null}
                 </span>
+              ) : aiState === 'unreachable' ? (
+                <span style={{ color: 'var(--soc-watch-fg)' }}>● Unreachable</span>
+              ) : aiState === 'disabled' ? (
+                <span style={{ color: 'var(--fw-t3)' }}>● Off</span>
               ) : (
+                // aiState === null: health itself hasn't arrived (no data at all) —
+                // distinct "unknown" bucket, never conflated with the real 'disabled' state.
                 <span style={{ color: 'var(--fw-t3)' }}>● Disconnected</span>
               )}
             </div>

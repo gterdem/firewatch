@@ -74,6 +74,15 @@ const HEALTH_DISCONNECTED: HealthResponse = {
   ai: 'unreachable',
 }
 
+/** Deliberately disabled (ai_enabled=false) — neutral, non-alarming (issue #93). */
+const HEALTH_DISABLED: HealthResponse = {
+  status: 'ok',
+  ollama_connected: false,
+  ollama_model: null,
+  db_ok: true,
+  ai: 'disabled',
+}
+
 const MODELS_RESPONSE = {
   models: ['llama3.2', 'qwen3:14b', 'mistral:7b'],
   current: 'qwen3:14b',
@@ -152,16 +161,51 @@ describe('LocalAiPanel — connection status', () => {
     })
   })
 
-  // State-driven: disconnected
-  it('shows disconnected status when ollama_connected=false', async () => {
+  // State-driven (issue #93, ADR-0066): health.ai='unreachable' → amber "Unreachable"
+  // (a real fault, NOT the collapsed "Disconnected" the old boolean produced).
+  it('shows "Unreachable" (amber) status when health.ai=unreachable', async () => {
     renderPanel(HEALTH_DISCONNECTED)
     await waitFor(() => {
       const status = screen.getByTestId('local-ai-status')
-      expect(status.textContent).toContain('Disconnected')
+      expect(status.textContent).toContain('Unreachable')
+      expect(status.textContent).not.toContain('Disconnected')
     })
   })
 
-  // State-driven: health=null → disconnected
+  // State-driven (issue #93, ADR-0066): health.ai='disabled' → neutral "Off"
+  // — must never render the same text/color as 'unreachable' (honesty bug #41 fixes).
+  it('shows "Off" (neutral) status when health.ai=disabled', async () => {
+    renderPanel(HEALTH_DISABLED)
+    await waitFor(() => {
+      const status = screen.getByTestId('local-ai-status')
+      expect(status.textContent).toContain('Off')
+      expect(status.textContent).not.toContain('Unreachable')
+    })
+  })
+
+  // Issue #93: 'unreachable' and 'disabled' must never collapse into the same
+  // treatment — distinct text AND distinct color.
+  it('never collapses unreachable and disabled into the same treatment', async () => {
+    const { unmount } = renderPanel(HEALTH_DISCONNECTED)
+    let unreachableStatus: HTMLElement
+    await waitFor(() => {
+      unreachableStatus = screen.getByTestId('local-ai-status')
+      expect(unreachableStatus.textContent).toContain('Unreachable')
+    })
+    const unreachableColor = unreachableStatus!.querySelector('span')?.style.color
+    unmount()
+
+    renderPanel(HEALTH_DISABLED)
+    await waitFor(() => {
+      const disabledStatus = screen.getByTestId('local-ai-status')
+      expect(disabledStatus.textContent).toContain('Off')
+      const disabledColor = disabledStatus.querySelector('span')?.style.color
+      expect(disabledColor).not.toBe(unreachableColor)
+    })
+  })
+
+  // State-driven: health=null (no data at all) → "Disconnected" — a distinct
+  // "unknown" bucket, separate from the real health.ai='disabled' state.
   it('shows disconnected status when health is null', async () => {
     renderPanel(null)
     await waitFor(() => {

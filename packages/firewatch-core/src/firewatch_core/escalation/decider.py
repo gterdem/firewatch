@@ -96,6 +96,43 @@ _PERSISTENCE_THRESHOLD = 3
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+def _qualifying_rule_names(qualify_result: QualifyResult) -> list[str]:
+    """Build ``EscalationVerdict.qualifying_rules`` (ADR-0072 D1).
+
+    Deduped, order-preserving union of ``qualifying_detections[].rule_name``
+    (D1a — always a non-empty ``str`` on ``Detection``) and the D1(b)
+    qualifying ALERT events' ``rule_name`` (``SecurityEvent.rule_name`` is
+    optional — ``None`` values are dropped so an anonymous-source ALERT
+    contributes nothing, per ADR-0072 D4's fail-toward-visibility boundary 1).
+    """
+    names: list[str] = []
+    seen: set[str] = set()
+    for detection in qualify_result.qualifying_detections:
+        if detection.rule_name not in seen:
+            seen.add(detection.rule_name)
+            names.append(detection.rule_name)
+    for event in qualify_result.qualifying_alert_events:
+        if event.rule_name and event.rule_name not in seen:
+            seen.add(event.rule_name)
+            names.append(event.rule_name)
+    return names
+
+
+def _attach_qualifying_rules(
+    verdict: EscalationVerdict, qualifying_rules: list[str]
+) -> EscalationVerdict:
+    """Attach the ADR-0072 D1 rule-identity set to *verdict* — additive only.
+
+    A no-op copy when *qualifying_rules* is empty (the common case); otherwise
+    returns a shallow copy of *verdict* with ``qualifying_rules`` set. Never
+    changes ``tier``/``score``/any other field — the golden oracle is
+    unaffected (``qualifying_rules`` carries no score weight).
+    """
+    if not qualifying_rules:
+        return verdict
+    return verdict.model_copy(update={"qualifying_rules": qualifying_rules})
+
+
 def _tally(events: list[SecurityEvent]) -> tuple[int, int, int]:
     """Return (block_drop_count, alert_log_count, allow_count) for *events*.
 
@@ -209,25 +246,37 @@ def decide(
     # by the observed fallback's justification.
     qualify_result = qualify(events, detections)
 
+    # ADR-0072 D1: the rule-identity set the D1 gate found for this actor —
+    # attached to whichever verdict branch below returns, regardless of tier,
+    # so false-positive suppression (ADR-0072 D4) can scope to it even on a
+    # verdict the gate did not itself route (e.g. a Tier-3/4 actor that also
+    # carries a qualifying detection). Never influences score or tier.
+    qualifying_rules = _qualifying_rule_names(qualify_result)
+
     # --- Tier 1: ALLOW + detection (unconditional — ADR-0067 D1 leaves this alone) ---
     if allow_events and has_detections:
-        return _tier1_verdict(detections, tally)
+        return _attach_qualifying_rules(_tier1_verdict(detections, tally), qualifying_rules)
 
     # --- Tier 2: ALERT/LOG with a qualifying assertion (ADR-0067 D1) ---------
     if alert_log_events and qualify_result.qualified:
-        return _tier2_verdict(qualify_result, tally, alert_log_events, resolved_posture_map)
+        return _attach_qualifying_rules(
+            _tier2_verdict(qualify_result, tally, alert_log_events, resolved_posture_map),
+            qualifying_rules,
+        )
 
     # --- Tier 3 / 4: BLOCK/DROP ------------------------------------------------
     # Reached also by actors whose ALERT/LOG mass failed the D1 gate — the
     # loudest *qualifying* class (the confirmed blocks) decides the tier.
     if block_drop_events:
-        return _tier3_or_4_verdict(block_drop_events, detections, tally)
+        return _attach_qualifying_rules(
+            _tier3_or_4_verdict(block_drop_events, detections, tally), qualifying_rules
+        )
 
     # --- Observed: no BLOCK/DROP, and nothing qualified (ADR-0067 D2) --------
     # Reaches here when: (a) all events are ALLOW with no detection [today's
     # tier-4 fallback], or (b) the ALERT/LOG population failed the D1 gate,
     # possibly mixed with ALLOW. Never claims a tier — no assertion was made.
-    return _observed_verdict(tally)
+    return _attach_qualifying_rules(_observed_verdict(tally), qualifying_rules)
 
 
 # ---------------------------------------------------------------------------

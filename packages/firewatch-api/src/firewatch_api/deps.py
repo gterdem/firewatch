@@ -141,6 +141,18 @@ def get_pipeline(request: Request) -> Any:
     return getattr(request.app.state, "pipeline", None)
 
 
+def get_decision_store(request: Request) -> Any:
+    """Provide the DecisionStore (SqliteDecisionStore) injected at app-creation time.
+
+    Returns None when no store was injected (e.g. tests that only exercise
+    other read routes); ``/decisions`` routes return 503, and the
+    ``triage_decision`` annotation / ``queue_size`` exclusion degrade to
+    "no decisions" (every actor renders as undecided) when this is None —
+    ADR-0072 D2/D8.
+    """
+    return getattr(request.app.state, "decision_store", None)
+
+
 def get_supervisor(request: Request) -> Any:
     """Provide the Supervisor injected at app-creation time (MB.4, issue #56).
 

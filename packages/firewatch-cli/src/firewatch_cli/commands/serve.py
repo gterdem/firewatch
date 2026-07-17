@@ -90,12 +90,22 @@ async def _serve(
         case_store = SqliteCaseStore(db_path=db_path)
         await case_store.init()
 
+    # ADR-0072 D2 (issue #47): decision store — separate aiosqlite connection
+    # on THIS loop (ADR-0023 §F) so /decisions and the triage_decision
+    # annotation / queue_size exclusion read/write live data.
+    from firewatch_core.adapters.decisions.sqlite_decisions import SqliteDecisionStore
+    decision_store: Any | None = None
+    if db_path is not None:
+        decision_store = SqliteDecisionStore(db_path=db_path)
+        await decision_store.init()
+
     app = create_app(
         registry=registry,
         event_store=store,
         pipeline=pipeline,
         analysis_ledger=ledger,
         case_store=case_store,
+        decision_store=decision_store,
         # No supervisor — serve starts no instance loops (read-only API).
     )
 
@@ -117,6 +127,11 @@ async def _serve(
                 await case_store.close()
             except Exception:
                 logger.warning("serve: case_store.close() raised; ignoring", exc_info=True)
+        if decision_store is not None and hasattr(decision_store, "close"):
+            try:
+                await decision_store.close()
+            except Exception:
+                logger.warning("serve: decision_store.close() raised; ignoring", exc_info=True)
         if hasattr(store, "close"):
             try:
                 await store.close()

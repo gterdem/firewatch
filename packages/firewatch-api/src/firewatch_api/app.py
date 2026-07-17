@@ -47,6 +47,7 @@ from firewatch_api.routes.analytics import router as analytics_router
 from firewatch_api.routes.banner import router as banner_router
 from firewatch_api.routes.cases import router as cases_router
 from firewatch_api.routes.config import router as config_router
+from firewatch_api.routes.decisions import router as decisions_router
 from firewatch_api.routes.discovery import router as discovery_router
 from firewatch_api.routes.escalation import router as escalation_router
 from firewatch_api.routes.export import router as export_router
@@ -70,6 +71,7 @@ def create_app(
     drift_report_path: Path | None = None,
     analysis_ledger: Any | None = None,
     case_store: Any | None = None,
+    decision_store: Any | None = None,
 ) -> FastAPI:
     """Create and configure the FireWatch FastAPI application.
 
@@ -101,6 +103,10 @@ def create_app(
             issue #534).  When *None*, all ``/cases`` routes return 503.
             Wired by the CLI commands (serve.py / run.py) on the same event
             loop as the other stores (ADR-0023 §F).
+        decision_store: Optional ``SqliteDecisionStore`` instance (ADR-0072 D2 /
+            issue #47).  When *None*, all ``/decisions`` routes return 503 and
+            every actor renders as undecided (``triage_decision: null``,
+            ``queue_size`` unaffected).  Wired the same way as ``case_store``.
 
     Returns:
         A configured ``FastAPI`` application ready to be served.
@@ -149,6 +155,9 @@ def create_app(
     # ADR-0053 D4 (issue #534): optional case store.
     # None → all /cases routes return 503.
     app.state.case_store = case_store
+    # ADR-0072 D2 (issue #47): optional triage-decisions store.
+    # None → all /decisions routes return 503; every actor renders undecided.
+    app.state.decision_store = decision_store
 
     # ── Router registration ───────────────────────────────────────────────────
     # Behavior-preserving moves (MA routes — existing tests unchanged):
@@ -194,6 +203,9 @@ def create_app(
 
     # Case file CRUD (ADR-0053 D4 / issue #534):
     app.include_router(cases_router)       # /cases and /cases/{id}/...
+
+    # Triage decisions (ADR-0072 D2/D3 / issue #47 Part 1/backend):
+    app.include_router(decisions_router)   # POST/GET /decisions, DELETE /decisions/{id}
 
     # Escalation policy registry + 24h hit-counts (issue #650, ADR-0058 D1/D6, ADR-0059 D6):
     app.include_router(escalation_router)  # GET /escalation/policy

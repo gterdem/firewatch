@@ -30,6 +30,14 @@ Security note: ``qualifying_event_severity`` is a validated ``SeverityLiteral``
 (Pydantic-enforced 5-value vocabulary) — safe to render in a justification,
 unlike free-text vendor fields such as ``SecurityEvent.rule_name``/``category``
 (ADR-0035 / #642 / #648 discipline, unaffected by this module).
+
+ADR-0072 D1 addendum: ``qualifying_alert_events`` (the full D1(b)-qualifying
+``ALERT`` events, not just the best severity) is exposed so the decider can
+build ``EscalationVerdict.qualifying_rules`` — the rule-identity set consumed
+by false-positive suppression scoping (ADR-0072 D4). Those events' ``rule_name``
+is source-declared free text (same caveat as above): it is used only for
+IDENTITY matching (equality against an operator-recorded FP decision), never
+rendered as trusted prose.
 """
 from __future__ import annotations
 
@@ -60,11 +68,18 @@ class QualifyResult:
                                      qualifying ``ALERT`` events (D1(b)), or
                                      ``None`` when qualification came only via
                                      (a), or not at all.
+    ``qualifying_alert_events``   — every ``ALERT`` event satisfying D1(b) (not
+                                     just the highest-severity one) — ADR-0072
+                                     D1: the decider derives
+                                     ``EscalationVerdict.qualifying_rules`` from
+                                     these events' ``rule_name`` plus
+                                     ``qualifying_detections[].rule_name``.
     """
 
     qualified: bool
     qualifying_detections: tuple[Detection, ...] = field(default_factory=tuple)
     qualifying_event_severity: SeverityLiteral | None = None
+    qualifying_alert_events: tuple[SecurityEvent, ...] = field(default_factory=tuple)
 
 
 def _detection_qualifies(detection: Detection) -> bool:
@@ -74,20 +89,26 @@ def _detection_qualifies(detection: Detection) -> bool:
     return detection.severity is not None and detection.severity in _QUALIFYING_SEVERITIES
 
 
-def _qualifying_event_severity(events: Iterable[SecurityEvent]) -> SeverityLiteral | None:
-    """D1(b): highest source-declared severity among qualifying ``ALERT`` events.
+def _qualifying_alert_events(events: Iterable[SecurityEvent]) -> tuple[SecurityEvent, ...]:
+    """D1(b): every ``ALERT`` event carrying source-declared severity high/critical.
 
     ``LOG`` events are never considered here — ECS ``kind:event`` is telemetry,
     not an assertion (D1 / RC4); only ``ALERT`` (ECS ``kind:alert``) qualifies.
     """
+    return tuple(
+        event
+        for event in events
+        if event.action == "ALERT" and event.severity in _QUALIFYING_SEVERITIES
+    )
+
+
+def _highest_severity(alert_events: Iterable[SecurityEvent]) -> SeverityLiteral | None:
+    """Highest-ranked severity among *alert_events* (critical > high), or None."""
     best: SeverityLiteral | None = None
     best_rank = 0
-    for event in events:
-        if event.action != "ALERT":
-            continue
+    for event in alert_events:
         severity = event.severity
-        if severity is None or severity not in _QUALIFYING_SEVERITIES:
-            continue
+        assert severity is not None  # narrowed by _qualifying_alert_events' filter
         rank = _SEVERITY_RANK[severity]
         if rank > best_rank:
             best_rank = rank
@@ -105,10 +126,12 @@ def qualify(
     ``decider.decide()`` before Tier-2 routing.
     """
     qualifying_detections = tuple(d for d in detections if _detection_qualifies(d))
-    qualifying_severity = _qualifying_event_severity(events)
+    qualifying_alert_events = _qualifying_alert_events(events)
+    qualifying_severity = _highest_severity(qualifying_alert_events)
     qualified = bool(qualifying_detections) or qualifying_severity is not None
     return QualifyResult(
         qualified=qualified,
         qualifying_detections=qualifying_detections,
         qualifying_event_severity=qualifying_severity,
+        qualifying_alert_events=qualifying_alert_events,
     )

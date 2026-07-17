@@ -118,6 +118,14 @@ export default defineConfig({
         // no bare route, but keep the SPA bypass for consistency.
         bypass: (req) => (isHtmlNavigation(req) ? '/index.html' : undefined),
       },
+      '/decisions': {
+        target: 'http://127.0.0.1:8000',
+        // POST/GET /decisions, DELETE /decisions/{id} — server-side triage
+        // decisions (ADR-0072 D3, issue #47 Part 1/backend). API-only
+        // (Accept: application/json); no bare route, but keep the SPA bypass
+        // for consistency.
+        bypass: (req) => (isHtmlNavigation(req) ? '/index.html' : undefined),
+      },
     },
   },
   test: {

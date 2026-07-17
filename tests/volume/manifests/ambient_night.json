@@ -1,0 +1,76 @@
+{
+  "_comment": "ADR-0068 D3 manifest — reviewable in one screen. Every persona's severity/category is justified against Suricata's shipped classification.config (ADR-0068 fact 1) or ADR-0069's syslog fallback recalibration (D4b). now = analysis anchor; all persona timing is expressed relative to it so the whole night is scored as one deterministic snapshot (ADR-0070 D4 windowing). Manifest-change discipline: README.md.",
+  "now": "2026-02-02T06:00:00+00:00",
+  "flood_tripwire": 10,
+  "personas": [
+    {
+      "name": "suricata_recon_scanners",
+      "kind": "suricata_ambient",
+      "actor_count": 40,
+      "min_events": 1,
+      "max_events": 4,
+      "category": "Attempted Information Leak",
+      "severity": 2,
+      "spread_hours": 8,
+      "justification": "classification.config: attempted-recon = priority 2 (ET SCAN ambient mass, ADR-0068 fact 1) -> ADR-0069 D4a normalizer maps priority 2 to 'medium'",
+      "expected": {"queue": false, "disposition": "observed"}
+    },
+    {
+      "name": "suricata_reputation_scanners",
+      "kind": "suricata_ambient",
+      "actor_count": 40,
+      "min_events": 1,
+      "max_events": 4,
+      "category": "Misc Attack",
+      "severity": 2,
+      "spread_hours": 8,
+      "justification": "classification.config: misc-attack = priority 2 (ET DROP/CINS reputation-list mass) -> ADR-0069 D4a normalizer maps priority 2 to 'medium'",
+      "expected": {"queue": false, "disposition": "observed"}
+    },
+    {
+      "name": "syslog_failed_login_scanners",
+      "kind": "syslog_ambient",
+      "actor_count": 45,
+      "min_events": 1,
+      "max_events": 4,
+      "spread_hours": 8,
+      "justification": "ADR-0069 D4b: a lone 'Failed password' line is Sigma-low ('notable event but rarely an incident'); an internet-exposed sshd sees hundreds of distinct ambient scanner IPs a night, each emitting 1-4 such lines",
+      "expected": {"queue": false, "disposition": "observed"}
+    },
+    {
+      "name": "ambient_sshd_burst_leaves",
+      "kind": "syslog_fixed_interval",
+      "actor_count": 1,
+      "count": 5,
+      "interval_minutes": 2.5,
+      "end_before_hours": 2,
+      "justification": "ADR-0070 distribution table: 5-in-10-min burst that leaves, peak ~= theta_press (5) -- borderline, contributes band score/pressure-strip visibility only, never queues",
+      "expected": {"queue": false, "disposition": "observed"}
+    },
+    {
+      "name": "isolated_inform_case",
+      "kind": "syslog_fixed_interval",
+      "actor_count": 1,
+      "count": 2,
+      "interval_minutes": 30,
+      "end_before_hours": 1,
+      "justification": "Maintainer's INFORM case (ADR-0070 distribution table): 2 attempts/30min isolated -- record + pressure strip only, never queues",
+      "expected": {"queue": false, "disposition": "observed"}
+    }
+  ],
+  "breach_overlay": {
+    "tier1_actor": {
+      "name": "tier1_breach_allow",
+      "end_before_minutes": 5,
+      "justification": "ADR-0068 D2-3 anti-suppression persona: one CEF firewall ALLOW (act=permit) + a corroborating Suricata ALERT on the same IP within the hour fires multi_source_attack -- ALLOW + any detection is Tier 1 unconditionally (ADR-0067 D1)",
+      "expected": {"queue": true, "tier": 1, "disposition": "allowed_through"}
+    },
+    "band_high_actor": {
+      "name": "band_high_port_scanner",
+      "count": 10,
+      "end_before_minutes": 10,
+      "justification": "band-axis anti-suppression persona: 10 Suricata BLOCK events across 10 distinct destination ports (port_scan +25, brute_force +30, persistence +10 = 65) crosses the HIGH band (>=51) via run_rules alone, independent of the escalation-tier axis (tier 3, blocked_persistent)",
+      "expected": {"queue": true, "tier": 3, "disposition": "blocked_persistent"}
+    }
+  }
+}

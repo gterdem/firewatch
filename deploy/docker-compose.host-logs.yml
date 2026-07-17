@@ -1,0 +1,82 @@
+# FireWatch — host-log bind-mount override (issue #5).
+#
+# Applies ON TOP of deploy/docker-compose.yml so a containerized FireWatch can
+# read the HOST's own logs (journald and/or /var/log) for endpoint source
+# plugins (linux_auth, clamav — firewatch_sdk.localhost.journald /
+# firewatch_sdk.localhost.filetail, ADR-0065). Works with any profile
+# (default / lean / rules-only): this override only adds mounts and group
+# membership to the `firewatch` service — it does NOT change the image build
+# or which profile you choose.
+#
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.host-logs.yml \
+#       --profile rules-only up -d --build
+#
+# See deploy/README.md ("Reading the host's own logs") for the full
+# walkthrough and verification steps (EICAR + a failed SSH login). Summary
+# below.
+#
+# ---------------------------------------------------------------------------
+# Choose ONE of the two mount sections below — comment out the other. Do not
+# apply both; /var/log/journal is already a subdirectory of /var/log, so
+# mounting both is redundant, not additive.
+#
+#   1. journald (default here; recommended whenever the host runs systemd —
+#      Arch, Ubuntu, Fedora, Debian) — mounts the host's journal directory
+#      PLUS /etc/machine-id. /etc/machine-id is required, not optional:
+#      journalctl inside the container decides which on-disk journal is "this
+#      machine's own" by comparing /etc/machine-id to the journal directory's
+#      name, and firewatch_sdk.localhost.journald.JournaldReader invokes
+#      journalctl with no -D/--machine flag, relying on that default
+#      resolution. Without a matching /etc/machine-id, the mounted journal
+#      files are invisible to a plain `journalctl` call.
+#
+#   2. file-tail (non-systemd host, OR a hardened Docker/Podman setup that
+#      restricts journal access specifically — e.g. an AppArmor/SELinux
+#      profile that denies the systemd-journal group but allows plain file
+#      reads) — mounts /var/log read-only. Point linux_auth's
+#      `auth_log_path` / clamav's `log_path` at the file under /var/log
+#      (default `/var/log/auth.log` on Debian/Ubuntu; RHEL/CentOS-family
+#      hosts use `/var/log/secure` instead — see the README's RHEL/CentOS
+#      caveat: that file is root-only by default there, so this path alone
+#      is not sufficient on those distros without a host-side permission
+#      change).
+#
+# ---------------------------------------------------------------------------
+# PERMISSION MODEL — read this before you start (deploy/README.md has the
+# full write-up with commands):
+#
+#   - Every mount below is `:ro`. This is a KERNEL-ENFORCED read-only bind:
+#     the container cannot write to, truncate, or delete host log files,
+#     regardless of which user is reading inside it.
+#   - Read-only does not by itself grant READ access. Linux permission checks
+#     run against each file's own owner/group/mode, independent of the mount
+#     flag. FireWatch's container runs as a non-root user (UID 1001,
+#     deploy/Dockerfile) — for it to actually be PERMITTED to read journal
+#     files (typically group `systemd-journal`, mode 0640) or auth.log
+#     (typically group `adm` on Debian/Ubuntu, mode 0640), it needs
+#     SUPPLEMENTARY GROUP membership matching the HOST's group GID.
+#     `group_add` below does exactly that: it adds a raw GID to the running
+#     container's process — the containerized equivalent of
+#     `sudo usermod -aG systemd-journal $USER` for a bare-metal invocation —
+#     WITHOUT elevating to root and WITHOUT `privileged: true`.
+#   - Find your host's actual GID and put it in deploy/.env as
+#     FW_HOST_LOG_GID (see deploy/.env.example):
+#       getent group systemd-journal   # journald path, e.g. systemd-journal:x:999:
+#       getent group adm               # file-tail path (Debian/Ubuntu), e.g. adm:x:4:
+#
+#   NEVER: `privileged: true`, `user: root`, or `cap_add: [ALL]` to work
+#   around a permission error here — that trades a scoped, auditable group
+#   grant for unrestricted host access from a container whose whole job is
+#   watching for intrusions. Fix the GID instead.
+
+services:
+  firewatch:
+    group_add:
+      - "${FW_HOST_LOG_GID:?Set FW_HOST_LOG_GID in deploy/.env to your host's systemd-journal (or adm, for file-tail) group GID -- see deploy/README.md}"
+    volumes:
+      # --- 1. journald path (systemd hosts, default) ---
+      - /var/log/journal:/var/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+      # --- 2. file-tail path (non-systemd host / hardened Docker) ---
+      # Comment out the two lines above and uncomment this one instead:
+      # - /var/log:/var/log:ro

@@ -48,8 +48,16 @@ FROM python:3.12-slim AS runtime
 WORKDIR /app
 
 # curl is needed for the Docker healthcheck probe (see docker-compose.yml).
+# systemd provides the journalctl binary the SDK's JournaldReader shells out
+# to (firewatch_sdk.localhost.journald — issue #5): reading the HOST's
+# journal from inside this container (deploy/docker-compose.host-logs.yml)
+# requires journalctl to exist in the image; the journal DATA itself is never
+# baked in — it is bind-mounted read-only at runtime (see that compose
+# override and deploy/README.md). --no-install-recommends keeps this to the
+# systemd package itself, skipping dbus/cryptsetup/etc. Measured image-size
+# delta: see deploy/README.md ("journald image size").
 # Installed before dropping to non-root so apt has permissions.
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
+RUN apt-get update && apt-get install -y --no-install-recommends curl systemd \
     && rm -rf /var/lib/apt/lists/*
 
 # Non-root user (minimal privilege — ADR-0026).

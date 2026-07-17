@@ -92,13 +92,29 @@ _FROM_IP_RE = re.compile(r"\bfrom\s+(\d{1,3}(?:\.\d{1,3}){3})", re.IGNORECASE)
 # (Previously this table used 4001/4, which is OCSF Network Activity, and 6002/6,
 # which is OCSF Application Lifecycle — both wrong; neither pair describes a
 # syslog auth line or an unclassified line. See ADR-0071 D5.)
+#
+# Severity (ADR-0069 D4(b), Sigma `level` vocabulary — the ADR-0069 D1 anchor):
+#   "SSH Brute Force" (a single `Failed password`/`publickey` line) is `low`, not
+#   `high`. Sigma `low` verbatim: "Notable event but rarely an incident. Low
+#   rated events can be relevant in high numbers or combination with others" —
+#   a lone failed login is this, letter for letter. An internet-exposed sshd
+#   sees hundreds of distinct ambient scanner IPs a night, each emitting one
+#   such line; at `high` each one qualified for Tier 2 (ADR-0067 D1(b)) — a
+#   flood channel of the same magnitude as Suricata's, out of a different pipe
+#   (ADR-0069 D1 corollary: ambient-at-volume classes map to at most `medium`).
+#   The "high numbers or combination" escalation path is owned by the
+#   correlation rules (`brute_force_then_login` critical/auto_escalate,
+#   `ids_then_brute_force` high) and ADR-0070's attempt_pressure/campaign rules
+#   — not this per-event mapping. "Sudo Failure" stays `medium` ("reviewed
+#   manually on a more frequent basis" — local-only, near-zero ambient on a
+#   healthy box). "SSH Login" / "Syslog Event" stay `info` on LOG (unchanged).
 _CATEGORY_MAP: dict[
     str,
     tuple[str, str, str | None, str | None, str | None, str | None, int, int],
 ] = {
     # category        action   severity  technique  tactic    kc-phase              capec  ocsf_cls  ocsf_cat
     "SSH Brute Force": (
-        "ALERT", "high",   "T1110",   "TA0006", "credential-access", None,  3002,    3,
+        "ALERT", "low",    "T1110",   "TA0006", "credential-access", None,  3002,    3,
     ),
     "SSH Login": (
         "LOG",   "info",   None,      None,     None,                None,  3002,    3,

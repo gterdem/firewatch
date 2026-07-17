@@ -40,12 +40,43 @@ export interface ScoreBreakdownItem {
 }
 
 /**
- * ai_status values returned by the pipeline.
- * "unavailable" / "disabled" = rule-only scoring (ADR-0015 graceful degradation).
- * "skipped" = caller explicitly passed ?ai=false (issue #268 fast path — no AI ran).
- *   The server MUST NOT claim success when the engine was not called (ADR-0035).
+ * Per-analysis ai_status values (ADR-0066 Layer 2 — the analog of ECS `event.outcome`,
+ * extended with *why-not-attempted*). ONE closed vocabulary across both pipeline paths:
+ *   "active"      — the AI engine analyzed this and produced a verdict (success).
+ *   "disabled"    — AI is turned off in config; rules scored this (choice, operator).
+ *   "skipped"     — this request asked for rules-only, ?ai=false (choice, caller).
+ *   "no_input"    — there was nothing to send to the AI; rules scored this (non-event).
+ *   "unavailable" — AI was wanted but the engine failed/was unreachable
+ *                   (fault — the only state that means "go fix something").
+ * The server MUST NOT claim success when the engine was not called (ADR-0035).
+ * Open union (| string): unrecognized future values degrade to the neutral
+ * "did not run" treatment at every render site — never assumed to be a fault.
+ *
+ * NOTE: this is a DIFFERENT vocabulary from the `/health` `ai` field
+ * (see `HealthAiStatus` below) — that layer's fault word is "unreachable", not
+ * "unavailable". Do not conflate the two when reading `HealthResponse.ai`.
  */
-export type AiStatus = 'active' | 'unavailable' | 'disabled' | 'error' | 'skipped' | string
+export type AiStatus =
+  | 'active'
+  | 'unavailable'
+  | 'disabled'
+  | 'error'
+  | 'skipped'
+  | 'no_input'
+  | string
+
+/**
+ * `/health` `ai` field — ADR-0066 Layer 1 engine (administrative vs operational) state,
+ * mirroring RFC 2863's `ifAdminStatus`/`ifOperStatus` split:
+ *   "active"      — AI is on and the engine answered the probe.
+ *   "disabled"    — AI is off because the operator turned it off — nothing is wrong.
+ *   "unreachable" — AI is on but the engine cannot be reached — go fix something.
+ * This is the ONLY vocabulary the global AI-status chip should key off of; the
+ * per-analysis `AiStatus` (Layer 2, above) drives per-row/per-analysis labels only.
+ * Open union (| string): unrecognized future values degrade to the neutral "did not
+ * run" treatment (never assumed to be a fault) — see `resolveHealthAiState`.
+ */
+export type HealthAiStatus = 'active' | 'disabled' | 'unreachable' | string
 
 /**
  * Threat level vocabulary (ADR-0024 canonical values).
@@ -280,12 +311,19 @@ export interface StatsResponse {
 }
 
 /**
- * Response from GET /health (ADR-0029 D1).
+ * Response from GET /health (ADR-0029 D1; tri-state `ai` field per ADR-0066).
  * ollama_connected / ollama_model: backend field names are unchanged (rename DEFERRED per #135).
  * User-facing label is "Local AI" (ADR-0022).
  */
 export interface HealthResponse {
   status: string
+  /**
+   * @deprecated Retained for compatibility only — `true` iff `ai === "active"`.
+   * Branch on `ai` (below) instead; this boolean collapses "off by choice" and
+   * "unreachable" into one value, which is exactly the honesty bug ADR-0066 fixes.
+   * It remains valid to use ONLY as a loading-time fallback while `health` itself
+   * has not yet arrived (i.e. before a HealthResponse exists at all).
+   */
   ollama_connected: boolean
   ollama_model: string | null
   db_ok: boolean
@@ -301,6 +339,12 @@ export interface HealthResponse {
    * issue before implementing backend exposure.
    */
   last_scored_at?: string | null
+  /**
+   * Tri-state AI engine status (ADR-0066 Layer 1) — the authoritative source for
+   * all AI-status presentation. See `HealthAiStatus` for the vocabulary. Always
+   * present on live `/health` responses (packages/firewatch-api routes/meta.py).
+   */
+  ai: HealthAiStatus
 }
 
 /**

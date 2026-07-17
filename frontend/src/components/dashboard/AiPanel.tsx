@@ -9,10 +9,14 @@
  *   - ai_status unavailable/disabled → show rule-based summary
  *   - insights null → skip the insights section
  *
- * AI status derivation mirrors AiSummaryPanel (MF-3 #160 / fix #180):
- *   health provided + ollama_connected=true  → "AI active"
- *   health provided + ollama_connected=false → "rules-only"
- *   health=null (loading/fetch failed)       → falls back to top.ai_status
+ * AI status derivation mirrors AiSummaryPanel (MF-3 #160 / fix #180; three-state
+ * rework issue #41 / ADR-0066):
+ *   health provided + health.ai='active'      → "AI active" (green)
+ *   health provided + health.ai='disabled'    → "AI off · rules-only" (neutral grey)
+ *   health provided + health.ai='unreachable' → "AI unreachable · rules-only" (amber)
+ *   health=null (loading/fetch failed)        → falls back to top.ai_status
+ *                                                (boolean `ollama_connected` is NOT
+ *                                                used — it collapses the tri-state)
  *
  * SECURITY (ADR-0029 D3): source_ip and ai_insights are attacker-controlled.
  * Rendered as text nodes only — never via dangerouslySetInnerHTML.
@@ -21,6 +25,7 @@
  */
 
 import type { ThreatScore, HealthResponse } from '../../api/types'
+import { resolveHealthAiState, AI_STATUS_COPY } from '../aiStatusCopy'
 
 interface AiPanelProps {
   /** All threats from GET /threats — panel picks the top scored actor. */
@@ -45,12 +50,30 @@ export default function AiPanel({ threats, health }: AiPanelProps) {
   // Top scored actor
   const top = [...threats].sort((a, b) => b.score - a.score)[0]
 
-  // Derive AI active state from health (authoritative, mirrors AiSummaryPanel — fix #180).
-  // health=null means health is still in flight: fall back to threat-derived ai_status.
-  const aiActive =
+  // Derive AI state from health.ai (authoritative tri-state, ADR-0066), mirroring
+  // AiSummaryPanel. health=null means health is still in flight: fall back to
+  // threat-derived ai_status (boolean `ollama_connected` is NOT used directly —
+  // it would collapse "off by choice" and "unreachable" into one value).
+  const aiState: 'active' | 'disabled' | 'unreachable' =
     health != null
-      ? health.ollama_connected
+      ? resolveHealthAiState(health)
       : top.ai_status === 'active'
+        ? 'active'
+        : 'disabled'
+
+  const aiActive = aiState === 'active'
+  const statusColor =
+    aiState === 'active'
+      ? 'var(--fw-green)'
+      : aiState === 'unreachable'
+        ? 'var(--fw-accent)'
+        : 'var(--fw-t3)'
+  const statusLabel =
+    aiState === 'active'
+      ? AI_STATUS_COPY.active
+      : aiState === 'unreachable'
+        ? AI_STATUS_COPY.unreachable
+        : AI_STATUS_COPY.disabled
 
   const hasInsights = Array.isArray(top.ai_insights) && top.ai_insights.length > 0
 
@@ -93,11 +116,11 @@ export default function AiPanel({ threats, health }: AiPanelProps) {
           style={{
             fontFamily: 'var(--fw-font-mono)',
             fontSize: 11,
-            color: aiActive ? 'var(--fw-green)' : 'var(--fw-t3)',
+            color: statusColor,
           }}
           data-testid="ai-panel-status"
         >
-          {aiActive ? 'AI active' : 'rules-only'}
+          {statusLabel}
         </span>
       </div>
 
@@ -157,13 +180,15 @@ export default function AiPanel({ threats, health }: AiPanelProps) {
         </ul>
       )}
 
-      {/* Fallback when AI is not active */}
+      {/* Fallback when AI is not active — copy differs by WHY (choice vs fault, ADR-0066) */}
       {!aiActive && !hasInsights && (
         <p
-          style={{ fontSize: 12, color: 'var(--fw-t3)', margin: 0 }}
+          style={{ fontSize: 12, color: statusColor, margin: 0 }}
           data-testid="ai-panel-degraded"
         >
-          AI offline — rule-based scoring. Score: {top.score}.
+          {aiState === 'unreachable'
+            ? `AI unreachable — rule-based scoring continues. Score: ${top.score}.`
+            : `AI off — rule-based scoring. Score: ${top.score}.`}
         </p>
       )}
     </div>

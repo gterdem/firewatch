@@ -23,6 +23,12 @@ Oracle derivation (provenance):
     (Authentication / Identity & Access Management -- corrected by #76, was
     wrongly 4001/4)
   - MITRE ATT&CK v15 T1110 / TA0006 (brute-force / credential-access)
+  - ADR-0069 D4(b) / D7 (issue #69, this session): the syslog FALLBACK-path SSH
+    Brute Force severity moves high -> low (Sigma `low` verbatim: "notable
+    event but rarely an incident" -- a lone failed login, letter for letter).
+    The CEF NUMERIC path (fixtures 1-3 below: Fortinet/PaloAlto/Generic) is
+    UNCHANGED -- this file is the regression net proving the recalibration did
+    not leak into the CEF path (D4(d)).
 
 Test IPs: RFC 5737 documentation ranges ONLY (192.0.2.0/24, 198.51.100.0/24,
 203.0.113.0/24) -- never real/routable IPs.
@@ -294,7 +300,11 @@ _RFC5424_LINE = (
 # Expected values:
 #   "Failed password for root from 198.51.100.5" -> SSH brute-force pattern
 #   -> ALERT (ADR-0012: IDS detection)
-#   -> severity=high (SSH brute-force is high severity)
+#   -> severity=low (ADR-0069 D4(b), issue #69: a lone Failed password/publickey
+#      line is Sigma `low` verbatim -- "notable event but rarely an incident";
+#      ambient at volume on a healthy sensor, so must not qualify Tier 2 alone
+#      (ADR-0067 D1(b)). Was `high` before #69 -- this is a fallback-path pin
+#      move, per D7's enumeration; the CEF-path fixtures above stay unchanged.)
 #   -> source_ip extracted from "from 198.51.100.5" in MSG
 #   -> MITRE T1110 / TA0006 / credential-access (ATT&CK v15)
 #   -> OCSF class_uid=3002 (Authentication), category_uid=3 (Identity & Access
@@ -302,7 +312,7 @@ _RFC5424_LINE = (
 #      ("regardless of success"), corrected by issue #76 (was wrongly 4001/4).
 _ORACLE_RFC5424 = {
     "action": "ALERT",
-    "severity": "high",
+    "severity": "low",
     "source_ip": "198.51.100.5",
     "attack_technique": "T1110",
     "attack_tactic": "TA0006",
@@ -358,10 +368,12 @@ _RFC3164_LINE = (
     "Failed password for root from 203.0.113.5 port 44321 ssh2"
 )
 
-# Expected values (same mapping as RFC 5424 fallback but via RFC 3164 framing):
+# Expected values (same mapping as RFC 5424 fallback but via RFC 3164 framing;
+# severity=low per ADR-0069 D4(b) / issue #69 -- see the RFC 5424 fixture above
+# for the full justification):
 _ORACLE_RFC3164 = {
     "action": "ALERT",
-    "severity": "high",
+    "severity": "low",
     "source_ip": "203.0.113.5",
     "attack_technique": "T1110",
     "attack_tactic": "TA0006",

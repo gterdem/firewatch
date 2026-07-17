@@ -55,6 +55,7 @@ const HEALTH_AI_ONLINE: HealthResponse = {
   ollama_connected: true,
   ollama_model: 'llama3.2',
   db_ok: true,
+  ai: 'active',
 }
 
 const HEALTH_AI_OFFLINE: HealthResponse = {
@@ -62,6 +63,7 @@ const HEALTH_AI_OFFLINE: HealthResponse = {
   ollama_connected: false,
   ollama_model: null,
   db_ok: true,
+  ai: 'unreachable',
 }
 
 /** Single HIGH-threat actor — 90% block rate → "block" recommendation. */

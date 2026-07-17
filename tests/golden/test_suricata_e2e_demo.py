@@ -65,6 +65,13 @@ _RFC5737_NETWORKS = [
 _DEMO_RECEIVED_AT = datetime(2026, 1, 15, 10, 30, 0, tzinfo=timezone.utc)
 _DEMO_SOURCE_ID = "demo-sensor"
 
+# issue #82: `detect()`'s `now` is now required and keyword-only (no wall-clock
+# default). The demo feed is dated 2026-01-15; anchoring `now` a full year
+# later decays any R1/R2/R3 (ADR-0070) attempt-intensity contribution to ~0
+# (HALF_LIFE=30min => ~17,500 half-lives), reproducing this suite's prior
+# behavior under the removed real-wall-clock default.
+_FAR_FUTURE_NOW = datetime(2027, 1, 15, 10, 30, 0, tzinfo=timezone.utc)
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -126,7 +133,7 @@ class _DisabledAIEngine:
 def _score_events(events: list[SecurityEvent]) -> tuple[int, str, list[str], list[str]]:
     """Run the full deterministic scoring path (rules + detections + merge, no AI)."""
     rule_score, attack_types = run_rules(events)
-    detections = detect(events)
+    detections = detect(events, now=_FAR_FUTURE_NOW)
     detection_boost = sum(d.score_delta for d in detections)
     final_score, level, _deriv = merge_score(rule_score, None, detection_boost=detection_boost)
     return final_score, level, attack_types, [d.rule_name for d in detections]

@@ -49,7 +49,7 @@ Skill gate: ai-engine-invariants loaded before editing this file.
 """
 import logging
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from firewatch_sdk import Detection, SecurityEvent
 from firewatch_core.attempts import (
@@ -466,25 +466,26 @@ need the pipeline's anchored ``now``. Run separately from ``BUILTIN_RULES``
 so a single misbehaving rule never aborts the others."""
 
 
-def detect(events: list[SecurityEvent], now: datetime | None = None) -> list[Detection]:
+def detect(events: list[SecurityEvent], *, now: datetime) -> list[Detection]:
     """Run all built-in correlation rules against a per-IP event list.
 
     ``now`` (ADR-0070 Revision 1 D2/D3, "Module shape") is the pipeline's
     anchored evaluation instant, consumed by ``TIME_ANCHORED_RULES``
     (R1 ``attempt_pressure``, R2 ``attack_in_progress``, R3 ``campaign``) to
-    compute decayed intensity. Optional, defaulting to the real wall clock,
-    mirroring ``Pipeline.__init__``'s own ``clock`` parameter (issue #52) —
-    this keeps every existing ``detect(events)`` call site (golden/e2e tests
-    included) working unchanged, since none of their fixture timestamps are
-    recent enough for R1/R2/R3 to fire under a real-wall-clock default; the
-    pipeline always passes its own anchored ``now`` explicitly in production,
-    and no rule below ever reads the wall clock a second time on its own.
+    compute decayed intensity. Required and keyword-only (issue #82): an
+    optional wall-clock-fallback ``now`` is a footgun by construction — any
+    caller that forgets ``now=`` would silently degrade into non-deterministic,
+    wall-clock-dependent scoring with no signal from pyright, exactly how the
+    ``GET /escalation/policy`` determinism defect shipped (issue #53 / PR #81,
+    fixed in commit ``4afa29c``). Making ``now`` required closes that class:
+    a forgotten call site now fails at type-check, not silently at runtime.
+    The pipeline computes its own anchored ``now`` once and threads it through
+    (``Pipeline.analyze_ip`` → this function), and no rule below ever reads
+    the wall clock a second time on its own.
 
     Failed rules are logged and skipped — they never abort the pipeline. Returns a flat
     list of all detections produced.
     """
-    if now is None:
-        now = datetime.now(timezone.utc)
     out: list[Detection] = []
     for rule in BUILTIN_RULES:
         try:

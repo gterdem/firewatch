@@ -257,6 +257,18 @@ def _normalize_syslog_fallback(
         https://attack.mitre.org/techniques/T1110/
       T1078 / TA0004: Valid Accounts / Privilege Escalation
         https://attack.mitre.org/techniques/T1078/
+
+    Severity (ADR-0069 D4(b) -- one defect, two files; the CEF numeric path
+    above is untouched):
+      "SSH Brute Force" (a single `Failed password`/`publickey` line) is `low`,
+      not `high`. Sigma `low` verbatim: "Notable event but rarely an incident.
+      Low rated events can be relevant in high numbers or combination with
+      others" -- a lone failed login is this, letter for letter. The
+      "high numbers or combination" escalation path is owned by the
+      correlation rules (`brute_force_then_login` critical/auto_escalate,
+      `ids_then_brute_force` high) and ADR-0070's attempt_pressure/campaign
+      rules -- not this per-event mapping. "Sudo Failure" stays `medium`;
+      "SSH Login" / generic syslog stay `info` on LOG (unchanged).
     """
     action: ActionLiteral
     severity: SeverityLiteral
@@ -269,7 +281,7 @@ def _normalize_syslog_fallback(
     if m:
         source_ip = m.group(1)
         action = "ALERT"
-        severity = "high"
+        severity = "low"
         category = "SSH Brute Force"
         attack_technique = "T1110"
         attack_tactic = "TA0006"

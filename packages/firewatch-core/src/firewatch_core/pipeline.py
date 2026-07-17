@@ -152,10 +152,10 @@ _GENERATING_HEARTBEAT_INTERVAL_S = 2.0
 #          dedicated cross-file test.
 # W_CAMPAIGN feeds detect() — the correlation rules' own fetch horizon
 #          (`ids_then_brute_force`, `brute_force_then_login`,
-#          `multi_source_attack`, `ssh_login_failure_intense`, R1
-#          `attempt_pressure`). Revision 1 (ADR-0070): this is also the
-#          episode-counting memory the future R2/R3 campaign rules (#54) will
-#          use for recidivism — "is this actor WAGING A CAMPAIGN?", a longer
+#          `multi_source_attack`, R1 `attempt_pressure`, R2
+#          `attack_in_progress`, R3 `campaign`). Revision 1 (ADR-0070, issue
+#          #54): this is also the episode-counting memory R3 `campaign` uses
+#          for recidivism — "is this actor WAGING A CAMPAIGN?", a longer
 #          memory than the state window's "current state" question. λ̂ itself
 #          needs no horizon (an event this old has already decayed to ~0 at
 #          H=30min); the horizon exists so recidivism has bounded, declared

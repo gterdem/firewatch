@@ -41,8 +41,9 @@ AC-constants  H, theta_press SHALL be named, code-declared beside W_STATE/
 
 AC-retire-burst  `_ssh_login_failure_burst` SHALL be removed in the same PR;
               MUST-NOT survive in any renamed/threshold-tweaked form.
-              `_ssh_login_failure_intense` and `_ssh_login_failure_events`
-              SHALL stand until #54.
+              `_ssh_login_failure_intense` and `_ssh_login_failure_events` stood
+              until #54, which retires both (see test_issue_54_attack_in_progress_campaign.py
+              for those retirement pins).
               -> TestSshLoginFailureBurstRetired
 
 Fixture IPs: all via `make_event`'s default (RFC 5737, 203.0.113.5) — never
@@ -359,15 +360,16 @@ class TestSshLoginFailureBurstRetired:
         assert policy.severity is None
         assert policy.auto_escalate is False
 
-    def test_ssh_login_failure_intense_still_present(self):
-        """Stands until #54 (ADR-0070 Revision-1 retire list)."""
-        assert hasattr(detector_mod, "_ssh_login_failure_intense")
-        names = {rule.__name__ for rule in detector_mod.BUILTIN_RULES}
-        assert "_ssh_login_failure_intense" in names
+    def test_ssh_login_failure_intense_retired_by_issue_54(self):
+        """Issue #54 (ADR-0070 Revision-1 retire list) retires this rule too —
+        R2 `attack_in_progress` subsumes it. See
+        test_issue_54_attack_in_progress_campaign.py for the full retirement
+        pins (regression: the same 45-in-10-min shape still queues, via R2)."""
+        assert not hasattr(detector_mod, "_ssh_login_failure_intense")
 
-    def test_shared_ssh_login_failure_events_helper_still_present(self):
-        """Stands until #54 — shared by ssh_login_failure_intense."""
-        assert hasattr(detector_mod, "_ssh_login_failure_events")
+    def test_shared_ssh_login_failure_events_helper_retired_by_issue_54(self):
+        """The then-orphaned helper is retired alongside its only caller."""
+        assert not hasattr(detector_mod, "_ssh_login_failure_events")
 
     def test_ssh_brute_force_category_union_frozensets_untouched(self):
         """ADR-0071's retirement, not this issue's — leave alone."""

@@ -363,6 +363,15 @@ class TestNormalizeCEF:
         event = self.plugin.normalize(raw, source_id="fw-edge")
         assert event.action == "BLOCK"
 
+    def test_cef_numeric_severity_path_unchanged_by_issue_69(self) -> None:
+        """Must-NOT (issue #69 / ADR-0069 D4(d)): the CEF numeric (ArcSight 0-10)
+        banding is untouched by the fallback-path recalibration -- full-pipeline
+        regression through normalize(), not just cef_severity_to_canonical()
+        in isolation."""
+        raw = _raw(CEF_FORTINET_DENY)  # CEF Severity=7 -> "high" (7-8 band)
+        event = self.plugin.normalize(raw, source_id="fw-edge")
+        assert event.severity == "high"
+
     def test_source_ip_from_cef_src(self) -> None:
         """source_ip comes from CEF Extension 'src' field (CEF dictionary standard)."""
         raw = _raw(CEF_FORTINET_DENY)
@@ -516,6 +525,54 @@ class TestSyslogFallback:
         raw = _raw(RFC3164_NON_CEF)
         event = self.plugin.normalize(raw, source_id="fw-edge")
         assert event.action == "ALERT"
+
+    def test_rfc5424_ssh_bruteforce_fallback_severity_is_low(self) -> None:
+        """ADR-0069 D4(b): a lone Failed password/publickey line -> severity='low'
+        on the fallback path, not 'high' -- Sigma `low` verbatim: "notable event
+        but rarely an incident"; ambient at volume on a healthy sensor, so must
+        not qualify Tier 2 alone (ADR-0067 D1(b))."""
+        raw = _raw(RFC5424_NON_CEF)
+        event = self.plugin.normalize(raw, source_id="fw-edge")
+        assert event.severity == "low"
+
+    def test_rfc3164_ssh_bruteforce_fallback_severity_is_low(self) -> None:
+        """Same recalibration via RFC 3164 framing (ADR-0069 D4(b))."""
+        raw = _raw(RFC3164_NON_CEF)
+        event = self.plugin.normalize(raw, source_id="fw-edge")
+        assert event.severity == "low"
+
+    def test_sudo_failure_fallback_severity_is_medium(self) -> None:
+        """ADR-0069 D4(b): Sudo Failure stays 'medium' on the fallback path --
+        asserted, not assumed -- unaffected by the SSH brute-force downshift."""
+        sudo_line = (
+            "<134>Jan 15 10:00:05 gateway sudo[999]: "
+            "pam_unix(sudo:auth): authentication failure; user=baduser"
+        )
+        raw = _raw(sudo_line)
+        event = self.plugin.normalize(raw, source_id="fw-edge")
+        assert event.severity == "medium"
+        assert event.action == "ALERT"
+        assert event.category == "Sudo Failure"
+
+    def test_ssh_login_fallback_severity_is_info(self) -> None:
+        """ADR-0069 D4(b): SSH Login stays 'info' on LOG -- asserted, not assumed."""
+        login_line = (
+            "<134>1 2026-01-15T10:00:01Z gateway sshd 1234 - - "
+            "Accepted password for admin from 203.0.113.5 port 55000 ssh2"
+        )
+        raw = _raw(login_line)
+        event = self.plugin.normalize(raw, source_id="fw-edge")
+        assert event.severity == "info"
+        assert event.action == "LOG"
+
+    def test_generic_fallback_severity_is_info(self) -> None:
+        """ADR-0069 D4(b): unrecognized syslog line stays 'info' on LOG --
+        asserted, not assumed."""
+        generic_line = "<134>Jan 15 10:00:10 gateway kernel: link status changed on eth0"
+        raw = _raw(generic_line)
+        event = self.plugin.normalize(raw, source_id="fw-edge")
+        assert event.severity == "info"
+        assert event.action == "LOG"
 
 
 # ---------------------------------------------------------------------------

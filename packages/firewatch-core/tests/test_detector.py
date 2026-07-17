@@ -1,8 +1,13 @@
-"""Correlation detector tests (EARS-3 — 5 rules, verbatim thresholds, source_type keyed).
+"""Correlation detector tests (EARS-3 — 3 source_type/category-keyed rules,
+verbatim thresholds; R1/R2/R3 have their own dedicated test files).
 
 `_sustained_attack` and `_ssh_login_failure_burst` retired in issue #53 (ADR-0070
 Revision 1 R1 `attempt_pressure` subsumes both) — see test_issue_53_attempt_pressure.py
-for R1's own tests and the retirement pins.
+for R1's own tests and the retirement pins. `_ssh_login_failure_intense` (+ the
+then-orphaned `_ssh_login_failure_events` helper) retired in issue #54 (R2
+`attack_in_progress` subsumes it) — see
+test_issue_54_attack_in_progress_campaign.py for R2/R3's tests and the
+retirement pins.
 """
 from datetime import datetime, timedelta, timezone
 
@@ -179,94 +184,6 @@ def test_multi_source_attack_single_type_no_fire():
         make_event(source_type="suricata", timestamp=T0 + timedelta(minutes=5)),
     ]
     assert _by_name(detect(events), "multi_source_attack") is None
-
-
-def _ssh_failure_events(count: int, *, span_minutes: float = 0.0):
-    """N 'SSH Login Failure' ALERT/low events, one IP, spread across
-    ``span_minutes`` (default: all at the same instant — the tightest
-    possible cadence, i.e. definitely within any window threshold)."""
-    step = timedelta(minutes=span_minutes / max(count - 1, 1)) if span_minutes else timedelta(0)
-    return [
-        make_event(
-            source_type="linux_auth", category="SSH Login Failure", action="ALERT",
-            severity="low", timestamp=T0 + step * i,
-        )
-        for i in range(count)
-    ]
-
-
-class TestSshLoginFailureIntense:
-    """issue #3 amendment (2026-07-15 threshold correction, PR #73 held batch):
-    the INTERIM high-intensity rule (stopgap pending #53/#54). >=45 events,
-    one IP, <=10 min — an active brute force, not ambient background. MUST
-    reach Tier 2.
-
-    Threshold is 45, not 30: the end-state model (ADR-0070 Rev-1 / issue #54)
-    queues at a decayed-intensity θ_high=40; a uniform 30-in-10-min burst only
-    peaks at λ̂≈26.8 (below θ_high), so a ≥30 interim rule would queue actors
-    the end state excludes and un-queue them the moment #53/#54 land. ≥45
-    peaks at λ̂≈40.2 ≥ θ_high, so interim and end-state agree.
-    """
-
-    def test_fires_at_forty_five(self):
-        events = _ssh_failure_events(45)
-        d = _by_name(detect(events), "ssh_login_failure_intense")
-        assert d is not None
-
-    def test_registered_high_and_auto_escalate(self):
-        events = _ssh_failure_events(45)
-        d = _by_name(detect(events), "ssh_login_failure_intense")
-        assert d is not None
-        assert d.severity == "high"
-        assert d.auto_escalate is True
-
-    def test_below_threshold_at_forty_four(self):
-        events = _ssh_failure_events(44)  # boundary: 44 < 45
-        assert _by_name(detect(events), "ssh_login_failure_intense") is None
-        # Still ambient pressure (attempt_pressure, R1's replacement for the
-        # retired ssh_login_failure_burst — 44 simultaneous attempts >> θ_press).
-        assert _by_name(detect(events, now=T0), "attempt_pressure") is not None
-
-    def test_too_long_span_no_fire(self):
-        events = [
-            make_event(
-                source_type="linux_auth", category="SSH Login Failure", action="ALERT",
-                severity="low", timestamp=T0 + timedelta(minutes=15 * i),
-            )
-            for i in range(45)  # spans well over 10 min
-        ]
-        assert _by_name(detect(events), "ssh_login_failure_intense") is None
-
-    def test_requires_alert_action_not_log(self):
-        events = [
-            make_event(
-                source_type="linux_auth", category="SSH Login Failure", action="LOG",
-                timestamp=T0 + timedelta(seconds=i),
-            )
-            for i in range(45)
-        ]
-        assert _by_name(detect(events), "ssh_login_failure_intense") is None
-
-    def test_intense_burst_reaches_tier_2(self):
-        """The property that matters: an actor whose detection is the
-        intense rule MUST pass the real ADR-0067 D1(a) qualify gate."""
-        from firewatch_core.escalation.qualify import qualify
-
-        events = _ssh_failure_events(45)
-        detections = detect(events)
-        assert any(d.rule_name == "ssh_login_failure_intense" for d in detections)
-        result = qualify(events, detections)
-        assert result.qualified is True
-
-    def test_both_attempt_pressure_and_intense_fire_together(self):
-        """>=45 events also satisfies R1 attempt_pressure's own theta_press
-        condition — both detections are expected (not mutually exclusive;
-        the intense Detection is what carries the qualifying severity)."""
-        events = _ssh_failure_events(45)
-        detections = detect(events, now=T0)
-        names = {d.rule_name for d in detections}
-        assert "attempt_pressure" in names
-        assert "ssh_login_failure_intense" in names
 
 
 def test_failing_rule_is_swallowed(monkeypatch):

@@ -67,6 +67,10 @@ class ClamAVSource:
             display_name="ClamAV Antivirus",
             version=_VERSION,
             flavor="pull",
+            # ADR-0067 D6 (issue #75): declared enforcement-posture default. ClamAV
+            # detects malware on disk but does not remove/quarantine it (ADR-0067 D4 —
+            # a FOUND detection is a host-attested, known-bad outcome; no action taken).
+            enforcement="detect_only",
             # ADR-0060: canonical SecurityEvent fields this source populates. ClamAV is a
             # host-based detector — no network/HTTP/DNS/TLS fields, and no real source_ip
             # (always ""), so both are deliberately OMITTED here (never declared just

@@ -143,6 +143,13 @@ class TestEntryPointDiscovery:
         assert plugin.metadata().type_key == "suricata"
         assert plugin.metadata().flavor == "pull"
 
+    def test_metadata_enforcement_default_is_observe(self) -> None:
+        """ADR-0067 D6 (issue #75): Suricata ships M1 as a watch-only IDS sensor."""
+        from firewatch_suricata.plugin import SuricataSource
+
+        plugin = SuricataSource()
+        assert plugin.metadata().enforcement == "observe"
+
     def test_zero_core_edits_via_loader(self) -> None:
         """The core loader discovers suricata without any patch — the real test of modularity."""
         from firewatch_core.loader import load_source_plugins

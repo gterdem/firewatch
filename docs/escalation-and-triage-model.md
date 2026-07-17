@@ -32,6 +32,7 @@ auto-block) is a deliberate later phase, gated behind operator consent.
 1. [The core idea — rules first, AI second](#1-the-core-idea)
 2. [The 4-tier action model](#2-the-4-tier-action-model)
    - [2.1 The assertion gate and the observed stratum](#21-the-assertion-gate-and-the-observed-stratum)
+   - [2.2 Enforcement posture — honest Tier-2 labels](#22-enforcement-posture-honest-tier-2-labels)
 3. [block_status — what it tells an analyst](#3-block_status)
 4. [The Triage banner — what you see and what to do](#4-the-triage-banner)
 5. [SIEM now, SOAR later](#5-siem-now-soar-later)
@@ -90,7 +91,7 @@ attached to the actor's `ThreatScore` as an `escalation` sub-object.
 | Tier | Actions that trigger it | Dashboard label (issue #6 — see `escalationCopy.ts`) | Plain-language meaning | `block_status` | Banner-worthy? |
 |---|---|---|---|---|---|
 | **1** | `ALLOW` + a high-fidelity detection | **Got through — possible breach** | A correlation rule fired *and* the request got past your defenses. The attack may have reached your system — highest priority. Unconditional — the breach signal, never gated. | `allowed` | Yes — loudest |
-| **2** | `ALERT` or `LOG` **with a qualifying signal** (see §2.1) | **Flagged — needs review** *(ratified interim label — PR #38 architect ruling; see note below)* | A trusted correlation rule, or a source-declared high/critical severity, flagged this actor as hostile. This label makes no claim about whether the traffic was actually blocked. | `unknown` | Yes |
+| **2** | `ALERT` or `LOG` **with a qualifying signal** (see §2.1) | **Flagged — needs review** *(the `block_status_unknown` cell — narrows to posture-specific labels, §2.2)* | A trusted correlation rule, or a source-declared high/critical severity, flagged this actor as hostile. This label makes no claim about whether the traffic was actually blocked. | `unknown` | Yes |
 | **3** | `BLOCK` / `DROP`, persistent (3 or more events) | **Blocked — kept trying** | Your defenses stopped every attempt, but this attacker keeps coming back. Consider a longer-term IP block. | `blocked` | No — informational |
 | **4** | `BLOCK` / `DROP`, one-off | **Blocked — didn't keep trying** | Your defenses stopped every attempt, and this one didn't keep coming back. No action needed. | `blocked` | No — informational |
 | **None** — **observed** | `ALERT`/`LOG` with **no qualifying signal**, or `ALLOW`-only with no detection | **On the record — no escalation claim** | Nothing asserted this actor is hostile. Not dropped — still scored on the severity-band axis, still visible in Network Logs. | reflects the truthful state (`unknown` / `allowed`) | No — the calm, honest default |
@@ -110,18 +111,16 @@ Alert`, which asserts the request was **not blocked** — not unknown); it now r
 recorded in this window," an engine-attested tally fact, not a claim about a downstream control
 FireWatch cannot see (ADR-0067 D6: "a passive sensor cannot see a downstream block").
 
-The disposition **key** `block_status_unknown` itself is not renamed: ADR-0067 D6 ("Enforcement
-posture: plugin-declared default, core-owned per-instance override") states "`enforce` or
-undeclared → `block_status_unknown`, which becomes rare and genuinely meaningful" — every instance
-today is posture-undeclared (the posture axis, #44, is M3/not-started), so this key is D6's correct
-end-state label over an empty posture map. **"Flagged — needs review" is ratified as the settled
-interim Tier-2 label** (architect ruling, PR #38) — it states only what D1 establishes (a
-qualifying detection/assertion exists) and makes no claim either way about block status. It is
-"interim" in that ADR-0067 D6's posture-aware vocabulary (#44/#45, M3) will later split it into
-posture-specific labels (`not_blocked_passive` / `detected_no_action` / a narrowed
-`block_status_unknown`) — the same interim status the disposition key carries. The **observed**
-row is not a fifth tier and carries no urgency claim at all — see
-[§2.1](#21-the-assertion-gate-and-the-observed-stratum).
+The disposition **key** `block_status_unknown` itself is not renamed. ADR-0067 D6 ("Enforcement
+posture: plugin-declared default, core-owned per-instance override") + its Amendment 1 govern this
+cell: as of issue #75, `block_status_unknown` is emitted only for **undeclared** posture or
+**mixed** postures across an actor's contributing instances — a **narrower**, genuinely-unknown
+cell than before. **"Flagged — needs review" is ratified as the settled label for that narrowed
+cell** (architect ruling, PR #38) — it states only what D1 establishes (a qualifying
+detection/assertion exists) and makes no claim either way about block status. A declared, uniform
+posture instead resolves to one of three honest, posture-specific labels — see
+[§2.2](#22-enforcement-posture-honest-tier-2-labels). The **observed** row is not a fifth tier and
+carries no urgency claim at all — see [§2.1](#21-the-assertion-gate-and-the-observed-stratum).
 
 The wording in the "Dashboard label" column is defined in exactly one place in code —
 `frontend/src/lib/escalationCopy.ts` — so a future rewording is a one-file edit, not a hunt across
@@ -163,6 +162,44 @@ anchors OCSF 1.8.0's `action_id=3 Observed` — "observed, but neither explicitl
 This is common with IDS and EDR controls." Nothing is dropped: a persistent low-severity scanner
 still accumulates score on the band axis and enters triage on merit, and every observed event
 remains fully visible in Network Logs.
+
+### 2.2 Enforcement posture — honest Tier-2 labels
+
+A qualified Tier-2 verdict's generic "block status unknown" label narrows to an honest,
+posture-specific one once core knows what the producing control **could have done** —
+its declared **enforcement posture** (ADR-0067 D6, issue #75). Each source plugin
+declares a default in its own metadata (`SourceMetadata.enforcement`); core resolves it
+into a per-instance posture map and the decider consumes it. Purity is preserved:
+`normalize()` never sees posture — it joins core-side, at analyze time.
+
+| Posture | Meaning | Qualified-Tier-2 label (`disposition`) | Dashboard wording |
+|---|---|---|---|
+| `observe` | A watch-only sensor — cannot block what it sees (e.g. a passive IDS, a syslog receiver). | `not_blocked_passive` | **Not blocked — watch-only sensor** |
+| `detect_only` | A host control that detects but does not remove/quarantine (e.g. ClamAV). | `detected_no_action` | **Detected — no action taken; file present** |
+| `enforce`, **zero BLOCK/DROP from this actor** | An inline, enforcing control that alerted on this actor without blocking it (ADR-0067 Amendment 1 A1.1) — a per-sensor fact, not an unknown. | `not_blocked_enforcing` | **Not blocked — this control was enforcing and did not block it** |
+| `enforce` with a BLOCK/DROP present, undeclared posture, or postures that **differ** across the actor's contributing instances | Genuinely unknown — a passive sensor cannot see what a differently-postured sensor did. | `block_status_unknown` | **Flagged — needs review** |
+
+**Safety property (verified, tested):** posture only ever relabels a qualified Tier-2
+*disposition*. No posture value can change a tier or produce `block_status="blocked"` —
+`blocked` derives solely from an actor's own BLOCK/DROP event tallies. A mis-declared
+posture can manufacture at most false urgency in a label, never false calm, and never a
+tier promotion.
+
+**In-tree defaults (issue #75):** `suricata` / `syslog` / `linux_auth` → `observe`;
+`clamav` → `detect_only`; `aws_network_firewall` → `enforce`. `azure_waf` deliberately
+declares nothing — its posture is per-policy (Detection/Prevention mode), set per
+instance rather than per plugin.
+
+**Interim — the Suricata inline (IPS) mis-label window.** Posture is *per-instance*, not
+per-plugin: the same Suricata sensor can run passive IDS or inline IPS, and only the
+instance-level override (Phase B, issue #44) can distinguish them. Until then, every
+Suricata instance reads the `observe` default. If your Suricata runs **inline (IPS)**,
+blocked traffic still labels correctly — a drop already normalizes to `BLOCK`, so it
+still reads `blocked` / `partial` — but an alert-only actor still reads **"Not blocked —
+watch-only sensor"** even though the sensor is actually inline. The "not blocked" *fact*
+remains true; only the sensor *description* is inaccurate. A per-instance posture
+override ships in issue #44. If your Suricata deployment guide documents IDS-only setup,
+this same caveat applies there.
 
 ### Why disposition beats score
 

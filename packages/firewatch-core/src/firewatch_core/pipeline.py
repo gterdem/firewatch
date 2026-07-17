@@ -77,7 +77,7 @@ import asyncio
 import ipaddress
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
 from urllib.parse import urlparse
@@ -86,6 +86,7 @@ from pydantic import BaseModel
 
 from firewatch_sdk import (
     AIEngine,
+    EnforcementPostureLiteral,
     EventStore,
     Notifier,
     PluginContext,
@@ -112,6 +113,7 @@ from firewatch_core.ai.stage_events import (
 from firewatch_core.ai_status import resolve_ai_status
 from firewatch_core.detector import detect
 from firewatch_core.escalation.decider import decide as _decide_escalation
+from firewatch_core.escalation.posture import resolve_posture_map
 from firewatch_core.ports.analysis_ledger import AnalysisLedger, AnalysisRecord
 from firewatch_core.scoring import (
     MAX_DETAILED_EVENTS,
@@ -285,6 +287,7 @@ class Pipeline:
         enrichers: list[Any] | None = None,
         ledger: AnalysisLedger | None = None,
         clock: Callable[[], datetime] | None = None,
+        posture_defaults: Mapping[str, EnforcementPostureLiteral | None] | None = None,
     ) -> None:
         """Create the pipeline.
 
@@ -311,6 +314,17 @@ class Pipeline:
             analysis windows are measured from.  Defaults to the real wall clock
             (``datetime.now(timezone.utc)``).  Tests inject a fixed instant so
             windowing assertions are deterministic (no wall-clock flakiness).
+        posture_defaults:
+            Optional ``source_type -> declared enforcement default`` (ADR-0067 D6,
+            issue #75) — built by the caller from every loaded plugin's
+            ``SourceMetadata.enforcement`` (e.g.
+            ``{t: p.metadata().enforcement for t, p in registry.items()}``).
+            ``analyze_ip`` resolves this (Phase A: no per-instance override yet —
+            issue #44 is Phase B) into a per-instance posture map passed to the
+            escalation decider so a qualified Tier-2 verdict gets an honest,
+            posture-specific label instead of the generic "block status unknown".
+            Defaults to ``None`` (every source_type undeclared) — zero behaviour
+            change for callers that omit it.
         """
         self.store = store
         self.ai_engine = ai_engine
@@ -318,6 +332,9 @@ class Pipeline:
         self.enrichers: list[Any] = list(enrichers) if enrichers else []
         self.ledger = ledger
         self._clock: Callable[[], datetime] = clock or (lambda: datetime.now(timezone.utc))
+        self._posture_defaults: dict[str, EnforcementPostureLiteral | None] = (
+            dict(posture_defaults) if posture_defaults else {}
+        )
 
     # ── Ingest ────────────────────────────────────────────────────
 
@@ -812,9 +829,18 @@ class Pipeline:
         # A bug in the decider must never abort scoring; escalation is additive.
         # Issue #52: windowed to W_STATE — the verdict reflects the actor's current
         # state, not a lifetime tally (ADR-0070 D4).
+        # Issue #75 (ADR-0067 D6 + Amendment 1): resolve this actor's enforcement
+        # posture map from (instance override OR plugin metadata default) — Phase A
+        # has no override source yet, so this call is (plugin defaults only). The
+        # posture map is instance-scoped to the actor's OWN contributing
+        # (source_type, source_id) pairs seen in the state window.
         escalation_verdict = None
         try:
-            escalation_verdict = _decide_escalation(state_events, detections)
+            instance_keys = {(e.source_type, e.source_id) for e in state_events}
+            posture_map = resolve_posture_map(instance_keys, self._posture_defaults)
+            escalation_verdict = _decide_escalation(
+                state_events, detections, posture_map=posture_map
+            )
         except Exception:
             logger.warning(
                 "pipeline.analyze_ip ip=%s escalation decider failed (fail-safe)",

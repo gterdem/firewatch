@@ -34,22 +34,32 @@
  * markdown heading. ADR-0067 D6 ("Enforcement posture: plugin-declared
  * default, core-owned per-instance override") exists (docs/adr/0067-*.md,
  * "### D6") and directly governs `block_status_unknown` today: D6 states
- * "`enforce` or undeclared → `block_status_unknown`, which becomes rare and
- * genuinely meaningful" — every instance today is posture-undeclared (the
- * posture axis, #44, is M3/not-started), so this key is D6's correct
- * end-state label over an empty posture map, not drift. What RC3 falsified
- * was the popover SENTENCE built on top of the key (prose implying an OCSF
- * non-terminating mapping), never the disposition key itself. See the
- * architect's ruling on PR #38 (this PR) for the settled account.
+ * "`enforce` or undeclared → `block_status_unknown`" — every instance before
+ * issue #75 was posture-undeclared, so this key was D6's correct label over
+ * an empty posture map, not drift. What RC3 falsified was the popover
+ * SENTENCE built on top of the key (prose implying an OCSF non-terminating
+ * mapping), never the disposition key itself. See the architect's ruling on
+ * PR #38 for the settled account.
+ *
+ * D6's "rare and genuinely meaningful" distribution claim for the residual
+ * `block_status_unknown` cell is CORRECTED by ADR-0067 Amendment 1: the
+ * `enforce` + zero-BLOCK/DROP cell is a *routine* M1 population (aws_nfw
+ * declares `enforce` and maps every non-blocked stateful event to ALERT), not
+ * rare — Amendment 1 A1.3. This file's PostureCopy rows below implement A1.1's
+ * fix for that cell.
  *
  * TIER 2 LABEL — RATIFIED (architect ruling, PR #38): "Flagged — needs
- * review" below is the settled interim Tier-2 label, not an open proposal.
- * It names what IS known (a qualifying detection/assertion exists per D1) and
- * makes no claim about whether the traffic was blocked. "Interim" because
- * ADR-0067 D6's posture-aware vocabulary (#44/#45, M3) later splits it into
- * posture-specific labels (`not_blocked_passive` / `detected_no_action` /
- * the narrowed `block_status_unknown`) — the same interim status the
- * disposition key itself carries.
+ * review" below is the settled interim Tier-2 label for the (now narrower)
+ * `block_status_unknown` cell, not an open proposal. It names what IS known
+ * (a qualifying detection/assertion exists per D1) and makes no claim about
+ * whether the traffic was blocked.
+ *
+ * POSTURE LABELS — issue #75 (ADR-0067 D6 + Amendment 1): a qualified Tier-2
+ * verdict whose contributing instance(s) declare a SINGLE, uniform
+ * `enforcement` posture gets one of three additive, posture-specific labels
+ * instead of the generic `block_status_unknown` — see `POSTURE_COPY` below.
+ * Modeled on the same "kept out of `TIER_COPY`, merged in the lookup helpers"
+ * pattern as `OBSERVED_COPY`: these are Tier-2 *variants*, not new tiers.
  *
  * OBSERVED STRATUM (ADR-0067 D2): an additive, deliberately NOT-a-fifth-tier
  * row — `tier: null`, `disposition: "observed"`. An observed actor carries no
@@ -67,6 +77,18 @@ export type DispositionKey =
 
 /** The ADR-0067 D2 observed-stratum disposition key — always paired with `tier: null`. */
 export type ObservedDispositionKey = 'observed'
+
+/**
+ * The ADR-0067 D6 + Amendment 1 posture-derived Tier-2 disposition keys
+ * (issue #75) — additive to `DispositionKey`, always paired with `tier: 2`.
+ * Emitted instead of the generic `block_status_unknown` when a qualified
+ * Tier-2 verdict's contributing instance(s) declare a single, uniform
+ * `enforcement` posture (`SourceMetadata.enforcement`, resolved core-side).
+ */
+export type PostureDispositionKey =
+  | 'not_blocked_passive'
+  | 'detected_no_action'
+  | 'not_blocked_enforcing'
 
 /** Machine-readable block_status key — from `EscalationVerdict.block_status` (fixed, ADR-0058 Amendment 1). */
 export type BlockStatusKey = 'allowed' | 'blocked' | 'unknown' | 'partial'
@@ -181,18 +203,78 @@ export const OBSERVED_COPY = {
   color: 'var(--fw-t3)',
 }
 
+/** One row of the ADR-0067 D6 + Amendment 1 posture-derived Tier-2 label set (issue #75). */
+export interface PostureCopy {
+  disposition: PostureDispositionKey
+  /** Always 2 — these are Tier-2 variants, never a new tier (see the module doc). */
+  tier: 2
+  /** Always 'unknown' — posture only relabels the disposition, never block_status (the #75 safety property). */
+  blockStatus: 'unknown'
+  label: string
+  shortLabel: string
+  description: string
+  color: string
+}
+
+// ---------------------------------------------------------------------------
+// The posture-derived Tier-2 copy rows (issue #75, ADR-0067 D6 + Amendment 1).
+// Kept OUT of TIER_COPY (same pattern as OBSERVED_COPY): these are honest
+// per-sensor VARIANTS of the generic Tier-2 label, not new tiers. Exact
+// wording per D6 / Amendment 1 A1.1.
+// ---------------------------------------------------------------------------
+
+export const POSTURE_COPY: readonly PostureCopy[] = [
+  {
+    disposition: 'not_blocked_passive',
+    tier: 2,
+    blockStatus: 'unknown',
+    label: 'Not blocked — watch-only sensor',
+    shortLabel: 'Not blocked (watch-only)',
+    description:
+      'This sensor observes traffic but cannot block it. A qualifying detection or declared high/critical severity flagged this actor — the traffic was not stopped by this control.',
+    color: 'var(--fw-amber)',
+  },
+  {
+    disposition: 'detected_no_action',
+    tier: 2,
+    blockStatus: 'unknown',
+    label: 'Detected — no action taken; file present',
+    shortLabel: 'Detected, no action',
+    description:
+      'A host-based detector found this on disk but does not remove or quarantine it automatically. The file is still present — this needs manual cleanup.',
+    color: 'var(--fw-amber)',
+  },
+  {
+    disposition: 'not_blocked_enforcing',
+    tier: 2,
+    blockStatus: 'unknown',
+    label: 'Not blocked — this control was enforcing and did not block it',
+    shortLabel: 'Not blocked (enforcing)',
+    description:
+      'This control is configured to block traffic, but it let this specific activity through — it alerted without stopping it. Worth a closer look.',
+    color: 'var(--fw-amber)',
+  },
+] as const
+
+const POSTURE_COPY_BY_DISPOSITION: Record<PostureDispositionKey, PostureCopy> = Object.fromEntries(
+  POSTURE_COPY.map((row) => [row.disposition, row]),
+) as Record<PostureDispositionKey, PostureCopy>
+
 // ---------------------------------------------------------------------------
 // Lookup helpers — every surface goes through these, never a switch of its own
 // ---------------------------------------------------------------------------
 
 /**
  * Full disposition label for a chip / popover trigger / legend title.
- * Handles the four ranked tiers plus the ADR-0067 observed stratum. Falls
- * back to the raw key for a disposition the copy table doesn't know about
- * yet (forward-compat — never throws on an unrecognized value).
+ * Handles the four ranked tiers, the ADR-0067 observed stratum, and the
+ * issue #75 posture-derived Tier-2 labels. Falls back to the raw key for a
+ * disposition the copy table doesn't know about yet (forward-compat — never
+ * throws on an unrecognized value).
  */
 export function dispositionLabel(disposition: string): string {
   if (disposition === OBSERVED_COPY.disposition) return OBSERVED_COPY.label
+  const postureRow = POSTURE_COPY_BY_DISPOSITION[disposition as PostureDispositionKey]
+  if (postureRow != null) return postureRow.label
   return TIER_COPY_BY_DISPOSITION[disposition as DispositionKey]?.label ?? disposition
 }
 
@@ -201,12 +283,17 @@ export function dispositionLabel(disposition: string): string {
  * `tier === null` covers the observed stratum (ADR-0067 D2): returns the
  * observed short label when the disposition says so, or a defensive
  * "No escalation verdict" fallback for a null tier with no disposition.
+ * A posture-derived disposition (issue #75) resolves through the same
+ * `Tier ${tier} — ${shortLabel}` shape as the four ranked tiers.
  */
 export function tierGroupLabel(tier: number | null, disposition: string | undefined): string {
   if (tier == null) {
     if (disposition === OBSERVED_COPY.disposition) return OBSERVED_COPY.shortLabel
     return 'No escalation verdict'
   }
+  const postureRow =
+    disposition != null ? POSTURE_COPY_BY_DISPOSITION[disposition as PostureDispositionKey] : undefined
+  if (postureRow != null) return `Tier ${tier} — ${postureRow.shortLabel}`
   const row = disposition != null ? TIER_COPY_BY_DISPOSITION[disposition as DispositionKey] : undefined
   return row != null ? `Tier ${tier} — ${row.shortLabel}` : `Tier ${tier}`
 }
@@ -243,11 +330,14 @@ export function blockStatusLabel(blockStatus: string, counts?: DispositionCounts
 /**
  * CSS color token for a disposition.
  * Tier 1 (allowed-through) uses --fw-red (highest urgency).
- * Tier 2 (block_status_unknown) uses --fw-amber.
+ * Tier 2 (block_status_unknown) uses --fw-amber; the issue #75 posture-derived
+ * Tier-2 labels use the same --fw-amber (they are Tier-2 variants).
  * Observed uses its own (muted) token. Others use the tier's own copy-table
  * color, or --fw-t2 for an unrecognized key.
  */
 export function dispositionColor(disposition: string): string {
   if (disposition === OBSERVED_COPY.disposition) return OBSERVED_COPY.color
+  const postureRow = POSTURE_COPY_BY_DISPOSITION[disposition as PostureDispositionKey]
+  if (postureRow != null) return postureRow.color
   return TIER_COPY_BY_DISPOSITION[disposition as DispositionKey]?.color ?? 'var(--fw-t2)'
 }

@@ -33,11 +33,21 @@ Core imports are at module level (not deferred): this module is itself imported
 only when a CLI command (``run`` / ``sync`` / ``serve``) executes — ``main``
 defers the command-module imports — so importing core here does not slow
 ``firewatch --help`` or ``firewatch new-source``.
+
+Issue #75 (ADR-0067 D6 + Amendment 1) — enforcement-posture defaults:
+  When a plugin ``registry`` is supplied, ``_build_pipeline`` derives
+  ``source_type -> SourceMetadata.enforcement`` for every loaded plugin and wires
+  it into the ``Pipeline`` as ``posture_defaults`` (Phase A: plugin defaults only —
+  the per-instance override, issue #44, is Phase B and does not touch this seam).
+  ``registry`` is optional and defaults to ``None`` — a caller that omits it (or a
+  test that never passes it) gets the pre-#75 pipeline unchanged.
 """
 from __future__ import annotations
 
 import logging
 from pathlib import Path
+
+from firewatch_sdk import EnforcementPostureLiteral, SourcePlugin
 
 from firewatch_core.adapters.ai_disabled import DisabledAIEngine
 from firewatch_core.adapters.ai_openai import OpenAIEngine
@@ -53,7 +63,10 @@ logger = logging.getLogger("firewatch.cli.pipeline_factory")
 _MMDB_DIR_NAME = "geo_data"
 
 
-def _build_pipeline(config_file: Path | str | None = None) -> object:
+def _build_pipeline(
+    config_file: Path | str | None = None,
+    registry: dict[str, SourcePlugin] | None = None,
+) -> object:
     """Construct and return a ``Pipeline`` for CLI use.
 
     - ``SQLiteEventStore`` at ``firewatch_events.db`` next to the config file
@@ -61,6 +74,12 @@ def _build_pipeline(config_file: Path | str | None = None) -> object:
     - The AI engine is selected from ``RuntimeConfig.ai_enabled`` (resolved via
       the config service, so env vars / config file apply): the real
       ``OpenAIEngine`` when enabled, else a rules-only ``DisabledAIEngine``.
+    - Issue #75 (ADR-0067 D6): when *registry* is supplied, every loaded
+      plugin's ``SourceMetadata.enforcement`` default is wired into the
+      ``Pipeline`` as ``posture_defaults`` so qualified Tier-2 verdicts get an
+      honest, posture-specific disposition label instead of the generic
+      "block status unknown". *registry* is optional — omitting it (as the
+      pre-#75 callers do) yields the pre-#75 pipeline unchanged.
 
     Returns a plain ``object`` to keep callers decoupled from the concrete
     ``Pipeline`` type.
@@ -107,8 +126,17 @@ def _build_pipeline(config_file: Path | str | None = None) -> object:
     from firewatch_core.adapters.ledger.sqlite_ledger import SqliteAnalysisLedger
 
     ledger = SqliteAnalysisLedger(db_path=db_path)
+    posture_defaults: dict[str, EnforcementPostureLiteral | None] = (
+        {type_key: plugin.metadata().enforcement for type_key, plugin in registry.items()}
+        if registry
+        else {}
+    )
     return Pipeline(
-        store=store, ai_engine=ai_engine, enrichers=[geo_enricher], ledger=ledger
+        store=store,
+        ai_engine=ai_engine,
+        enrichers=[geo_enricher],
+        ledger=ledger,
+        posture_defaults=posture_defaults,
     )
 
 

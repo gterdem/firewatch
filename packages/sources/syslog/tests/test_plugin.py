@@ -114,6 +114,13 @@ class TestEntryPointDiscovery:
         assert plugin.metadata().type_key == "syslog"
         assert plugin.metadata().flavor == "push"
 
+    def test_metadata_enforcement_default_is_observe(self) -> None:
+        """ADR-0067 D6 (issue #75): a syslog receiver is a passive telemetry collector."""
+        from firewatch_syslog.plugin import SyslogSource
+
+        plugin = SyslogSource()
+        assert plugin.metadata().enforcement == "observe"
+
     def test_zero_core_edits_via_loader(self) -> None:
         """The core loader discovers syslog without any patch — the real modularity test."""
         from firewatch_core.loader import load_source_plugins

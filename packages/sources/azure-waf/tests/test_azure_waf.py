@@ -186,6 +186,15 @@ class TestEntryPointDiscovery:
         assert plugin.metadata().type_key == "azure_waf"
         assert plugin.metadata().flavor == "pull"
 
+    def test_metadata_enforcement_is_undeclared(self) -> None:
+        """ADR-0067 D6 + issue #75 must-NOT: azure_waf's posture is per-policy
+        (Detection/Prevention) — it deliberately declares no metadata default.
+        The per-instance override lands in Phase B (issue #44)."""
+        from firewatch_azure_waf.plugin import AzureWAFSource
+
+        plugin = AzureWAFSource()
+        assert plugin.metadata().enforcement is None
+
     def test_zero_core_edits_via_loader(self) -> None:
         """The core loader discovers azure_waf with zero core edits."""
         from firewatch_core.loader import load_source_plugins

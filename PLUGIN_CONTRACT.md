@@ -1,4 +1,4 @@
-# PLUGIN_CONTRACT.md — Telemetry Source Plugin Contract (v1.4)
+# PLUGIN_CONTRACT.md — Telemetry Source Plugin Contract (v1.5)
 
 > **Architect-owned.** Implementation work does not edit this file. A needed change is
 > raised as a `contract-change` issue and, if it alters a settled decision, a new ADR in

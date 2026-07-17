@@ -3,9 +3,13 @@
 **Date:** 2026-07-15 (Revision 1: 2026-07-16)
 **Status:** Accepted (2026-07-16) — Revision 1 read and approved by the Maintainer (verbatim:
 "I read the ADR changes and I approve them"), superseding the first draft wholesale. Coupled
-with ADR-0069 (still Proposed): D8's fixed landing order stands — neither half ships alone.
+with ADR-0069 (Accepted 2026-07-16): D8's fixed landing order stands — neither half ships alone.
 Amendable on evidence; the D5 falsifiers and the ADR-0068 D3 live calibration pass are the
 named mechanisms, and a live-testing finding is an amendment, not a reopening.
+**Amendment 1 (2026-07-16): Accepted, maintainer-approved — episode merging gains
+quiet-collapse hysteresis (θ_quiet = θ_press/2); D3's "collapsed to quiet" is defined by the
+θ_quiet crossing, correcting the false-`campaign` defect PR #86 surfaced. See the Amendment 1
+section below.**
 
 **Revision 1** replaces the first draft's queue-entry machinery — D2's two-arm
 volume-in-window rule and D3's quiet-gap episode segmentation — with an **intensity (rate)
@@ -674,6 +678,146 @@ entering the queue through the same gate the codebase already trusts.
 | `pipeline.py` `W_STATE`/`W_CAMPAIGN` + comments (`pipeline.py:137-153`, incl. the line-145 "recidivism" comment) | **Stand**; comments updated to Revision-1 meaning in the #53 PR |
 | `docs/escalation-and-triage-model.md` §7 (`sustained_attack` rows, §D2/§D3 pointer) | **Stands until #53/#54** (describes current code accurately); updated in their docs batch |
 | ADR-0069 D8 coupling / landing order | **Stands** (rule names updated here; obligation unchanged) |
+
+## Amendment 1 (2026-07-16): episode merging gains quiet-collapse hysteresis — θ_quiet
+
+**Status:** Accepted (2026-07-16) — maintainer-approved; this is the architect's adjudication
+of the false-`campaign` finding PR #86 surfaced and deliberately declined to self-authorize a
+fix for (the refusal was correct process; this amendment is the authorization it asked for).
+House rule honoured: D3's and D5's text above is never edited; this amendment supersedes **one
+mechanism detail** — "any θ_press down-crossing separates episodes" — and gives D3's
+"collapsed to quiet" phrase its missing definition. Everything else in D2/D3/D5 — the
+estimator, the three clauses, the tier attribution, the constants discipline — stands
+unchanged.
+
+### A1.1 — The rule
+
+> Two θ_press excursions of λ̂ belong to the **same pressure episode** unless λ̂ fell below
+> **θ_quiet = θ_press / 2** (provisional: 2.5) between them.
+
+- **"Collapsed to quiet" thereby has an exact meaning:** the actor's pressure lost at least
+  half its floor mass — ≥ 1 half-life of pure decay below θ_press — before the return.
+- **Span semantics unchanged.** Episode `start` is still the first excursion's opening
+  attempt; episode `end` is still the **last excursion's θ_press down-crossing**. θ_quiet
+  governs ONLY the merge decision, so D3's endurance clause measures exactly what it measured
+  before — a merged episode's span runs from the first excursion's start to the last
+  excursion's θ_press down-crossing, gaps included.
+- **Still closed-form, still exact.** The θ_quiet down-crossing after an excursion's last
+  attempt is `t_i + H·log₂(λ_i/θ_quiet)`, folded through any sub-threshold attempts in the
+  gap. Mechanically no crossing-time computation is even needed: λ̂ is strictly decreasing
+  between attempts, so the infimum of λ̂ over a gap is the smallest **pre-jump** value among
+  the gap's attempts (including the next excursion's opening attempt) — each pre-jump value is
+  the running minimum since the previous attempt, and the fold already computes it. The merge
+  test is one comparison per attempt; nothing is sampled.
+- This is the dual-threshold comparator — a **Schmitt trigger**: enter pressure at θ_press,
+  leave (for episode-counting purposes) only at θ_quiet.
+
+### A1.2 — The defect it corrects (surfaced by PR #86; re-verified numerically this session)
+
+Wiring `episodes()` into R3 for the first time exposed that exact-crossing separation is
+chatter-sensitive at the θ_press boundary. The pre-existing `test_pipeline.py` fixture —
+**10 BLOCK attempts 4 min apart, one continuous moderate burst spanning 36 min** — traces as:
+λ̂ climbs 1.00 → 1.91 → 2.74 → 3.50 → 4.19 → 4.82 → **5.40** (t = 24 min; the excursion
+opens), then the 4-min gap lets it dip to **4.92 for ~42 seconds** before the next attempt
+restores it (5.92 → 6.40 → 6.83). Under Revision 1's exact crossings that 42-second,
+2%-deep dip is an episode boundary: **two episodes → R3's recidivism clause fires `campaign`
+on a single continuous burst.** λ̂ = 4.92 is 98% of the pressure floor — no honest reading of
+"rose, collapsed to quiet, and rose again" covers it. Worse, the general case: a **boundary
+oscillator** whose rate holds λ̂ jittering in 4–6 indefinitely (~8 attempts/h with irregular
+spacing: steady-state post-jump ≈ 6.3; a 12-min gap dips to ≈ 4.8) manufactures unbounded
+episode counts — `campaign` within tens of minutes for a pattern that neither returned nor
+went quiet.
+
+Under hysteresis: the fixture's trough (4.92) is above θ_quiet (2.5) → **one episode**, no
+recidivism, no endurance (span ≪ 24 h), no breadth → `campaign` does not fire and the
+fixture's score is **55** (40 rule + 15 `attempt_pressure` boost), not 70. The 55 is right on
+its own terms, not merely "the old value encoded a bug": a single continuous ramp whose
+pressure never leaves the floor's immediate neighbourhood is exactly D3's INFORM-plus-pressure
+population until it endures or returns — the 70 asserted a recidivism claim ("2 pressure
+episodes") that is false in the prose's own vocabulary. What would falsify the 55: the A1.4
+falsifier below (a real recidivist merged away by the trickle floor) — that moves θ_quiet,
+not this fixture's score. The boundary oscillator becomes one ever-extending episode →
+**endurance fires at D_endure** — the honest clause, and a *strengthening* of the D3
+clause-seam property (A1.5). **Golden untouched:** hysteresis can only merge episodes, never
+split them, so `campaign` fires strictly less often; `expected_scores.json` pins
+`detection_rule_names: []` throughout and stays byte-identical (sha `fe4787…3f31f`).
+
+### A1.3 — Why hysteresis, not a minimum quiet gap (G_min)
+
+The obvious alternative — two excursions are separate only if the sub-θ_press gap between
+them lasts ≥ some `G_min` — is rejected:
+
+- **G_min is fooled by the not-quiet trickle.** An actor that drops to λ̂ ≈ 4.9 and *holds it
+  there* with a sub-threshold trickle shows an arbitrarily long sub-θ_press "gap"; any G_min
+  eventually calls that quiet and fires recidivism — but λ̂ ≈ 4.9 is 98% of the pressure
+  floor, hours of it least of all "quiet." Duration below θ_press does not measure quietness;
+  **depth does.** Hysteresis encodes D3's semantic directly on the axis the model already
+  owns.
+- **G_min is a new time constant with no anchor.** Any value is arbitrary relative to H, and
+  its falsifier would be entangled with H's. θ_quiet adds no new dimension: it is a ratio on
+  the existing measure, and at θ_press/2 it *is* one half-life of decay — it inherits H's
+  calibration instead of competing with it.
+- **It is the standard mechanism.** Dual thresholds are THE textbook fix for comparator
+  chatter on a noisy signal at a single threshold — the Schmitt trigger, verbatim (fetched
+  this session, https://en.wikipedia.org/wiki/Schmitt_trigger): *"when the input is higher
+  than a chosen threshold, the output is high. When the input is below a different (lower)
+  chosen threshold the output is low, and when the input is between the two levels the output
+  retains its value. This dual threshold action is called hysteresis."* (Original circuit:
+  O. H. Schmitt, "A thermionic trigger," J. Sci. Instrum. 15 (1938) — literature attribution,
+  not fetched this session; the anti-chatter property used here is re-derived in A1.1/A1.2
+  and does not rest on the citation.)
+
+### A1.4 — θ_quiet joins the D5 constants (provisional; its own falsifier)
+
+D5's table above stands unedited (house rule); it is **extended** by this row, and #50's
+manifest mirrors the merged set:
+
+| Constant | Provisional value | Anchor |
+|---|---|---|
+| `θ_quiet` (episode-merge hysteresis floor) | θ_press / 2 (= 2.5) | One half-life of pure decay below the pressure floor: "collapsed to quiet" = pressure lost ≥ half its floor mass. Ratio-coupled to θ_press until calibration says otherwise |
+
+Not operator-tunable — D6 applies unchanged. **Falsifier (this constant's own, distinct from
+D5's):** a real recidivist whose between-burst floor sits inside **(θ_press/2, θ_press)** —
+bursts a human adjudicator would call "returned after quiet," kept merged because a trickle
+holds λ̂ above 2.5, so recidivism never fires and queue entry waits for endurance at
+D_endure. That is the legitimate constants-move signal (raise θ_quiet toward θ_press, or
+decouple the ratio), adjudicated by the ADR-0068 D3 live-calibration pass and mirrored into
+#50's manifest. The opposite direction: a live capture where one human-judged continuous
+burst still splits (a trough below θ_quiet inside it) means θ_quiet is too high or H too
+short. The cost while wrong-low is bounded: the merged-away recidivist still queues at
+D_endure (A1.5's limit property) — a delay, never silence.
+
+### A1.5 — D3's prose, now defined by the mechanism; the seam property restated
+
+- D3's recidivism bullet — *"the actor's intensity rose, collapsed to quiet, and rose
+  again"* — stands unedited and is henceforth **defined**: "collapsed to quiet" ⇔ λ̂ crossed
+  below θ_quiet between the excursions. Before this amendment the mechanism read "fell below
+  θ_press for any positive duration"; the 42-second dip is the proof that was never the
+  prose's meaning. Prose and mechanism now say the same thing.
+- The clause-seam paragraph's sentence *"it may never let the dip form … must hold
+  λ̂ ≥ θ_press continuously"* is superseded in one detail: the merge-preventing filler now
+  needs only **λ̂ ≥ θ_quiet in the gaps**. The limit property is restated, strictly stronger:
+  **any actor that keeps its excursions merged — by holding λ̂ above θ_quiet between them —
+  extends ONE episode whose span (gaps included) counts toward endurance, so it queues within
+  D_endure; any θ_quiet collapse separates episodes and arms recidivism. No addition of
+  events can move an actor to calm** — unchanged, now over a wider population (holding
+  λ̂ ≥ θ_quiet is weaker than holding λ̂ ≥ θ_press, and both roads end in a queue entry).
+
+### Amendment 1 retire list (grep-derived this session: `grep -rn "collapsed to quiet|quiet dip|dip form|down-crossing|closed-form crossing" docs/ packages/ --include=*.md --include=*.py`; `gh issue view 54`; `gh pr view 86`)
+
+| Artifact | Disposition |
+|---|---|
+| D3 recidivism bullet "rose, collapsed to quiet, and rose again" (this file, above) | Stands unedited (house rule); **defined by A1.5** |
+| D3 clause-seam sentence "must hold λ̂ ≥ θ_press continuously (it may never let the dip form)" (this file, above) | Stands unedited; **superseded by A1.5's restatement** (θ_quiet floor, wider surface) |
+| D5 constants table (no θ_quiet row) | Stands unedited; **extended by A1.4**; #50's manifest carries the merged set |
+| `attempts.py` `episodes()` + docstring ("closes at t_i + ln(λ_i/threshold)/β … UNLESS a later attempt arrives first" — separation at any θ_press down-crossing) | **Replaced in PR #86** (the implementing PR) with the A1.1 merge rule; `QUIET_THRESHOLD` lands beside `HALF_LIFE`/`PRESSURE_THRESHOLD` |
+| `detector.py` docstrings asserting the old separation semantics (module header :41, `CAMPAIGN_MIN_EPISODES` :321-323, `_campaign` clause-seam note :399-402) | **Replaced in PR #86** — gain the θ_quiet definition |
+| `test_pipeline.py::test_analyze_ip_detection_boost_flows` (`score == 70` pin, campaign-fires assertion, and its inline derivation comment) | **Replaced in PR #86** — reverts to `score == 55` and becomes a **must-NOT** ("a single continuous moderate burst must NOT fire `campaign`") |
+| `test_attempts.py` `TestEpisodes` pins + comments (:22, :221) | **Stand** — verified compatible this session (the 6 h-separated bursts' trough ≈ 0.001 < θ_quiet; episode ends are unchanged, so the closed-form-crossing pin still holds); PR #86 adds the hysteresis cases beside them |
+| `test_issue_54_attack_in_progress_campaign.py` (recidivism / endurance / clause-seam tests) | **Stand** — verified compatible (6 h separations collapse to ≈ 0.0015 ≪ θ_quiet; the dip-filler helper holds λ̂ ≥ θ_press ⊇ ≥ θ_quiet); PR #86 adds the four A1 personas |
+| Issue #54 acceptance criteria ("burst-quiet-burst = 2 episodes"; the clause-seam pin with the dip "filled at pressure level") | **Stand** — compatible as written (its quiet gaps are 6 h; its filler is at pressure level) |
+| PR #86 body, "Deviation" section (pinned 70 as spec-compliant; declined to invent hysteresis unauthorized) | **Stands as the historical record** — correct process; this amendment is the adjudication it requested |
+| `docs/escalation-and-triage-model.md:404-405` ("intensity rose, went quiet, and rose again") | **Stands until PR #86's docs touch**, which adds the θ_quiet parenthetical (closing the mis-citation channel) |
 
 ## References
 

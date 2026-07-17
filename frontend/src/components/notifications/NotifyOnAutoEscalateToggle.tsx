@@ -1,14 +1,19 @@
 /**
- * NotifyOnAutoEscalateToggle — opt-in escalation-aware notifications (ADR-0059 D3 / issue #661).
+ * NotifyOnAutoEscalateToggle — escalation-aware notifications, ON by default
+ * (ADR-0059 D3 mechanism / ADR-0059 Amendment 1 default / issue #74).
  *
- * SDK field: notify_on_auto_escalate: bool (default false — additive, backward-compatible).
+ * SDK field: notify_on_auto_escalate: bool (default true since Amendment 1 — additive,
+ * backward-compatible; existing persisted configs keep their stored value).
  *
- * When OFF (default): notifier gates on the Notification threshold severity band only.
- * When ON: notifier uses is_alert_worthy(threat, threshold) — band OR escalation tier <= 2 —
- * so a low-score auto-escalating threat (allowed-through but dispositioned suspicious/malicious)
- * also triggers a notification.
+ * When ON (default): notifier uses is_alert_worthy(threat, threshold) — band OR escalation
+ * tier <= 2 — so a HIGH ALERT / escalation-tier actor (allowed-through but dispositioned
+ * suspicious/malicious) notifies out of the box. When OFF: notifier gates on the
+ * Notification threshold severity band only.
  *
- * Default OFF keeps chat quiet by design per ADR-0059 D3.
+ * Default ON per ADR-0059 Amendment 1: the ADR-0067 assertion gate already bounds the
+ * population that can reach tier <= 2 to the triage-queue population, so quiet chat is
+ * preserved by the gate, not by this toggle. The toggle still exists so an operator can
+ * opt back OUT to band-only notifications.
  */
 
 const HELP_STYLE: React.CSSProperties = {
@@ -52,8 +57,10 @@ export function NotifyOnAutoEscalateToggle({
         Also notify on auto-escalating detections
       </label>
       <div style={{ ...HELP_STYLE, marginLeft: 24 }}>
-        When off, notifications fire on the Notification threshold band only. When on, a low-score
-        allowed-through threat (escalation tier &le; 2) also notifies.
+        Default ON (ADR-0059 Amendment 1): a HIGH ALERT / escalation-tier actor (tier &le; 2)
+        notifies even below the Notification threshold. Quiet chat is preserved by the
+        assertion gate upstream, not by this toggle — turn it off to fall back to
+        Notification-threshold-only alerting.
       </div>
     </div>
   )

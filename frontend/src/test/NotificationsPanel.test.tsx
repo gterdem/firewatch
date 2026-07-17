@@ -28,9 +28,9 @@
  *   - Event-driven: toggle success → success toast.
  *   - Event-driven: toggle failure → error toast + checkbox rolled back.
  *
- *   NotifyOnAutoEscalateToggle (ADR-0059 D3):
+ *   NotifyOnAutoEscalateToggle (ADR-0059 D3 mechanism / Amendment 1 default, issue #74):
  *   - Rendered: "Also notify on auto-escalating detections" toggle present.
- *   - State-driven: default OFF when GET fails (safe default).
+ *   - State-driven: default ON when GET fails (ADR-0059 Amendment 1 default).
  *   - State-driven: GET /config/runtime populates notify_on_auto_escalate.
  *   - Event-driven: toggle → PUT /config/runtime called with notify_on_auto_escalate.
  *   - Event-driven: toggle success → success toast.
@@ -469,15 +469,15 @@ describe('NotificationsPanel — NotifyOnAutoEscalateToggle', () => {
     })
   })
 
-  // State-driven: default OFF — when GET fails, toggle defaults to false
-  it('defaults to OFF (unchecked) when getRuntimeConfig fails', async () => {
+  // State-driven: default ON (ADR-0059 Amendment 1) — when GET fails, toggle defaults to true
+  it('defaults to ON (checked) when getRuntimeConfig fails', async () => {
     const { ApiError } = await import('../api/client')
     mockGetRuntimeConfig.mockRejectedValue(new ApiError(503, null, 'Service Unavailable'))
     renderPanel()
     await waitFor(() => {
       const toggle = screen.getByTestId('notify-on-auto-escalate-toggle') as HTMLInputElement
       expect(toggle).toBeInTheDocument()
-      expect(toggle.checked).toBe(false)
+      expect(toggle.checked).toBe(true)
     })
   })
 
@@ -603,7 +603,8 @@ describe('NotificationsPanel — NotifyOnAutoEscalateToggle', () => {
     renderPanel()
     await waitFor(() => {
       const escalationSection = screen.getByTestId('section-notifications-escalation')
-      expect(escalationSection.textContent).toContain('Notification threshold band')
+      expect(escalationSection.textContent).toContain('Notification threshold')
+      expect(escalationSection.textContent).toContain('ADR-0059 Amendment 1')
     })
   })
 })

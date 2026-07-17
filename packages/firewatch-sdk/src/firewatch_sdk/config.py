@@ -101,13 +101,22 @@ class RuntimeConfig(BaseModel):
         description="Outbound webhook URL. May contain auth tokens — stored as SecretStr.",
     )
     notify_on_auto_escalate: bool = Field(
-        default=False,
+        default=True,
         description=(
             "When True, also send webhook notifications for detections that auto-escalate "
             "to tier 1 or tier 2 (allowed-through / block-status-unknown), even when their "
-            "severity band is below the Notification threshold (ADR-0059 D3). "
-            "Default False keeps chat quiet — the dashboard banner surfaces escalations "
-            "regardless of this setting."
+            "severity band is below the Notification threshold (ADR-0059 D3 mechanism; "
+            "ADR-0059 Amendment 1, default; issue #74). "
+            "Default True (flipped from the original D3 default of False by ADR-0059 "
+            "Amendment 1 A1.1): a HIGH ALERT / escalation-tier actor now notifies out of the "
+            "box when a webhook is configured, because the ADR-0067 assertion gate already "
+            "bounds the population that can reach tier <= 2 — quiet chat is preserved by the "
+            "gate, not by this toggle. The toggle still exists so an operator can opt back OUT "
+            "to band-only notifications. Existing persisted configs keep their stored value; "
+            "only the default for absent values changed (no migration). Firing cadence is "
+            "governed by transition semantics (webhook_notifier.check_and_alert) — the "
+            "notifier fires on state transitions, not on every re-evaluation of an unchanged "
+            "state."
         ),
     )
     ollama_base_url: str = Field(

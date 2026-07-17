@@ -32,6 +32,18 @@
  * text ever reaches this line). The line is shown in BOTH the active and
  * calm banner states, and the legend gains one "Observed" row.
  *
+ * Issue #55 (ADR-0070 D1/D3/D5) — the attempts headline + pressure strip:
+ * when `GET /banner/summary` reports one or more attempts in the state
+ * window, `AttemptsHeadline` (components/dashboard/AttemptsHeadline.tsx)
+ * renders "N hostile attempts from M actors — S succeeded · K need review"
+ * plus a bounded top-N pressure strip, IN THE SAME SLOT the #43
+ * ObservedRecordLine occupies — superseding it, not stacking alongside it.
+ * When `attemptSummary` is null/absent or reports zero attempts, the #43
+ * ObservedRecordLine renders unchanged (no regression to the pre-#55
+ * calm-state behavior). This component never computes any of the #55
+ * integers itself — `attemptSummary` arrives pre-assembled from the backend
+ * (ADR-0070 D3 hard constraint: never count differently than the engine).
+ *
  * EARS:
  *   - WHILE one or more actors need a decision → show count + actor chips.
  *   - WHERE banner renders an escalated actor → show justification + disposition.
@@ -65,7 +77,7 @@
 
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { ThreatScore, EscalationVerdict } from '../../api/types'
+import type { ThreatScore, EscalationVerdict, BannerAttemptSummary } from '../../api/types'
 import type { OnAction } from '../../lib/triageActions'
 import type { ObservedRecordSummary } from '../../lib/triageBand'
 import {
@@ -78,6 +90,7 @@ import {
 } from '../../lib/escalationCopy'
 import ClickableIp from '../entity/ClickableIp'
 import { Popover } from '../ds/Popover'
+import AttemptsHeadline from './AttemptsHeadline'
 
 // ---------------------------------------------------------------------------
 // Top-N constant (issue #728)
@@ -103,6 +116,14 @@ interface TriageBannerProps {
    * never derives it — it only renders the two integers it is handed.
    */
   observedRecord?: ObservedRecordSummary | null
+  /**
+   * `GET /banner/summary` result (issue #55) — the attempts headline +
+   * pressure strip source of truth. `null`/`undefined` (fetch not yet
+   * resolved, or failed — non-fatal per ADR-0015) falls back to the #43
+   * `observedRecord` line unchanged. When present with `attempt_count > 0`,
+   * supersedes the #43 line in the same slot (see module doc above).
+   */
+  attemptSummary?: BannerAttemptSummary | null
 }
 
 // ---------------------------------------------------------------------------
@@ -148,12 +169,23 @@ function groupByTier(actors: ThreatScore[]): TierBucket[] {
   return buckets
 }
 
-export default function TriageBanner({ pendingActors, onAction, observedRecord }: TriageBannerProps) {
+export default function TriageBanner({
+  pendingActors,
+  onAction,
+  observedRecord,
+  attemptSummary,
+}: TriageBannerProps) {
   const count = pendingActors.length
 
   // Issue #728: view-all expander state.
   // When collapsed only the top-N loudest actors are shown per tier.
   const [expanded, setExpanded] = useState(false)
+
+  // Issue #55: the attempts headline supersedes the #43 ObservedRecordLine in
+  // the SAME SLOT only when one or more attempts exist in the state window
+  // (checked inline at each render slot below). A null/undefined
+  // attemptSummary (fetch pending or failed — non-fatal per ADR-0015) or a
+  // zero attempt_count falls back to the #43 line unchanged.
 
   if (count === 0) {
     // Calm / all-clear state — also show the 4-tier legend so analysts
@@ -188,10 +220,15 @@ export default function TriageBanner({ pendingActors, onAction, observedRecord }
           <span>All clear — no actors need a triage decision.</span>
         </div>
 
-        {/* Observed-stratum aggregate record line (issue #43, ADR-0067 D5(2)) —
-            still visible when observed events exist, so the record is never
-            silently dropped even in the calm state (EARS). */}
-        {observedRecord != null && <ObservedRecordLine record={observedRecord} />}
+        {/* Issue #55: attempts headline + pressure strip supersedes the #43
+            aggregate record line in this slot when attempts exist; otherwise
+            the #43 line renders unchanged (EARS: calm state renders unchanged
+            when no attempts exist). */}
+        {attemptSummary != null && attemptSummary.attempt_count > 0 ? (
+          <AttemptsHeadline summary={attemptSummary} />
+        ) : (
+          observedRecord != null && <ObservedRecordLine record={observedRecord} />
+        )}
 
         {/* 4-tier escalation legend (ADR-0058 §4a) */}
         <EscalationLegend />
@@ -284,13 +321,20 @@ export default function TriageBanner({ pendingActors, onAction, observedRecord }
         </div>
       )}
 
-      {/* Observed-stratum aggregate record line (issue #43, ADR-0067 D5(2)) —
-          rendered alongside the active queue too: the record is honest about
-          what exists below the bar even while the banner has chips to show. */}
-      {observedRecord != null && (
+      {/* Issue #55: attempts headline + pressure strip supersedes the #43
+          aggregate record line here too, when attempts exist — rendered
+          alongside the active queue: the record stays honest about what
+          exists below the bar even while the banner has chips to show. */}
+      {attemptSummary != null && attemptSummary.attempt_count > 0 ? (
         <div style={{ marginTop: 8 }}>
-          <ObservedRecordLine record={observedRecord} />
+          <AttemptsHeadline summary={attemptSummary} />
         </div>
+      ) : (
+        observedRecord != null && (
+          <div style={{ marginTop: 8 }}>
+            <ObservedRecordLine record={observedRecord} />
+          </div>
+        )
       )}
     </div>
   )

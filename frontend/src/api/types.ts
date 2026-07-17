@@ -348,6 +348,56 @@ export interface HealthResponse {
 }
 
 /**
+ * One row of the bounded top-N `top_pressure` strip (issue #55).
+ *
+ * `attempt_count` and `span_minutes` are plain engine integers (ADR-0035) —
+ * never the underlying decayed-intensity float used to rank the strip
+ * server-side. Rows arrive already ordered highest-pressure first; the
+ * frontend never re-sorts or re-derives the ranking.
+ */
+export interface PressureEntry {
+  /** The actor's IP (attacker-influenced value — render as a text node only, ADR-0029 D3). */
+  source_ip: string
+  /** Count of ADR-0070 D1-qualifying attempt events for this actor, state window (24h). */
+  attempt_count: number
+  /** Minutes between this actor's first and last qualifying attempt. 0 when fewer than two exist. */
+  span_minutes: number
+}
+
+/**
+ * Response from GET /banner/summary (issue #55).
+ *
+ * Additive fields for the dashboard triage banner's attempts headline + pressure
+ * strip — extends #43's aggregate record line with the ADR-0070 attempt
+ * vocabulary. Every count is computed server-side from the same
+ * `firewatch_core.attempts` module and `decide()`/`detect()` verdicts the
+ * per-actor `ThreatScore` escalation already uses — the frontend NEVER
+ * recomputes any of these integers; it only renders what the server sends.
+ *
+ * `succeeded_count` is THE correctness crux (ADR-0070 D3 tier-attribution
+ * correction): the success set is Tier-1 verdicts UNION actors carrying a
+ * critical-severity qualifying detection — never Tier-1 alone. Render this
+ * field verbatim; do not re-derive "succeeded" from tier client-side.
+ */
+export interface BannerAttemptSummary {
+  /** Total D1-qualifying attempt events across all actors, state window (24h). */
+  attempt_count: number
+  /** Distinct actors with >=1 qualifying attempt in the state window. */
+  actor_count: number
+  /**
+   * Actors with a Tier-1 verdict OR a critical-severity qualifying detection
+   * (ADR-0070 D3 tier-attribution correction) — the union, never Tier-1 alone.
+   */
+  succeeded_count: number
+  /** K = actors carrying a Tier-1 or Tier-2 escalation verdict ("need review"). */
+  queue_size: number
+  /** Bounded (<= 5) highest-pressure actors, ranked server-side by peak decayed intensity. */
+  top_pressure: PressureEntry[]
+  /** ISO-8601 UTC timestamp when this summary was generated. */
+  generated_at: string
+}
+
+/**
  * Response from GET /ai/models (#135).
  * models: flat list of model IDs available at the configured local endpoint.
  * current: the currently persisted model ID, or null if none is set.

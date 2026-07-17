@@ -313,6 +313,38 @@ exactly one honest sentence:
   "All clear — 214 detections on the record from 3 sources → Network Logs" — the calm, honest
   default day-one screen.
 
+### The attempts headline and pressure strip (issue #55, ADR-0070 D1/D3/D5)
+
+`GET /banner/summary` extends the aggregate record line above with the ADR-0070 "attempt"
+vocabulary. Whenever one or more qualifying attempt events exist in the trailing 24-hour state
+window, the banner renders ONE headline sentence IN THE SAME SLOT the line above occupies —
+superseding it, not stacking alongside it:
+
+> **N hostile attempts from M actors — S succeeded · K need review**
+
+All four integers are computed server-side (`firewatch_api.banner_assembler`) from the same
+`firewatch_core.attempts` predicate and `decide()`/`detect()` verdicts already behind each
+actor's `ThreatScore` — the frontend renders them verbatim and never recomputes any of them:
+
+- **N / M** — count of D1-qualifying attempt events / distinct contributing actors, state window.
+- **S (succeeded)** — THE correctness crux (ADR-0070 D3 tier-attribution correction): the
+  success set is Tier-1 verdicts **UNION** actors carrying a critical-severity qualifying
+  detection — never Tier-1 alone. A host-auth source (syslog/`linux_auth`) never emits ALLOW, so
+  a pure-SSH `brute_force_then_login` compromise is structurally Tier 2; a Tier-1-only
+  derivation would read "0 succeeded" while that compromise fires — the worst possible false
+  calm. The critical-severity arm closes that gap.
+- **K (need review)** — the queue size, identical to §2.1's Tier-1/Tier-2 population.
+
+A bounded top-N (≤ 5) **pressure strip** accompanies the headline: each row names one
+highest-pressure actor's IP (linking to its entity detail), qualifying attempt count, and the
+span in minutes between its first and last attempt — plain integers, no decision verb, no inner
+scrollbar. A "+N more actors → Network Logs" link covers any actors beyond the bounded strip.
+`top_pressure` rows are ranked server-side by peak decayed intensity — never a raw float sent
+over the wire (ADR-0035) — so the frontend never re-ranks or re-derives the ordering either.
+
+When no attempts exist in the window, the aggregate record line above renders unchanged — no
+regression to the pre-#55 calm-state behavior.
+
 ---
 
 ## 5. SIEM now, SOAR later

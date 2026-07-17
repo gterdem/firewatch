@@ -99,6 +99,7 @@ const HEALTH_ONLINE: HealthResponse = {
   ollama_connected: true,
   ollama_model: 'llama3.2',
   db_ok: true,
+  ai: 'active',
 }
 
 const SCORE_BREAKDOWN: ScoreBreakdownItem[] = [

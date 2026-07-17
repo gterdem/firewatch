@@ -63,6 +63,7 @@ const HEALTH_CONNECTED: HealthResponse = {
   ollama_connected: true,
   ollama_model: 'qwen3:14b',
   db_ok: true,
+  ai: 'active',
 }
 
 const HEALTH_DISCONNECTED: HealthResponse = {
@@ -70,6 +71,7 @@ const HEALTH_DISCONNECTED: HealthResponse = {
   ollama_connected: false,
   ollama_model: null,
   db_ok: true,
+  ai: 'unreachable',
 }
 
 const MODELS_RESPONSE = {

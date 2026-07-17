@@ -121,7 +121,7 @@ describe('KpiStrip — AI engine pill hard-right slot (#254)', () => {
     render(
       <KpiStrip
         stats={STATS_FIXTURE}
-        health={{ status: 'ok', ollama_connected: true, ollama_model: 'llama3.2', db_ok: true }}
+        health={{ status: 'ok', ollama_connected: true, ollama_model: 'llama3.2', db_ok: true, ai: 'active' }}
       />,
     )
     expect(screen.getByTestId('ai-engine-pill')).toBeInTheDocument()

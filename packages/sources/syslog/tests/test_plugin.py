@@ -394,17 +394,45 @@ class TestNormalizeBasic:
         event = self.plugin.normalize(raw, source_id="pi-syslog")
         assert event.source_ip == "198.51.100.10"
 
-    def test_ssh_brute_force_severity_is_high(self) -> None:
-        """SSH brute-force → severity='high'."""
+    def test_ssh_brute_force_severity_is_low(self) -> None:
+        """SSH brute-force (a single Failed password/publickey line) → severity='low'
+        (ADR-0069 D4(b): a lone failed login is Sigma `low` verbatim -- "notable
+        event but rarely an incident"; ambient at volume, so must not qualify
+        Tier 2 alone (ADR-0067 D1(b))."""
         raw = _raw(_rfc3164_ssh_bruteforce())
         event = self.plugin.normalize(raw, source_id="pi-syslog")
-        assert event.severity == "high"
+        assert event.severity == "low"
+
+    def test_ssh_brute_force_category_unchanged_by_recalibration(self) -> None:
+        """ADR-0069 D4(b): the category string ("SSH Brute Force") is unchanged
+        by the severity downshift -- the detector correlates on this exact
+        string (renaming is explicitly out of scope, ADR-0069 Alternatives)."""
+        raw = _raw(_rfc3164_ssh_bruteforce())
+        event = self.plugin.normalize(raw, source_id="pi-syslog")
+        assert event.category == "SSH Brute Force"
 
     def test_ssh_login_severity_is_info(self) -> None:
         """SSH login (informational) → severity='info'."""
         raw = _raw(_rfc5424_ssh_login())
         event = self.plugin.normalize(raw, source_id="pi-syslog")
         assert event.severity == "info"
+
+    def test_generic_syslog_severity_is_info(self) -> None:
+        """Unrecognized syslog line → severity='info' on LOG (ADR-0069 D4(b):
+        unaffected by the fallback recalibration -- asserted, not assumed)."""
+        raw = _raw(_rfc3164_generic())
+        event = self.plugin.normalize(raw, source_id="pi-syslog")
+        assert event.severity == "info"
+        assert event.action == "LOG"
+
+    def test_sudo_failure_severity_is_medium(self) -> None:
+        """Sudo authentication failure → severity='medium' (ADR-0069 D4(b):
+        stays medium -- "reviewed manually on a more frequent basis"; local-only
+        and near-zero ambient on a healthy box. Unaffected by the SSH
+        brute-force downshift -- asserted, not assumed)."""
+        raw = _raw(_rfc3164_sudo_failure())
+        event = self.plugin.normalize(raw, source_id="pi-syslog")
+        assert event.severity == "medium"
 
     def test_payload_snippet_is_the_syslog_line(self) -> None:
         """payload_snippet carries the raw syslog line (truncated to 500)."""

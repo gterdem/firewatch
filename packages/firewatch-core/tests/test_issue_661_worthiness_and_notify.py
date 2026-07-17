@@ -2,10 +2,11 @@
 updated for issue #42 (ADR-0067 D2/D7) — the tier=None (observed) null-guard.
 
 EARS criteria:
-- WHEN notify_on_auto_escalate is OFF (default), THE SYSTEM SHALL gate notifications on the
+- WHEN notify_on_auto_escalate is OFF, THE SYSTEM SHALL gate notifications on the
   Notification threshold severity band only (current behaviour preserved byte-identical).
-- WHEN notify_on_auto_escalate is ON, THE SYSTEM SHALL gate notifications on
-  is_alert_worthy(threat, notification_threshold) (band OR escalation tier <= 2).
+- WHEN notify_on_auto_escalate is ON (default since ADR-0059 Amendment 1 / issue #74),
+  THE SYSTEM SHALL gate notifications on is_alert_worthy(threat, notification_threshold)
+  (band OR escalation tier <= 2).
 - THE SYSTEM SHALL NOT notify on tier 3/4 escalations when band does not meet the threshold.
 - THE SYSTEM SHALL safely handle threat.escalation is None (the tier half is False).
 - (ADR-0067 D2/D7, issue #42) WHEN escalation.tier is None (the observed stratum), THE SYSTEM
@@ -346,12 +347,16 @@ class TestNotifyToggleOff:
         assert sent is True
         assert len(_FakeHttpx.captured) == 1
 
-    async def test_default_toggle_is_off(
+    async def test_toggle_explicitly_off_is_band_only(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Default (no notify_on_auto_escalate kwarg) is False — band-only gate."""
-        n = _notifier(monkeypatch, webhook_url=SAFE_URL, alert_threshold="CRITICAL")
-        # RuntimeConfig default is False — this notifier should behave like toggle OFF.
+        """notify_on_auto_escalate=False explicitly is band-only (tier axis dark)."""
+        n = _notifier(
+            monkeypatch,
+            webhook_url=SAFE_URL,
+            alert_threshold="CRITICAL",
+            notify_on_auto_escalate=False,
+        )
         threat = _threat("MEDIUM", escalation=_verdict(1))
         assert await n.check_and_alert(threat) is False
 
@@ -370,6 +375,15 @@ class TestNotifyToggleOff:
 
 class TestNotifyToggleOn:
     """When notify_on_auto_escalate is ON, tier <= 2 threats also notify."""
+
+    async def test_default_toggle_is_on(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Default (no notify_on_auto_escalate kwarg) is True (ADR-0059 Amendment 1
+        / issue #74) -- a tier-1 MEDIUM notifies out of the box."""
+        n = _notifier(monkeypatch, webhook_url=SAFE_URL, alert_threshold="CRITICAL")
+        threat = _threat("MEDIUM", escalation=_verdict(1))
+        assert await n.check_and_alert(threat) is True
 
     async def test_tier1_medium_notifies_when_toggle_on(
         self, monkeypatch: pytest.MonkeyPatch
@@ -487,27 +501,30 @@ class TestNotifyToggleOn:
 
 
 class TestRuntimeConfigNotifyField:
-    def test_default_is_false(self) -> None:
-        """notify_on_auto_escalate defaults to False (ADR-0059 D3 — quiet chat)."""
-        cfg = RuntimeConfig()
-        assert cfg.notify_on_auto_escalate is False
+    def test_default_is_true(self) -> None:
+        """notify_on_auto_escalate defaults to True (ADR-0059 Amendment 1 / issue #74).
 
-    def test_can_set_to_true(self) -> None:
-        """The field can be set to True."""
-        cfg = RuntimeConfig(notify_on_auto_escalate=True)
+        The gate mechanism is unchanged (ADR-0059 D3); only the default flipped.
+        """
+        cfg = RuntimeConfig()
         assert cfg.notify_on_auto_escalate is True
+
+    def test_can_set_to_false(self) -> None:
+        """The field can still be set to False (opt back out to band-only)."""
+        cfg = RuntimeConfig(notify_on_auto_escalate=False)
+        assert cfg.notify_on_auto_escalate is False
 
     def test_serialises_in_model_dump(self) -> None:
         """The field appears in model_dump() with its value."""
-        cfg = RuntimeConfig(notify_on_auto_escalate=True)
+        cfg = RuntimeConfig(notify_on_auto_escalate=False)
         d = cfg.model_dump()
         assert "notify_on_auto_escalate" in d
-        assert d["notify_on_auto_escalate"] is True
+        assert d["notify_on_auto_escalate"] is False
 
-    def test_default_serialises_as_false(self) -> None:
+    def test_default_serialises_as_true(self) -> None:
         cfg = RuntimeConfig()
         d = cfg.model_dump()
-        assert d["notify_on_auto_escalate"] is False
+        assert d["notify_on_auto_escalate"] is True
 
     def test_unknown_field_still_rejected(self) -> None:
         """extra='forbid' is still enforced — unknown keys raise ValidationError."""

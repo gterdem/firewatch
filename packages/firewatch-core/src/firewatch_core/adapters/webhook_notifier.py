@@ -10,8 +10,15 @@ with a generic-JSON fallback — but re-wired to the FireWatch v2 contract:
 - The URL is anti-SSRF-validated at config-write time by ``RuntimeConfig`` (ADR-0026);
   this adapter does not re-validate.
 - ``check_and_alert`` gates on the band axis only when ``notify_on_auto_escalate`` is
-  False (default); when True it uses the shared ``is_alert_worthy`` predicate from
-  ``escalation.worthiness`` (band OR tier <= 2, ADR-0059 D3).
+  False; when True (the default since ADR-0059 Amendment 1 / issue #74) it uses the
+  shared ``is_alert_worthy`` predicate from ``escalation.worthiness`` (band OR
+  tier <= 2, ADR-0059 D3).
+- ``check_and_alert`` fires only on a notification-worthy STATE TRANSITION, never on
+  repeated re-evaluation of an unchanged state (ADR-0059 Amendment 1 / issue #74).
+  Cadence is delegated to ``escalation.transition.NotifyTransitionTracker`` — see that
+  module for the exact transition rules. This closes the stock-vs-flow gap: without
+  it, an actor that stays alert-worthy re-notifies on every ingest-triggered
+  analysis (``pipeline.background_analyze_and_alert`` runs per event / per batch-IP).
 
 MB.3 / issue #55. Implements ``firewatch_sdk.ports.Notifier``.
 """
@@ -22,6 +29,7 @@ from typing import Any
 
 import httpx
 
+from firewatch_core.escalation.transition import NotifyTransitionTracker
 from firewatch_core.escalation.worthiness import band_meets, is_alert_worthy
 from firewatch_sdk.config import ConfigStore, RuntimeConfig
 from firewatch_sdk.models import ThreatScore
@@ -43,6 +51,11 @@ class WebhookNotifier:
 
     def __init__(self, config_store: ConfigStore) -> None:
         self._config = config_store
+        # Per-actor notification cadence (ADR-0059 Amendment 1 / issue #74). Lives
+        # on the instance so cadence state survives across calls for as long as
+        # this WebhookNotifier does — one process restart is the acceptable reset
+        # boundary (issue #74's implementation note).
+        self._transitions = NotifyTransitionTracker()
 
     # ---- config access (read fresh each call) --------------------------------
 
@@ -204,28 +217,53 @@ class WebhookNotifier:
         return ok
 
     async def check_and_alert(self, threat: ThreatScore) -> bool:
-        """Send only if the threat meets the configured alerting gate.
+        """Send only if the threat is alert-worthy AND its state just transitioned.
 
-        Gate logic (ADR-0059 D3):
-        - ``notify_on_auto_escalate`` **False** (default): band-only gate — preserves
-          current behaviour exactly. ``band_meets(threat_level, alert_threshold)`` must
-          be True or no notification is sent.
-        - ``notify_on_auto_escalate`` **True**: full ``is_alert_worthy`` predicate —
-          band OR escalation tier <= 2. A low-score allowed-through / block-status-unknown
-          detection also triggers a notification.
+        Gate logic (ADR-0059 D3, default flipped by Amendment 1 / issue #74):
+        - ``notify_on_auto_escalate`` **True** (default): full ``is_alert_worthy``
+          predicate — band OR escalation tier <= 2. A low-score allowed-through /
+          block-status-unknown detection also triggers a notification.
+        - ``notify_on_auto_escalate`` **False**: band-only gate.
+          ``band_meets(threat_level, alert_threshold)`` must be True or no
+          notification is sent.
 
-        In both cases a webhook URL must be configured or the call returns False.
+        Cadence (ADR-0059 Amendment 1 / issue #74): worthiness alone is not
+        sufficient — the call also fires only when ``NotifyTransitionTracker``
+        reports a fresh transition (entering the worthy state, or getting louder
+        while already in it) for this actor. An actor that stays continuously
+        worthy across repeated calls (this method is invoked per ingested event /
+        per batch-IP, see ``pipeline.background_analyze_and_alert``) does NOT
+        re-notify on every call — this is the fix for the pre-existing
+        statelessness bug where a CRITICAL-band actor re-notified on every
+        analysis. The transition tracker's inputs (band + tier) are recorded on
+        every evaluation, including non-worthy ones, so a later crossing is
+        detected correctly.
+
+        A webhook URL must be configured or the call returns False without
+        touching the transition tracker (no channel — nothing to track towards).
         """
         runtime = self._runtime()
-        if runtime.notify_on_auto_escalate:
-            worthy = is_alert_worthy(threat, runtime.alert_threshold)
-        else:
-            worthy = band_meets(threat.threat_level, runtime.alert_threshold)
-        if not worthy:
-            return False
         url = self._url(runtime)
         if url is None:
             return False
+
+        band_met = band_meets(threat.threat_level, runtime.alert_threshold)
+        tier = threat.escalation.tier if threat.escalation is not None else None
+
+        if runtime.notify_on_auto_escalate:
+            worthy = is_alert_worthy(threat, runtime.alert_threshold)
+        else:
+            worthy = band_met
+
+        fresh = self._transitions.transitioned(
+            threat.source_ip,
+            band_met=band_met,
+            tier=tier,
+            tier_axis_enabled=runtime.notify_on_auto_escalate,
+        )
+        if not (worthy and fresh):
+            return False
+
         ok = await self._post(url, self._format_alert(url, threat))
         if ok:
             logger.info("Threshold alert sent for %s (score %d)", threat.source_ip, threat.score)

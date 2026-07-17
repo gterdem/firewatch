@@ -414,11 +414,14 @@ export interface RuntimeConfigResponse {
    */
   geo_provider: 'offline' | 'online'
   /**
-   * Opt-in escalation-aware notifications (ADR-0059 D3 / issue #661).
-   * When false (default), notifier gates on the Notification threshold band only.
-   * When true, notifier uses is_alert_worthy(threat, threshold) — band OR escalation
-   * tier <= 2 — so a low-score auto-escalating threat also triggers a notification.
-   * Additive SDK field; backward-compatible (default false keeps existing behaviour).
+   * Escalation-aware notifications, ON by default (ADR-0059 D3 mechanism /
+   * ADR-0059 Amendment 1 default / issue #74).
+   * When true (default since Amendment 1), notifier uses is_alert_worthy(threat,
+   * threshold) — band OR escalation tier <= 2 — so a HIGH ALERT / escalation-tier
+   * actor also triggers a notification. When false, notifier gates on the
+   * Notification threshold band only.
+   * Additive SDK field; backward-compatible. Firing cadence is transition-gated
+   * (fires on a state change, not on every re-evaluation of an unchanged state).
    */
   notify_on_auto_escalate: boolean
   /**

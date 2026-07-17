@@ -91,7 +91,7 @@ const RUNTIME_CONFIG_BASE = {
   ai_enabled: true,
   ollama_base_url: 'http://localhost:11434',
   geo_provider: 'offline' as const,
-  notify_on_auto_escalate: false,
+  notify_on_auto_escalate: true,
   triage_threshold: 'HIGH' as const,
 }
 

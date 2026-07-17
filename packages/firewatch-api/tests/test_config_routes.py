@@ -673,11 +673,13 @@ def test_get_runtime_config_api_key_set_false_when_not_configured() -> None:
 
 # ---------------------------------------------------------------------------
 # issue #661 — notify_on_auto_escalate round-trip (ADR-0059 D3)
+# issue #74 — default flipped to True (ADR-0059 Amendment 1)
 # ---------------------------------------------------------------------------
 
 
-def test_get_runtime_config_notify_on_auto_escalate_default_false() -> None:
-    """GET /config/runtime SHALL include notify_on_auto_escalate=false by default (ADR-0059 D3).
+def test_get_runtime_config_notify_on_auto_escalate_default_true() -> None:
+    """GET /config/runtime SHALL include notify_on_auto_escalate=true by default
+    (ADR-0059 Amendment 1 / issue #74 — flipped from the original ADR-0059 D3 default).
 
     The field is a plain bool (not a secret) so it flows through model_dump() and
     _mask_secrets() untouched — no allowlist plumbing needed.
@@ -694,8 +696,32 @@ def test_get_runtime_config_notify_on_auto_escalate_default_false() -> None:
         "notify_on_auto_escalate must be present in GET /config/runtime response. "
         f"Keys returned: {list(body.keys())!r}"
     )
+    assert body["notify_on_auto_escalate"] is True, (
+        "Default notify_on_auto_escalate must be True (ADR-0059 Amendment 1 — quiet chat is "
+        "preserved by the ADR-0067 assertion gate, not by this toggle). "
+        f"Response: {body!r}"
+    )
+
+
+def test_put_runtime_config_notify_on_auto_escalate_can_opt_out_to_false() -> None:
+    """PUT /config/runtime with notify_on_auto_escalate=false persists and is returned by GET.
+
+    The toggle still exists so an operator can opt back OUT to band-only notifications.
+    """
+    store = FakeConfigStore()
+    client = _make_client({}, store)
+
+    put_resp = client.put(
+        "/config/runtime",
+        json={"updates": {"notify_on_auto_escalate": False}},
+    )
+    assert put_resp.status_code == 200
+
+    get_resp = client.get("/config/runtime")
+    assert get_resp.status_code == 200
+    body = get_resp.json()
     assert body["notify_on_auto_escalate"] is False, (
-        "Default notify_on_auto_escalate must be False (ADR-0059 D3 — quiet chat by default). "
+        "notify_on_auto_escalate must be False after PUT with False. "
         f"Response: {body!r}"
     )
 

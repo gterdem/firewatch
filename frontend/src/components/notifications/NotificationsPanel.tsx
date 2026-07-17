@@ -10,8 +10,8 @@
  *   - Notification threshold (label for SDK field alert_threshold)
  *   - Webhook URL + alert_on_sync (preserves ADR-0006 SecretStr masking)
  *
- * New control (ADR-0059 D3):
- *   - notify_on_auto_escalate toggle (default OFF)
+ * New control (ADR-0059 D3, mechanism):
+ *   - notify_on_auto_escalate toggle (default ON since ADR-0059 Amendment 1 / issue #74)
  *
  * Security: webhook_url is SecretStr on the server. GET returns null when set.
  * webhook_url_set (boolean) is the honest signal. The secret is never echoed.
@@ -97,8 +97,8 @@ export default function NotificationsPanel() {
   const [webhookIsSet, setWebhookIsSet] = useState(false)
   // alert_on_sync: persisted on toggle
   const [alertOnSync, setAlertOnSync] = useState(true)
-  // notify_on_auto_escalate: ADR-0059 D3; default OFF per spec
-  const [notifyOnAutoEscalate, setNotifyOnAutoEscalate] = useState(false)
+  // notify_on_auto_escalate: ADR-0059 D3 mechanism; default ON per ADR-0059 Amendment 1
+  const [notifyOnAutoEscalate, setNotifyOnAutoEscalate] = useState(true)
   // Saving state for all config operations
   const [configSaving, setConfigSaving] = useState(false)
   const [toast, setToast] = useState<ToastState | null>(null)
@@ -119,8 +119,8 @@ export default function NotificationsPanel() {
         // webhook_url_set: non-secret boolean from server (ADR-0006 / #494).
         // Never prefill the input with the secret value.
         setWebhookIsSet(cfg.webhook_url_set)
-        // notify_on_auto_escalate: new additive field; default false if absent
-        setNotifyOnAutoEscalate(cfg.notify_on_auto_escalate ?? false)
+        // notify_on_auto_escalate: additive field; default true if absent (ADR-0059 A1)
+        setNotifyOnAutoEscalate(cfg.notify_on_auto_escalate ?? true)
       })
       .catch(() => {
         // Non-blocking — controls fall back to safe defaults if config load fails.

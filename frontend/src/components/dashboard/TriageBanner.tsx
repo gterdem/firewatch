@@ -17,6 +17,16 @@
  *     NOT here — it targets a rule, not the actor (lives on the entity-panel
  *     detection row instead, per D6).
  *
+ * Issue #56 (ADR-0072 D4, PR-3 minimal slice) — the re-entry flag chip:
+ * ActorChip renders ONE plain-text chip ("Returned — escalated since you
+ * decided …") when `actor.triage_decision.reentry` is non-null — the actor
+ * was previously decided (expected/dismissed) and has since re-escalated (a
+ * tier appeared or loudened). The chip is purely informational: it demands
+ * no new decision and introduces no new verb — the operator re-decides via
+ * the existing Expected/Harden/overflow actions already on the chip. Copy +
+ * the engine-integer formatting live in `escalationCopy.ts`'s
+ * `reentryChipText` (issue #6 discipline: this component owns zero copy).
+ *
  * ADR-0058 D2 (issue #649): banner-worthiness now also considers the escalation
  * axis. Tier 1 (allowed-through) and Tier 2 (block-status-unknown) actors surface
  * even when their numeric score is LOW or MEDIUM. Each chip shows:
@@ -112,6 +122,7 @@ import {
   blockStatusLabel,
   tierGroupLabel,
   triageHeadlineText,
+  reentryChipText,
 } from '../../lib/escalationCopy'
 import ClickableIp from '../entity/ClickableIp'
 import { Popover } from '../ds/Popover'
@@ -833,6 +844,36 @@ function ActorChip({ actor, onAction }: ActorChipProps) {
             </div>
           </div>
         </Popover>
+      )}
+
+      {/* Re-entry flag (issue #56, ADR-0072 D4) — the actor was decided
+          (expected/dismissed) and has since re-escalated: a tier appeared or
+          loudened since the decision. Plain text, ALWAYS visible (never
+          hover-only — WCAG 1.4.13/2.1.1, this is the essential signal, not a
+          progressive-disclosure detail). Copy + the engine-integer
+          formatting live entirely in `escalationCopy.ts`'s
+          `reentryChipText` — this component owns zero copy of its own
+          (issue #6 discipline). Informational only: no new verb/action, the
+          operator re-decides via the existing Expected/Harden/overflow
+          affordances already on this chip. */}
+      {actor.triage_decision?.reentry != null && (
+        <span
+          data-testid="triage-chip-reentry"
+          style={{
+            fontSize: 10,
+            fontWeight: 600,
+            color: 'var(--fw-orange)',
+            border: '1px solid var(--fw-orange)',
+            borderRadius: 3,
+            padding: '1px 5px',
+            lineHeight: 1.5,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {/* Text node only — ADR-0029 D3; engine integers only, never a raw
+              float (ADR-0072 D4 / ADR-0035 RULE-tagged provenance) */}
+          {reentryChipText(actor.triage_decision.reentry)}
+        </span>
       )}
 
       {/* Queue card actions (issue #45, ADR-0072 D6 maintainer ruling):

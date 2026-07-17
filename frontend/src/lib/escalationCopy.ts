@@ -505,3 +505,41 @@ export function triageHeadlineText(
   }
   return `${count} ${actorWord} ${needWord} review`
 }
+
+// ---------------------------------------------------------------------------
+// Re-entry flag chip copy (issue #56, ADR-0072 D4) — the PR-3 minimal slice.
+//
+// A decided (`expected`/`dismissed`) actor whose tier has newly appeared or
+// loudened since the decision is served back with `triage_decision.reentry`
+// populated (never null). This is the SOLE copy home for the "returned"
+// wording — `TriageBanner.tsx`'s ActorChip owns zero copy of its own (issue
+// #6 discipline, extended here).
+//
+// Plain text, not hover-only (WCAG 1.4.13/2.1.1 — this is the essential
+// signal, not a progressive-disclosure detail): engine integers only, never
+// a raw float (ADR-0072 D4 / ADR-0035 RULE-tagged provenance). This function
+// never recomputes the re-entry predicate — it only formats the integers the
+// server already decided on.
+//
+// `ReentryLike` is a local structural mirror of `ReentryAnnotation`
+// (api/types.ts) so this module stays decoupled from the api layer (same
+// convention as `DispositionCountsLike` above).
+// ---------------------------------------------------------------------------
+
+interface ReentryLike {
+  decided_tier: number | null
+  current_tier: number | null
+}
+
+/**
+ * Build the re-entry flag chip's plain-text label for an actor whose
+ * `triage_decision.reentry` is non-null (issue #56).
+ *
+ * `decided_tier`/`current_tier` are engine integers (`null` = the observed
+ * stratum, ADR-0067 D2 — no tier at all, never rendered as "Tier null").
+ */
+export function reentryChipText(reentry: ReentryLike): string {
+  const decided = reentry.decided_tier == null ? 'no tier' : `Tier ${reentry.decided_tier}`
+  const current = reentry.current_tier == null ? 'no tier' : `Tier ${reentry.current_tier}`
+  return `Returned — escalated since you decided (decided at ${decided}, now ${current})`
+}

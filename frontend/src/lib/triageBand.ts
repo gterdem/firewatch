@@ -32,7 +32,7 @@
  */
 
 import { bandMeets } from './threatLevel'
-import { isDismissed } from './triageActions'
+import { isSuppressed } from './triageDecisions'
 import type { ThreatScore } from '../api/types'
 
 /**
@@ -66,6 +66,10 @@ export function isHighTierEscalation(t: ThreatScore): boolean {
  * Sort order: tier-1 escalations first, then tier-2, then by score descending
  * (so the loudest signals lead — ADR-0058 "Tier 1 = loudest").
  * Actors without an escalation verdict sort as tier 99 (after tiered ones).
+ *
+ * ADR-0072 D3: queue membership is `escalated && !(triage_decision?.suppressed)`.
+ * `isSuppressed` reads the server-computed annotation only — no client-side
+ * lifecycle logic (the pre-#47 localStorage `isDismissed` is retired).
  */
 export function deriveTriageActors(
   threats: ThreatScore[],
@@ -74,7 +78,7 @@ export function deriveTriageActors(
   return threats
     .filter(
       (t) =>
-        !isDismissed(t) &&
+        !isSuppressed(t) &&
         (bandMeets(t.threat_level, triageThreshold) || isHighTierEscalation(t)),
     )
     .sort((a, b) => {
@@ -126,7 +130,7 @@ export function deriveObservedRecord(
   const pendingIps = new Set(pendingActors.map((t) => t.source_ip))
   const observedOnly = threats.filter(
     (t) =>
-      !isDismissed(t) &&
+      !isSuppressed(t) &&
       t.escalation?.disposition === 'observed' &&
       !pendingIps.has(t.source_ip),
   )

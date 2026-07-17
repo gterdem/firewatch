@@ -165,6 +165,43 @@ export interface EscalationVerdict {
 }
 
 /**
+ * The additive `triage_decision` annotation on `ThreatScore` (ADR-0072 D3/D8,
+ * issue #47). Mirrors the API schema `TriageDecisionAnnotation`
+ * (packages/firewatch-api/src/firewatch_api/schemas.py).
+ *
+ * `null` (the default) when the actor carries no active actor-identity
+ * decision — `false_positive` rows are rule-scoped and never rendered in this
+ * slot; they only affect `suppressed` via the server-side evaluator. Decided
+ * actors are NEVER removed from `GET /threats` — this field only ANNOTATES
+ * (ADR-0072 finding 1, the observed-stratum "never hide lifetime facts" rule).
+ *
+ * **Client contract (ADR-0072 D3):** queue membership is
+ * `escalated && !(triage_decision?.suppressed)`. No lifecycle logic runs
+ * client-side — the client renders what the server computed. See
+ * `lib/triageDecisions.ts`'s `isSuppressed` for the canonical predicate.
+ */
+export interface TriageDecisionAnnotation {
+  /** `false_positive` decisions are rule-scoped and never surface here. */
+  verb: 'expected' | 'dismissed'
+  /** UTC ISO-8601 timestamp the decision was recorded. */
+  decided_at: string
+  /** Verdict tier at decision time; null = observed stratum (ADR-0067 D2). */
+  decided_tier: number | null
+  /** Score at decision time (#49/#56 re-entry input; not consumed in M1). */
+  decided_score: number
+  /**
+   * OR of actor-identity and false-positive suppression (ADR-0072 D4) — the
+   * ONLY field queue-membership logic may read.
+   */
+  suppressed: boolean
+  /**
+   * Always null until issue #56 implements re-entry (ADR-0072 D4 interim).
+   * Engine-integer payload when populated; never attacker-controlled text.
+   */
+  reentry: Record<string, unknown> | null
+}
+
+/**
  * Mirrors the SDK ThreatScore model as returned by GET /threats and GET /threats/{ip}.
  * ai_* fields are additive-only — absent or unavailable when AI is offline (ADR-0015).
  */
@@ -222,6 +259,12 @@ export interface ThreatScore {
    * tier 1 or tier 2 = banner-worthy even when threat_level is MEDIUM or LOW.
    */
   escalation?: EscalationVerdict | null
+  /**
+   * Server-computed triage-decision annotation (ADR-0072 D3, issue #47).
+   * Additive — null/absent when the actor carries no active decision, or on
+   * older API responses that predate this field. See `TriageDecisionAnnotation`.
+   */
+  triage_decision?: TriageDecisionAnnotation | null
 }
 
 /**
@@ -1969,4 +2012,69 @@ export interface EntityGraphResponse {
    * highest-weight subset (EARS-3).  Render an honest "showing top N" chip when true.
    */
   truncated: boolean
+}
+
+// ---------------------------------------------------------------------------
+// Triage decisions — ADR-0072 D2/D3, issue #47 (server-side triage persistence)
+//
+// Mirrors packages/firewatch-api/src/firewatch_api/schemas.py's
+// CreateDecisionRequest / DecisionRecord / ListDecisionsResponse.
+// Consumed by api/decisions.ts. `acknowledge` is retired (ADR-0072 D6) — the
+// verb vocabulary here is the closed 3-value set the store accepts.
+// ---------------------------------------------------------------------------
+
+/**
+ * The three verbs an operator may record against an actor (or actor+rule)
+ * via `POST /decisions` (ADR-0072 D2/D6). NOT the SIEM `ThreatActionVerb`
+ * (lib/triageActions.ts) — that is the UI-facing action-seam vocabulary;
+ * this is the server-store vocabulary the seam's `dismiss`/`block` verbs
+ * translate into.
+ */
+export type TriageDecisionVerb = 'expected' | 'dismissed' | 'false_positive'
+
+/**
+ * Request body for `POST /decisions` (ADR-0072 D3).
+ *
+ * `decided_tier`/`decided_score` are NEVER sent by the client — the server
+ * computes them by running the actor through the pipeline at decision time
+ * (ADR-0072 D2 "snapshot authority is the server"; a stale tab must not write
+ * a stale re-entry baseline).
+ *
+ * `rule_name` is required iff `verb === 'false_positive'` — the server
+ * returns 422 on a mismatch.
+ */
+export interface CreateDecisionRequest {
+  actor_ip: string
+  verb: TriageDecisionVerb
+  rule_name?: string | null
+  note?: string | null
+}
+
+/**
+ * One `triage_decisions` row on the wire (ADR-0072 D2) — full history shape.
+ * Returned by `POST /decisions` (the new row incl. server snapshot) and as
+ * each item of `GET /decisions`' cursor envelope.
+ */
+export interface DecisionRecord {
+  id: number
+  actor_ip: string
+  verb: TriageDecisionVerb
+  rule_name: string | null
+  /** Verdict tier at decision time; null = observed stratum. */
+  decided_tier: number | null
+  decided_score: number
+  /** UTC ISO-8601 — server-stamped. */
+  decided_at: string
+  /** Null = active; set by `DELETE /decisions/{id}` (soft-revoke). */
+  revoked_at: string | null
+  /** Defaults to 'local operator' (ADR-0053 D3 seam). */
+  author: string
+  note: string | null
+}
+
+/** `GET /decisions` — ADR-0029 D2 cursor envelope, newest-first. */
+export interface ListDecisionsResponse {
+  items: DecisionRecord[]
+  next_cursor: string | null
+  has_more: boolean
 }

@@ -142,7 +142,6 @@ vi.mock('../api/logs', () => ({
 }))
 
 import DashboardRoute from '../routes/DashboardRoute'
-import { clearDismissed } from '../lib/triageActions'
 
 function renderDashboard() {
   return render(
@@ -437,7 +436,7 @@ describe('AttackDispositionFlow (component)', () => {
 describe('DashboardRoute — flow strip integration (issue #214)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    clearDismissed()
+    localStorage.clear()
     mockFetchHealth.mockResolvedValue(HEALTH_AI_ONLINE)
     mockFetchStats.mockResolvedValue(STATS_FIXTURE)
     mockFetchTimeline.mockResolvedValue(TIMELINE_FIXTURE)

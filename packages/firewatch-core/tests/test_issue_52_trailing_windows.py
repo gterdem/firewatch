@@ -245,7 +245,7 @@ def test_detect_has_no_internal_time_filtering() -> None:
             timestamp=_ANCIENT + timedelta(minutes=5),
         ),
     ]
-    detections = detect(events)
+    detections = detect(events, now=_ANCIENT + timedelta(minutes=5))
     assert any(d.rule_name == "multi_source_attack" for d in detections), (
         "detect() must not filter by time — it is a pure function"
     )

@@ -450,3 +450,74 @@ class NarrationResponse(BaseModel):
             "'skipped' (caller passed ai=false), 'disabled'."
         )
     )
+
+
+# ---------------------------------------------------------------------------
+# Banner attempts-summary shapes (issue #55 Part 1/backend, ADR-0070 D1/D3/D5)
+# ---------------------------------------------------------------------------
+
+
+class PressureEntry(BaseModel):
+    """One row of the bounded top-N ``top_pressure`` strip (issue #55).
+
+    ``attempt_count`` and ``span_minutes`` are plain engine integers
+    (ADR-0035) — never the underlying decayed-intensity float used to rank
+    the strip. Rows are ordered highest-pressure first.
+    """
+
+    source_ip: str = Field(description="The actor's IP (attacker-influenced value).")
+    attempt_count: int = Field(
+        description=(
+            "Count of ADR-0070 D1-qualifying attempt events for this actor "
+            "within the trailing state window (W_STATE, 24h)."
+        )
+    )
+    span_minutes: int = Field(
+        description=(
+            "Minutes between this actor's first and last qualifying attempt in "
+            "the state window. 0 when fewer than two qualifying attempts exist."
+        )
+    )
+
+
+class BannerAttemptSummary(BaseModel):
+    """Response for ``GET /banner/summary`` (issue #55 Part 1/backend).
+
+    Additive fields for the dashboard triage banner (ADR-0029 additive rule) —
+    extends #43's aggregate record line with the attempt vocabulary. Every
+    count is computed server-side from ``firewatch_core.attempts`` (the D1
+    attempt predicate) and the existing ``decide()``/``detect()`` verdicts —
+    the banner can never count differently than the escalation engine.
+
+    ``succeeded_count`` is THE correctness crux (ADR-0070 D3 tier-attribution
+    correction, 2026-07-16): the success set is Tier-1 verdicts UNION actors
+    carrying a critical-severity qualifying detection — never Tier-1 alone.
+    See ``firewatch_api.banner_assembler._succeeded`` for the full worked
+    reasoning (a host-auth actor's ``brute_force_then_login`` is Tier 2, never
+    Tier 1 — binding "succeeded" to tier==1 would silently read "0 succeeded"
+    during an active SSH compromise).
+    """
+
+    attempt_count: int = Field(
+        description="Total D1-qualifying attempt events across all actors, state window (24h)."
+    )
+    actor_count: int = Field(
+        description="Distinct actors with >=1 qualifying attempt in the state window."
+    )
+    succeeded_count: int = Field(
+        description=(
+            "Actors with a Tier-1 verdict OR a critical-severity qualifying "
+            "detection (ADR-0070 D3 tier-attribution correction) — the union, "
+            "never Tier-1 alone."
+        )
+    )
+    queue_size: int = Field(
+        description="K = actors carrying a Tier-1 or Tier-2 escalation verdict."
+    )
+    top_pressure: list[PressureEntry] = Field(
+        default_factory=list,
+        description="Bounded (<= 5) highest-pressure actors, ranked by peak decayed intensity.",
+    )
+    generated_at: str = Field(
+        description="ISO-8601 UTC timestamp when this summary was generated."
+    )

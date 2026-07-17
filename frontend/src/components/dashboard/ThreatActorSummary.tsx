@@ -20,9 +20,13 @@
  *
  * IPs render via ClickableIp (#202) — opens the entity slide-over.
  *
- * Degraded wording (ADR-0035 §4): RULES_ONLY_DEGRADED_WORDING constant shown
- * in the block body when AI is offline (the global engine chip lives in the
- * KPI strip — this body wording is the in-pane degraded signal, not duplicate).
+ * Degraded wording (ADR-0035 §4): shown in the block body when AI is not active
+ * (the global engine chip lives in the KPI strip — this body wording is the
+ * in-pane degraded signal, not duplicate). Issue #93 (fast-follow to #41 /
+ * ADR-0066): the wording/tone differentiates WHY — health.ai='unreachable' (a
+ * real fault) renders attention-worthy amber via aiStatusCopy's AI_STATUS_COPY;
+ * health.ai='disabled' (a deliberate choice) renders the neutral
+ * RULES_ONLY_DEGRADED_WORDING. The two are never collapsed into one treatment.
  *
  * Security (ADR-0029 D3): source_ip and ai_insights are attacker-controlled.
  * Rendered as text nodes only — never via dangerouslySetInnerHTML.
@@ -33,6 +37,7 @@
 import type { ThreatScore, HealthResponse } from '../../api/types'
 import { ProvenanceChip, ScoreBadge, ConfidenceLabel } from '../ds'
 import { RULES_ONLY_DEGRADED_WORDING } from '../../lib/provenance'
+import { AI_STATUS_COPY, resolveHealthAiState } from '../aiStatusCopy'
 import ClickableIp from '../entity/ClickableIp'
 
 // ---------------------------------------------------------------------------
@@ -54,13 +59,19 @@ export interface ThreatActorSummaryProps {
 // ---------------------------------------------------------------------------
 
 /**
- * Derive whether the AI engine is considered active.
- * health is authoritative; falls back to threat-level ai_status field.
- * Mirrors the same derivation used in AiPanel and KpiStrip (fix #180).
+ * Derive the tri-state AI engine status (issue #93, ADR-0066).
+ * health.ai is authoritative via resolveHealthAiState; falls back to the top
+ * actor's threat-level ai_status field only while health has not yet arrived
+ * (health=null). Mirrors the same derivation used in AiPanel (fix #180 / #93).
+ * The fallback is conservative: any non-'active' threat-derived status degrades
+ * to 'disabled' — never asserts a fault ('unreachable') from threat data alone.
  */
-function resolveAiActive(top: ThreatScore, health: HealthResponse | null | undefined): boolean {
-  if (health != null) return health.ollama_connected
-  return top.ai_status === 'active'
+function resolveAiState(
+  top: ThreatScore,
+  health: HealthResponse | null | undefined,
+): 'active' | 'disabled' | 'unreachable' {
+  if (health != null) return resolveHealthAiState(health)
+  return top.ai_status === 'active' ? 'active' : 'disabled'
 }
 
 /**
@@ -88,7 +99,8 @@ export default function ThreatActorSummary({ threats, health }: ThreatActorSumma
   const sorted = [...threats].sort((a, b) => b.score - a.score)
   const top = sorted[0] as ThreatScore & { score_derivation?: string }
 
-  const aiActive = resolveAiActive(top, health)
+  const aiState = resolveAiState(top, health)
+  const aiActive = aiState === 'active'
   const derivation = resolveDerivation(top)
 
   const criticalCount = threats.filter((t) => t.threat_level === 'CRITICAL').length
@@ -247,18 +259,21 @@ export default function ThreatActorSummary({ threats, health }: ThreatActorSumma
         </div>
       )}
 
-      {/* Degraded wording — AI offline (ADR-0035 §4, shown in body when degraded) */}
+      {/* Degraded wording — AI not active (ADR-0035 §4, shown in body when degraded).
+          Issue #93 / ADR-0066: tone/text differ by WHY — 'unreachable' (a real
+          fault) reads attention-worthy amber; 'disabled' (a deliberate choice)
+          reads neutral. The two are never collapsed into the same treatment. */}
       {!aiActive && (
         <p
           style={{
             fontSize: 12,
-            color: 'var(--fw-t3)',
+            color: aiState === 'unreachable' ? 'var(--soc-watch-fg)' : 'var(--fw-t3)',
             margin: '8px 0 0',
-            fontStyle: 'italic',
+            fontStyle: aiState === 'unreachable' ? 'normal' : 'italic',
           }}
           data-testid="tas-degraded-wording"
         >
-          {RULES_ONLY_DEGRADED_WORDING}
+          {aiState === 'unreachable' ? AI_STATUS_COPY.unreachable : RULES_ONLY_DEGRADED_WORDING}
         </p>
       )}
     </div>

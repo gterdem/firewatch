@@ -670,8 +670,9 @@ describe('DashboardRoute', () => {
     expect(screen.getByTestId('ai-engine-pill')).toHaveTextContent('llama3.2')
   })
 
-  it('shows AiEnginePill offline label when health.ollama_connected=false', async () => {
-    // health=offline → pill shows "AI offline"
+  it('shows AiEnginePill unreachable label when health.ai=unreachable (issue #93 tri-state)', async () => {
+    // health.ai=unreachable → pill shows "AI unreachable" (amber, attention) —
+    // NOT the collapsed "AI offline" (issue #93 fixes the honesty bug for this pill).
     mockFetchHealth.mockResolvedValue(HEALTH_AI_OFFLINE)
     mockFetchStats.mockResolvedValue(STATS_FIXTURE)
     mockFetchTimeline.mockResolvedValue(TIMELINE_FIXTURE)
@@ -683,7 +684,7 @@ describe('DashboardRoute', () => {
     await waitFor(() => {
       expect(screen.getByTestId('ai-engine-pill')).toBeInTheDocument()
     })
-    expect(screen.getByTestId('ai-engine-pill')).toHaveTextContent('AI offline')
+    expect(screen.getByTestId('ai-engine-pill')).toHaveTextContent('AI unreachable')
   })
 
   it('AiEnginePill shows active when health online despite threat ai_status=disabled (fix #180 core case)', async () => {
@@ -706,7 +707,10 @@ describe('DashboardRoute', () => {
 
   it('AiEnginePill falls back to threat-derived ai_status when health fetch fails (fix #180 fallback)', async () => {
     // health fetch fails → null → pill falls back to deriveAiStatus(threats).
-    // THREATS_AI_UNAVAILABLE_FIXTURE → deriveAiStatus = 'unavailable' → pill shows offline
+    // THREATS_AI_UNAVAILABLE_FIXTURE → deriveAiStatus = 'unavailable' → the
+    // health=null fallback is conservative (issue #93): any non-'active'
+    // threat-derived status degrades to the neutral 'disabled' bucket ("AI off")
+    // rather than asserting the 'unreachable' fault from threat data alone.
     mockFetchHealth.mockRejectedValue(new Error('health unavailable'))
     mockFetchStats.mockResolvedValue(STATS_FIXTURE)
     mockFetchTimeline.mockResolvedValue(TIMELINE_FIXTURE)
@@ -718,7 +722,7 @@ describe('DashboardRoute', () => {
     await waitFor(() => {
       expect(screen.getByTestId('ai-engine-pill')).toBeInTheDocument()
     })
-    expect(screen.getByTestId('ai-engine-pill')).toHaveTextContent('AI offline')
+    expect(screen.getByTestId('ai-engine-pill')).toHaveTextContent('AI off')
   })
 
   it('does not show AiEnginePill when both health and threats are unavailable', async () => {

@@ -13,7 +13,7 @@ from firewatch_sdk.actions import (
 )
 from firewatch_sdk.config import ConfigStore, RuntimeConfig
 from firewatch_sdk.context import PluginContext
-from firewatch_sdk.metadata import FlavorLiteral, SourceMetadata
+from firewatch_sdk.metadata import EnforcementPostureLiteral, FlavorLiteral, SourceMetadata
 from firewatch_sdk.models import (
     ActionLiteral,
     AIStatusLiteral,
@@ -21,6 +21,7 @@ from firewatch_sdk.models import (
     Detection,
     DispositionCounts,
     EscalationBlockStatusLiteral,
+    EscalationDispositionLiteral,
     EscalationVerdict,
     EventSummary,
     FactorEvidence,
@@ -69,6 +70,9 @@ __all__ = [
     "FlavorLiteral",
     "ScoreDerivationLiteral",
     "EscalationBlockStatusLiteral",
+    "EscalationDispositionLiteral",
+    # enforcement posture (ADR-0067 D6, issue #75)
+    "EnforcementPostureLiteral",
     # metadata
     "SourceMetadata",
     # context (ADR-0027)

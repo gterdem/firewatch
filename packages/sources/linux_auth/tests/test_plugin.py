@@ -55,6 +55,11 @@ class TestEntryPointDiscovery:
         assert plugin.metadata().type_key == "linux_auth"
         assert plugin.metadata().flavor == "pull"
 
+    def test_metadata_enforcement_default_is_observe(self) -> None:
+        """ADR-0067 D6 (issue #75): journald/auth.log is a passive telemetry read."""
+        plugin = LinuxAuthSource()
+        assert plugin.metadata().enforcement == "observe"
+
     def test_zero_core_edits_via_loader(self) -> None:
         """The core loader discovers linux_auth without any patch — modularity proof."""
         from firewatch_core.loader import load_source_plugins

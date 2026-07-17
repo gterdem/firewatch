@@ -355,7 +355,7 @@ Two named windows, both core constants ([ADR-0070](adr/0070-hostile-attempt-pres
 | Window | Value | Feeds | Question it answers |
 |---|---|---|---|
 | **State window** (`W_STATE`) | 24 hours | Rule scoring (`brute_force`, `port_scan`, `sql_injection`, `xss`, persistence), the score breakdown, and the escalation verdict (Tier 1-4 / observed) | "What is this actor's **current** threat state?" |
-| **Campaign horizon** (`W_CAMPAIGN`) | 7 days | Cross-source correlation detection (`attempt_pressure`, `multi_source_attack`, etc.) | "Is this actor **waging a campaign**?" — recidivism needs a longer memory than state |
+| **Campaign horizon** (`W_CAMPAIGN`) | 7 days | Cross-source correlation detection (`attempt_pressure`, `attack_in_progress`, `campaign`, `multi_source_attack`, etc.) | "Is this actor **waging a campaign**?" — recidivism needs a longer memory than state |
 
 Both are provisional engineering estimates, not settled/calibrated values — see ADR-0070 §D5 for the
 calibration procedure and falsifiers; the volume-oracle manifest (issue #50) is the ledger of record
@@ -377,35 +377,39 @@ rule-scoring, detection, and decider functions — it is a property of the analy
 the rules themselves.
 
 **A stale escalation auto-expires.** Correlation detections (`attempt_pressure`,
-`multi_source_attack`, etc.) and the escalation verdict are re-derived from scratch on every
-analysis — nothing is persisted. Once an actor's activity ages past its window with no recurrence,
-the detections and the tier it drove stop reappearing on their own; no manual "un-escalate" action
-is needed. (A dedicated recidivism/campaign correlation rule that consumes this same campaign
-horizon is a follow-up, not part of this window mechanism itself — see
-[ADR-0070](adr/0070-hostile-attempt-pressure-and-campaign-detection.md) §D2/§D3.)
+`attack_in_progress`, `campaign`, `multi_source_attack`, etc.) and the escalation verdict are
+re-derived from scratch on every analysis — nothing is persisted. Once an actor's activity ages
+past its window with no recurrence, the detections and the tier it drove stop reappearing on their
+own; no manual "un-escalate" action is needed.
 
 **`attempt_pressure` — the decayed-intensity pressure rule (issue #53, ADR-0070 Revision 1).**
 An actor's hostile-attempt intensity is measured as an exponentially-decayed count — every
 qualifying attempt (a BLOCK/DROP, or an ALERT that isn't merely informational) contributes 1
 immediately, then fades by half every 30 minutes. When an actor's peak intensity within the
 trailing state window reaches the pressure threshold, `attempt_pressure` raises the actor's score
-so the pattern is visible on the dashboard, but — like its retired predecessor
-`ssh_login_failure_burst` — never queues the actor by itself.
+so the pattern is visible on the dashboard, but never queues the actor by itself.
 
-**One interim brute-force rule remains (scheduled for replacement).** Until the campaign
-correlation rules described in ADR-0070 ship (issue #54), one stopgap correlation rule watches
-failed SSH logins from a single IP, as reported by the Linux auth log source:
+**`attack_in_progress` — a high-rate attack happening right now (issue #54, ADR-0070 Revision
+1).** When an actor's *current* decayed intensity (not just its peak) reaches the high-rate
+threshold, `attack_in_progress` queues the actor immediately — the flagship case is an SSH brute
+force at tens of attempts per minute, which crosses the threshold and queues within the first
+minute it is happening. It **retires the earlier interim rule** that used to watch for a raw count
+of failed SSH logins in a fixed window; the replacement threshold was derived so the handover does
+not change who queues (a 45-failed-logins-in-10-minutes stream still queues, now via this rule).
+Like `attempt_pressure`, it fades purely by decay: once the actor's attempts stop, its intensity
+falls back below the threshold on the next analysis and it leaves the queue on its own — no manual
+expiry.
 
-- `ssh_login_failure_intense` — **45 or more failed SSH logins within 10 minutes**. This is an
-  active, high-intensity brute force, not background noise, so the actor **is queued in
-  [the Triage banner (§4)](#4-the-triage-banner) through
-  [the assertion gate (§2.1)](#21-the-assertion-gate-and-the-observed-stratum)**. If an actor
-  appeared in your queue citing this rule, that is what happened: something hammered your SSH
-  port at least 45 times inside ten minutes.
-
-This rule is marked interim in the code and is retired when its replacement lands — issue #54
-(`attack_in_progress` replaces it). The replacement threshold was derived so the handover does
-not change who queues.
+**`campaign` — intent demonstrated over time (issue #54, ADR-0070 Revision 1).** Within the
+7-day campaign horizon, `campaign` queues an actor whose pressure episodes show **recidivism**
+(intensity rose, went quiet, and rose again at least once more — went quiet (λ̂ fell below
+θ_quiet = θ_press/2 — ADR-0070 Amendment 1)), **endurance** (one episode of
+sustained pressure lasting a full day or more — the moderate-rate grinder that never spikes but
+never stops), or **breadth** (a pressure episode combined with activity across multiple attack
+categories or a wide spread of destination ports — pressure that is also exploring, not commodity
+spray). When both `attack_in_progress` and `campaign` fire for the same actor, the triage banner's
+headline names `attack_in_progress` — the attack happening right now outranks the historical
+pattern.
 
 ---
 

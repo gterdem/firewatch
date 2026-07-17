@@ -271,3 +271,26 @@ class TestEpisodes:
         result = episodes(events, threshold=5, half_life=HALF_LIFE)
         assert len(result) == 1
         assert result[0].start == T0
+
+    def test_return_within_forty_minutes_merges_via_quiet_collapse_hysteresis(self):
+        """ADR-0070 Amendment 1: a 10-event burst followed by a return burst
+        40 min later has a trough of ~3.97 (>= theta_quiet = 2.5) -> the two
+        excursions merge into ONE episode."""
+        b1 = [make_event(action="BLOCK", timestamp=T0) for _ in range(10)]
+        b2 = [
+            make_event(action="BLOCK", timestamp=T0 + timedelta(minutes=40))
+            for _ in range(10)
+        ]
+        result = episodes(b1 + b2, threshold=PRESSURE_THRESHOLD, half_life=HALF_LIFE)
+        assert len(result) == 1
+
+    def test_return_after_two_hours_splits_past_quiet_collapse_hysteresis(self):
+        """The same two bursts, but the return is 2h later: trough ~0.625 <
+        theta_quiet (2.5) -> the excursions split into TWO episodes."""
+        b1 = [make_event(action="BLOCK", timestamp=T0) for _ in range(10)]
+        b2 = [
+            make_event(action="BLOCK", timestamp=T0 + timedelta(hours=2))
+            for _ in range(10)
+        ]
+        result = episodes(b1 + b2, threshold=PRESSURE_THRESHOLD, half_life=HALF_LIFE)
+        assert len(result) == 2

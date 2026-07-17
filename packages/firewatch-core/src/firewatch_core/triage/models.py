@@ -47,11 +47,14 @@ class TriageDecision:
 
 @dataclass(frozen=True)
 class ReentryInfo:
-    """Re-entry payload (ADR-0072 D4) — engine integers, RULE-tagged (ADR-0035).
+    """Re-entry payload (ADR-0072 D4, issue #56) — engine integers, RULE-tagged
+    (ADR-0035), never a raw float.
 
-    Deferred seam: issue #56 is the only producer of a non-``None`` value.
-    ``suppression.evaluate`` in THIS package (#47) never constructs one — see
-    the seam comment there.
+    Produced by ``suppression.evaluate`` (via ``_reentry_info``) when the
+    actor's current verdict tier is newly present (``decided_tier`` was
+    ``None``) or numerically lower (louder) than ``decided_tier`` at decision
+    time. ``decided_score``/``current_score`` ride along as a #49 input
+    (ADR-0072 D4 boundary 2) — never a re-entry trigger themselves.
     """
 
     decided_tier: int | None

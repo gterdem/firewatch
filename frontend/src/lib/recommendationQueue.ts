@@ -213,7 +213,9 @@ export function buildCounterfactualLine(
  * ai_status fields — the "Rules-only mode · AI engine offline" badge shows.
  *
  * @param threats            Threat actors from GET /threats.
- * @param aiOnline           Whether the AI engine is reachable (from health.ollama_connected).
+ * @param aiOnline           Whether the AI engine is active (health.ai === 'active';
+ *                           see resolveHealthAiState in components/aiStatusCopy.ts —
+ *                           issue #93, ADR-0066 tri-state).
  *                           Defaults to false (safe default: degrade to rules-only when unknown).
  * @param isActorDismissed   Optional predicate — return true for actors that have been dismissed.
  *                           When provided, dismissed actors are excluded from the output so the

@@ -1,4 +1,4 @@
-# PLUGIN_CONTRACT.md — Telemetry Source Plugin Contract (v1.4)
+# PLUGIN_CONTRACT.md — Telemetry Source Plugin Contract (v1.5)
 
 > **Architect-owned.** Implementation work does not edit this file. A needed change is
 > raised as a `contract-change` issue and, if it alters a settled decision, a new ADR in
@@ -296,6 +296,38 @@ The architect owns this contract. Changes are a `contract-change` issue plus a n
 decision is affected. See `docs/adr/`.
 
 ## Changelog
+
+### v1.5 — `SourceMetadata.enforcement` — enforcement-posture default (ADR-0067 D6, issue #75)
+
+`SourceMetadata` gains 1 new **additive, defaulted** field (`area:sdk`):
+
+- `enforcement: Literal["observe", "enforce", "detect_only"] | None = None` —
+  what this source's producing control COULD have done to traffic it observed.
+  `None` (the default) means "undeclared" — the escalation decider keeps the
+  conservative `block_status_unknown` label for this source's qualified Tier-2
+  verdicts, exactly as before this field existed. Declaring a value narrows that
+  label to an honest, posture-specific one (`not_blocked_passive` / `detected_no_action`
+  / `not_blocked_enforcing`, ADR-0067 D6 + Amendment 1) the moment the actor's
+  contributing instances declare a single, uniform posture.
+
+**Plugin author impact: none required, declaring is encouraged.** Every existing
+plugin that omits `enforcement` remains conformant — construction is unaffected and
+behaviour is byte-identical (every qualified Tier-2 verdict keeps today's generic
+label). This is the ADR-0048/0055/0060 additive-growth pattern; no PLUGIN_CONTRACT
+break. Posture is **per-instance, not per-plugin** in general (e.g. Suricata can run
+IDS or inline IPS) — this field is only the *plugin-declared default* half; the
+core-owned per-instance override lands in Phase B (issue #44) and does not change
+this field's shape.
+
+In-tree plugins declaring a default in this issue: `suricata`/`syslog`/`linux_auth` →
+`observe`; `clamav` → `detect_only`; `aws_network_firewall` → `enforce`. `azure_waf`
+deliberately declares nothing (its posture is per-policy Detection/Prevention — set
+per instance in Phase B).
+
+Standard anchor: OCSF 1.8.0 `action_id` 3 Observed / 2 Denied —
+https://schema.ocsf.io/api/1.8.0/classes/detection_finding (backs `observe`/`enforce`;
+`detect_only` is FireWatch's label for a host control that detects without removing,
+no direct OCSF `action_id` equivalent).
 
 ### v1.4 — ADR-0069 D5 severity semantics become contract surface (issue #70)
 

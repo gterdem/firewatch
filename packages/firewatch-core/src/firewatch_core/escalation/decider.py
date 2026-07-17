@@ -1,7 +1,8 @@
 """Pure deterministic escalation decider — ADR-0058 D2 / Amendment 1 (A3-A5) /
-ADR-0067 (assertion-gated Tier-2 entry + the observed stratum).
+ADR-0067 (assertion-gated Tier-2 entry + the observed stratum + D6/Amendment 1
+enforcement posture, issue #75).
 
-``decide(events, detections) -> EscalationVerdict``
+``decide(events, detections, posture_map=None) -> EscalationVerdict``
 
 Single home of the tiered action model. **No I/O, no LLM, no side effects.**
 Unit-testable in isolation; called from ``pipeline.analyze_ip``.
@@ -11,10 +12,22 @@ Tier model (ADR-0058 §D2/§4a, gated per ADR-0067 D1):
 | Tier | Action(s)                        | Disposition              | block_status |
 |------|-----------------------------------|--------------------------|--------------|
 |  1   | ALLOW (with any detection)       | allowed_through          | allowed      |
-|  2   | ALERT / LOG **+ qualifying signal**| block_status_unknown *(interim — posture labels, #44)* | unknown |
+|  2   | ALERT / LOG **+ qualifying signal**| posture-derived — see below | unknown / partial |
 |  3   | BLOCK/DROP — persistent           | blocked_persistent       | blocked      |
 |  4   | BLOCK/DROP — one-off              | blocked_one_off          | blocked      |
 | None | unqualified ALERT/LOG, or ALLOW-only with no detection | observed | unknown / allowed |
+
+Tier-2 disposition (ADR-0067 D6 + Amendment 1, issue #75 — the label table lives
+in ``escalation.posture.qualified_tier2_disposition``, consulted here via
+``posture_map``): the generic ``block_status_unknown`` narrows to an honest,
+posture-specific label the moment the actor's contributing instances declare a
+SINGLE, uniform ``enforcement`` posture. ``posture_map`` is additive and
+defaulted (``None`` -> every instance undeclared, today's behaviour, zero
+shipped-label movement).
+
+Safety property (verified, pinned by tests): no posture value can ever change a
+tier or produce ``block_status="blocked"`` — those derive solely from the
+per-event BLOCK/DROP tallies below, never from posture.
 
 ADR-0067 D1 — the assertion gate (``escalation.qualify.qualify()``):
 Tier 2 now requires a *qualifying signal*, not bare ALERT/LOG presence:
@@ -43,13 +56,10 @@ Standard alignment:
 - OCSF disposition_id: ALLOW ≈ Allowed (id=1), BLOCK/DROP ≈ Blocked (id=2).
   ALERT has an explicit OCSF disposition — id=19 Alert: "detected as a threat and
   resulted in a notification but request was not blocked" — it asserts NOT-blocked,
-  not unknown (ADR-0067 RC3). The qualified-Tier-2 disposition ``block_status_unknown``
-  is therefore NOT an OCSF mapping: it is ADR-0067 D6's conservative label for
-  undeclared enforcement posture — core cannot say "not blocked by this control"
-  until it knows the control's posture. It narrows to the genuinely-unknown
-  (inline-silent) case when the posture axis lands (#44: ``not_blocked_passive`` /
-  ``detected_no_action``). Unqualified ALERT/LOG ≈ ``action_id=3 Observed``
-  (ADR-0067 D2). Ref: schema.ocsf.io (1.8.0).
+  not unknown (ADR-0067 RC3). ``block_status_unknown`` is therefore NOT an OCSF
+  mapping: it is D6's conservative label for undeclared/mixed posture — see
+  ``escalation/posture.py`` for the full per-posture label table (issue #75).
+  Unqualified ALERT/LOG ≈ ``action_id=3 Observed`` (ADR-0067 D2). Ref: schema.ocsf.io.
 - ADR-0035 provenance: ``justification`` is a RULE-tagged string (never LLM).
 - ADR-0012: ALERT is an honest IDS non-blocking disposition.
 - ``"partial"`` is a FireWatch extension (no OCSF equivalent) — ADR-0058 A1.
@@ -60,17 +70,20 @@ lowest operationally meaningful "the adversary is persisting" bar).
 """
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from firewatch_sdk.models import (
     Detection,
     DispositionCounts,
+    EnforcementPostureLiteral,
     EscalationBlockStatusLiteral,
+    EscalationDispositionLiteral,
     EscalationVerdict,
     SecurityEvent,
 )
 
+from firewatch_core.escalation.posture import InstanceKey, qualified_tier2_disposition
 from firewatch_core.escalation.qualify import QualifyResult, qualify
 
 # Number of BLOCK/DROP events required to classify the adversary as "persistent"
@@ -132,6 +145,7 @@ class _PartitionTally:
 def decide(
     events: list[SecurityEvent],
     detections: list[Detection],
+    posture_map: Mapping[InstanceKey, EnforcementPostureLiteral | None] | None = None,
 ) -> EscalationVerdict:
     """Map (events, detections) to a deterministic EscalationVerdict.
 
@@ -157,13 +171,24 @@ def decide(
     or terminal (BLOCK/DROP) class — the loudest *qualifying* class decides.
 
     Args:
-        events:     All SecurityEvents for the IP in the analysis window.
-        detections: All Detection objects produced by ``detector.detect(events)``.
+        events:      All SecurityEvents for the IP in the analysis window.
+        detections:  All Detection objects produced by ``detector.detect(events)``.
+        posture_map: ``(source_type, source_id) -> enforcement posture`` — resolved
+                     by the caller (the pipeline) via ``escalation.posture.
+                     resolve_posture_map`` from (instance override OR plugin
+                     metadata default). Additive, defaulted to ``None`` — treated
+                     as an empty map (every instance undeclared), the exact
+                     pre-#75 behaviour: qualified Tier-2 verdicts keep
+                     ``block_status_unknown`` when no posture is known
+                     (ADR-0067 D6 + Amendment 1, issue #75).
 
     Returns:
         EscalationVerdict: always a valid verdict (never raises).
     """
     has_detections = bool(detections)
+    resolved_posture_map: Mapping[InstanceKey, EnforcementPostureLiteral | None] = (
+        posture_map or {}
+    )
 
     # Partition events by action (needed for per-tier justification builders).
     allow_events = [e for e in events if e.action == "ALLOW"]
@@ -190,7 +215,7 @@ def decide(
 
     # --- Tier 2: ALERT/LOG with a qualifying assertion (ADR-0067 D1) ---------
     if alert_log_events and qualify_result.qualified:
-        return _tier2_verdict(qualify_result, tally)
+        return _tier2_verdict(qualify_result, tally, alert_log_events, resolved_posture_map)
 
     # --- Tier 3 / 4: BLOCK/DROP ------------------------------------------------
     # Reached also by actors whose ALERT/LOG mass failed the D1 gate — the
@@ -225,16 +250,37 @@ def _tier1_verdict(detections: list[Detection], tally: _PartitionTally) -> Escal
     )
 
 
-def _tier2_verdict(qualify_result: QualifyResult, tally: _PartitionTally) -> EscalationVerdict:
+def _tier2_verdict(
+    qualify_result: QualifyResult,
+    tally: _PartitionTally,
+    alert_log_events: list[SecurityEvent],
+    posture_map: Mapping[InstanceKey, EnforcementPostureLiteral | None],
+) -> EscalationVerdict:
     if tally.mixed:
         justification = _build_justification_partial(
             tally.n_block_drop, tally.n_alert_log, tally.n_allow
         )
     else:
         justification = _build_justification_tier2_qualified(qualify_result)
+
+    # ADR-0067 D6 + Amendment 1 (issue #75): narrow the generic label to an
+    # honest, posture-specific one when the actor's contributing instances
+    # declare a single, uniform enforcement posture. DISPOSITION-LABEL ONLY —
+    # block_status/tier below are computed exactly as before, from the tally
+    # alone (the #75 safety property: posture never moves tier/block_status).
+    instance_keys = {(e.source_type, e.source_id) for e in alert_log_events}
+    # Explicit annotation (not just inferred): pyright otherwise widens the
+    # Mapping.get() literal-union result type to plain `str | None`.
+    postures: list[EnforcementPostureLiteral | None] = [
+        posture_map.get(key) for key in instance_keys
+    ]
+    disposition: EscalationDispositionLiteral = qualified_tier2_disposition(
+        postures, tally.n_block_drop
+    )
+
     return EscalationVerdict(
         tier=2,
-        disposition="block_status_unknown",
+        disposition=disposition,
         justification=justification,
         block_status="partial" if tally.mixed else "unknown",
         disposition_counts=tally.counts,

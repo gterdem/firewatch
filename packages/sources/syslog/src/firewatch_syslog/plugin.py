@@ -76,6 +76,10 @@ class SyslogSource:
             display_name="Syslog UDP/TCP",
             version=_VERSION,
             flavor="push",
+            # ADR-0067 D6 (issue #75): declared enforcement-posture default. A syslog
+            # receiver is a passive telemetry collector — it cannot block anything it
+            # forwards (ADR-0067 D6: "not blocked by this control — watch-only sensor").
+            enforcement="observe",
         )
 
     def config_schema(self) -> type[BaseModel]:

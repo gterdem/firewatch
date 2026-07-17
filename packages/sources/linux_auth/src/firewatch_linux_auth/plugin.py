@@ -68,6 +68,10 @@ class LinuxAuthSource:
             display_name="Linux Auth & Intrusion Signals",
             version=_VERSION,
             flavor="pull",
+            # ADR-0067 D6 (issue #75): declared enforcement-posture default. This
+            # source reads journald/auth.log — a passive telemetry collector that
+            # cannot block a login attempt it observes.
+            enforcement="observe",
         )
 
     def config_schema(self) -> type[BaseModel]:

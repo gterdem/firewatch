@@ -12,6 +12,11 @@
  * #3 WHILE AI offline: queue shows rule-derived cards + rules-only badge + NOT blank.
  *    → health={ollama_connected:false} → rec-queue-offline-badge; cards still render.
  *
+ * Issue #93 (fast-follow to #41 / ADR-0066): the offline badge differentiates WHY —
+ * health.ai='unreachable' (a real fault) renders attention-worthy amber; health.ai=
+ * 'disabled' (a deliberate choice) renders neutral. The two are never collapsed
+ * into the same treatment.
+ *
  * #4 WHEN analyst dismisses a card → onAction(actor, "dismiss") called.
  *    → Done button → onAction with "dismiss".
  *
@@ -64,6 +69,15 @@ const HEALTH_AI_OFFLINE: HealthResponse = {
   ollama_model: null,
   db_ok: true,
   ai: 'unreachable',
+}
+
+/** Deliberately disabled (ai_enabled=false) — neutral, non-alarming (issue #93). */
+const HEALTH_AI_DISABLED: HealthResponse = {
+  status: 'ok',
+  ollama_connected: false,
+  ollama_model: null,
+  db_ok: true,
+  ai: 'disabled',
 }
 
 /** Single HIGH-threat actor — 90% block rate → "block" recommendation. */
@@ -149,8 +163,8 @@ describe('RecommendationCards', () => {
     expect(screen.getByTestId('rec-card-action-label').textContent).toMatch(/^Consider/)
   })
 
-  // EARS #3: offline badge shown when health.ollama_connected=false
-  it('shows rules-only badge when AI engine is offline', () => {
+  // EARS #3 (issue #93): amber, attention-worthy badge when health.ai=unreachable
+  it('shows amber "AI unreachable" badge when health.ai=unreachable', () => {
     render(
       <RecommendationCards
         threats={[SINGLE_BLOCK_THREAT]}
@@ -160,7 +174,43 @@ describe('RecommendationCards', () => {
     )
     const badge = screen.getByTestId('rec-queue-offline-badge')
     expect(badge).toBeInTheDocument()
+    expect(badge.textContent).toMatch(/AI unreachable/)
+    expect(badge.style.color).toBe('var(--soc-watch-fg)')
+  })
+
+  // Issue #93: neutral, non-alarming badge when health.ai=disabled
+  it('shows neutral rules-only badge when health.ai=disabled', () => {
+    render(
+      <RecommendationCards
+        threats={[SINGLE_BLOCK_THREAT]}
+        onAction={vi.fn()}
+        health={HEALTH_AI_DISABLED}
+      />,
+    )
+    const badge = screen.getByTestId('rec-queue-offline-badge')
+    expect(badge).toBeInTheDocument()
     expect(badge.textContent).toMatch(/AI engine offline/)
+    expect(badge.textContent).not.toMatch(/unreachable/)
+    expect(badge.style.color).toBe('var(--fw-t3)')
+  })
+
+  // Issue #93: 'unreachable' and 'disabled' must never collapse into the same
+  // treatment — distinct text AND distinct color.
+  it('never collapses unreachable and disabled badges into the same treatment', () => {
+    const { unmount } = render(
+      <RecommendationCards threats={[SINGLE_BLOCK_THREAT]} onAction={vi.fn()} health={HEALTH_AI_OFFLINE} />,
+    )
+    const unreachableBadge = screen.getByTestId('rec-queue-offline-badge')
+    const unreachableColor = unreachableBadge.style.color
+    const unreachableText = unreachableBadge.textContent
+    unmount()
+
+    render(
+      <RecommendationCards threats={[SINGLE_BLOCK_THREAT]} onAction={vi.fn()} health={HEALTH_AI_DISABLED} />,
+    )
+    const disabledBadge = screen.getByTestId('rec-queue-offline-badge')
+    expect(disabledBadge.style.color).not.toBe(unreachableColor)
+    expect(disabledBadge.textContent).not.toBe(unreachableText)
   })
 
   // EARS #3: queue never goes blank when AI offline — rule cards still render

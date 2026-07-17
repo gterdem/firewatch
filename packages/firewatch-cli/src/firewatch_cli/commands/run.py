@@ -148,7 +148,9 @@ async def cmd_run(
     # ordered teardown.  Nothing leaks.
     try:
         # Step 2: build pipeline + store; init connection on THIS loop.
-        pipeline = _build_pipeline(config_path)
+        # Issue #75 (ADR-0067 D6): pass registry so the pipeline can wire each
+        # loaded plugin's declared enforcement-posture default.
+        pipeline = _build_pipeline(config_path, registry=registry)
         store = pipeline.store  # type: ignore[attr-defined]
         # MK-2 (ADR-0044): same verdict-ledger instance the pipeline writes to;
         # its aiosqlite connection is born on THIS loop (ADR-0023 §F) so the read

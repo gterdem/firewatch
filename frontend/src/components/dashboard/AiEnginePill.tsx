@@ -12,9 +12,18 @@
  * #254 by moving the import, no internal changes needed.
  *
  * Content: `model · status`
- *   - Health available + engine connected: "<model-name> · active" (green pulse)
- *   - Health available + engine offline: "AI offline" (muted)
+ *   - Health available + health.ai='active':      "<model-name> · active" (green pulse)
+ *   - Health available + health.ai='unreachable': "AI unreachable" (amber — attention,
+ *     NOT critical/red; detection continues on the rules-only floor, ADR-0015)
+ *   - Health available + health.ai='disabled':    "AI off" (muted — deliberate choice,
+ *     non-alarming)
  *   - Health null (in-flight / failed): falls back to threat-derived aiStatus
+ *     (boolean `ollama_connected` is NOT used directly — issue #93 / ADR-0066)
+ *
+ * Tri-state rework (issue #93, fast-follow to #41 / ADR-0066): branches on the
+ * authoritative `health.ai` tri-state via `resolveHealthAiState` (aiStatusCopy.ts)
+ * instead of the deprecated `ollama_connected` boolean, which collapsed "off by
+ * choice" (disabled) and "unreachable" (fault) into one ambiguous value.
  *
  * Click disclosure (ADR-0035 §4): click/Enter/Space opens a small disclosure
  * showing model name + connection status. The inference endpoint host/URL is
@@ -43,6 +52,7 @@
 import type { HealthResponse, AiStatus } from '../../api/types'
 import { useDismissableDisclosure } from '../ds'
 import { capModelName } from '../../lib/modelName'
+import { resolveHealthAiState } from '../aiStatusCopy'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -65,21 +75,67 @@ export interface AiEnginePillProps {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+/** The tri-state `/health.ai` value (ADR-0066), plus the model name. */
 interface ResolvedState {
-  connected: boolean
+  state: 'active' | 'disabled' | 'unreachable'
   model: string | null
 }
 
+/** Per-tone visual treatment for the pill (issue #93 — amber ≠ neutral, never collapsed). */
+interface ToneStyle {
+  border: string
+  background: string
+  color: string
+  dotColor: string
+  animate: boolean
+}
+
+const TONE_STYLES: Record<ResolvedState['state'], ToneStyle> = {
+  active: {
+    border: '1px solid rgba(34, 197, 94, 0.3)',
+    background: 'rgba(34, 197, 94, 0.06)',
+    color: 'var(--fw-green)',
+    dotColor: 'var(--fw-green)',
+    animate: true,
+  },
+  // Attention-worthy amber (soc-watch tokens) — a real fault, but NOT critical/red:
+  // detection continues on the rules-only floor (ADR-0015).
+  unreachable: {
+    border: '1px solid var(--soc-watch-border)',
+    background: 'var(--soc-watch-bg)',
+    color: 'var(--soc-watch-fg)',
+    dotColor: 'var(--fw-accent)',
+    animate: false,
+  },
+  // Deliberate choice — neutral, non-alarming (ADR-0066).
+  disabled: {
+    border: '1px solid var(--fw-border)',
+    background: 'var(--fw-bg-input)',
+    color: 'var(--fw-t3)',
+    dotColor: 'var(--fw-t3)',
+    animate: false,
+  },
+}
+
+/**
+ * Resolve the tri-state engine status.
+ *
+ * health is authoritative (ADR-0066 `health.ai`, via `resolveHealthAiState`).
+ * When health is still in-flight/failed (null), falls back to the threat-derived
+ * `aiStatus` (issue #41 pattern) — the deprecated `ollama_connected` boolean is
+ * NOT read directly, since it collapses "off by choice" and "unreachable" into
+ * one ambiguous value. The fallback mirrors AiPanel.tsx: any non-'active'
+ * threat-derived status degrades to 'disabled' (conservative — we cannot assert
+ * a fault from threat data alone).
+ */
 function resolveState(
   health: HealthResponse | null | undefined,
   aiStatus: AiStatus | null | undefined,
 ): ResolvedState {
   if (health != null) {
-    return { connected: health.ollama_connected, model: health.ollama_model }
+    return { state: resolveHealthAiState(health), model: health.ollama_model }
   }
-  // Fallback: threat-derived status
-  const connected = aiStatus === 'active'
-  return { connected, model: null }
+  return { state: aiStatus === 'active' ? 'active' : 'disabled', model: null }
 }
 
 // ---------------------------------------------------------------------------
@@ -93,15 +149,28 @@ export default function AiEnginePill({ health, aiStatus }: AiEnginePillProps) {
   // Hide during initial load (health=null + no aiStatus)
   if (health == null && !aiStatus) return null
 
-  const { connected, model: rawModel } = resolveState(health, aiStatus)
+  const { state, model: rawModel } = resolveState(health, aiStatus)
   // NB-2 (issue #306): cap model name to 64 chars to guard against layout breaks.
   const model = capModelName(rawModel)
+  const tone = TONE_STYLES[state]
 
-  const pillLabel = connected
-    ? model
-      ? `${model} · active`
-      : 'AI · active'
-    : 'AI offline'
+  const pillLabel =
+    state === 'active'
+      ? model
+        ? `${model} · active`
+        : 'AI · active'
+      : state === 'unreachable'
+        ? 'AI unreachable'
+        : 'AI off'
+
+  const ariaLabel =
+    state === 'active'
+      ? `AI engine active${model ? `: ${model}` : ''}`
+      : state === 'unreachable'
+        ? 'AI engine unreachable'
+        : 'AI engine off'
+
+  const statusLabel = state === 'active' ? 'connected' : state === 'unreachable' ? 'unreachable' : 'off'
 
   return (
     <div
@@ -113,7 +182,7 @@ export default function AiEnginePill({ health, aiStatus }: AiEnginePillProps) {
         type="button"
         data-testid="ai-engine-pill"
         aria-expanded={open}
-        aria-label={connected ? `AI engine active${model ? `: ${model}` : ''}` : 'AI engine offline'}
+        aria-label={ariaLabel}
         {...triggerProps}
         style={{
           display: 'inline-flex',
@@ -125,13 +194,9 @@ export default function AiEnginePill({ health, aiStatus }: AiEnginePillProps) {
           fontFamily: 'var(--fw-font-ui)',
           fontWeight: 500,
           cursor: 'pointer',
-          border: connected
-            ? '1px solid rgba(34, 197, 94, 0.3)'
-            : '1px solid var(--fw-border)',
-          background: connected
-            ? 'rgba(34, 197, 94, 0.06)'
-            : 'var(--fw-bg-input)',
-          color: connected ? 'var(--fw-green)' : 'var(--fw-t3)',
+          border: tone.border,
+          background: tone.background,
+          color: tone.color,
           /* #578: maxWidth raised from 180→220 to avoid premature clip @1280px.
              overflow+textOverflow removed from the button (inline-flex does not
              apply textOverflow to its block box) — ellipsis is on the text span. */
@@ -146,10 +211,10 @@ export default function AiEnginePill({ health, aiStatus }: AiEnginePillProps) {
             width: 6,
             height: 6,
             borderRadius: '50%',
-            background: connected ? 'var(--fw-green)' : 'var(--fw-t3)',
+            background: tone.dotColor,
             display: 'inline-block',
             flexShrink: 0,
-            animation: connected ? 'fw-pulse var(--fw-dur-pulse) infinite' : 'none',
+            animation: tone.animate ? 'fw-pulse var(--fw-dur-pulse) infinite' : 'none',
           }}
         />
         {/* #578: flex:1 + minWidth:0 lets the span shrink inside the inline-flex
@@ -222,8 +287,8 @@ export default function AiEnginePill({ health, aiStatus }: AiEnginePillProps) {
             data-testid="ai-engine-pill-status"
           >
             <span style={{ color: 'var(--fw-t3)' }}>Status</span>
-            <span style={{ color: connected ? 'var(--fw-green)' : 'var(--fw-t3)' }}>
-              {connected ? 'connected' : 'offline'}
+            <span style={{ color: tone.color }}>
+              {statusLabel}
             </span>
           </div>
 

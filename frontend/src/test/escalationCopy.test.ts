@@ -22,6 +22,7 @@ import { describe, it, expect } from 'vitest'
 import {
   TIER_COPY,
   OBSERVED_COPY,
+  POSTURE_COPY,
   dispositionLabel,
   tierGroupLabel,
   blockStatusLabel,
@@ -171,6 +172,77 @@ describe('OBSERVED_COPY (ADR-0067 D2)', () => {
 
   it('tierGroupLabel(null, undefined) still falls back to "No escalation verdict" (defensive default)', () => {
     expect(tierGroupLabel(null, undefined)).toBe('No escalation verdict')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// ADR-0067 D6 + Amendment 1 — posture-derived Tier-2 labels (issue #75)
+// ---------------------------------------------------------------------------
+
+describe('POSTURE_COPY (ADR-0067 D6 + Amendment 1, issue #75)', () => {
+  it('has exactly 3 rows (observe / detect_only / enforce+zero-blocks)', () => {
+    expect(POSTURE_COPY).toHaveLength(3)
+  })
+
+  it('is not one of the 4 ranked tiers (kept out of TIER_COPY, like OBSERVED_COPY)', () => {
+    expect(TIER_COPY.map((r) => r.disposition)).not.toContain('not_blocked_passive')
+    expect(TIER_COPY.map((r) => r.disposition)).not.toContain('detected_no_action')
+    expect(TIER_COPY.map((r) => r.disposition)).not.toContain('not_blocked_enforcing')
+  })
+
+  it('every row is tier 2 with blockStatus "unknown" (posture relabels disposition only)', () => {
+    for (const row of POSTURE_COPY) {
+      expect(row.tier).toBe(2)
+      expect(row.blockStatus).toBe('unknown')
+    }
+  })
+
+  it('every row has a non-empty label, shortLabel, description, and --fw-* color token', () => {
+    for (const row of POSTURE_COPY) {
+      expect(row.label.length).toBeGreaterThan(0)
+      expect(row.shortLabel.length).toBeGreaterThan(0)
+      expect(row.description.length).toBeGreaterThan(0)
+      expect(row.color).toMatch(/^var\(--fw-/)
+    }
+  })
+
+  it('not_blocked_passive label matches the D6 wording exactly', () => {
+    const row = POSTURE_COPY.find((r) => r.disposition === 'not_blocked_passive')
+    expect(row?.label).toBe('Not blocked — watch-only sensor')
+  })
+
+  it('detected_no_action label matches the D6 wording exactly', () => {
+    const row = POSTURE_COPY.find((r) => r.disposition === 'detected_no_action')
+    expect(row?.label).toBe('Detected — no action taken; file present')
+  })
+
+  it('not_blocked_enforcing label matches the Amendment 1 A1.1 wording exactly', () => {
+    const row = POSTURE_COPY.find((r) => r.disposition === 'not_blocked_enforcing')
+    expect(row?.label).toBe('Not blocked — this control was enforcing and did not block it')
+  })
+
+  it('not_blocked_enforcing label MUST NOT claim "breach" (A1.1 honest-state discipline)', () => {
+    const row = POSTURE_COPY.find((r) => r.disposition === 'not_blocked_enforcing')
+    expect(row?.label.toLowerCase()).not.toContain('breach')
+    expect(row?.description.toLowerCase()).not.toContain('breach')
+  })
+
+  it('dispositionLabel resolves each posture key to its POSTURE_COPY label', () => {
+    for (const row of POSTURE_COPY) {
+      expect(dispositionLabel(row.disposition)).toBe(row.label)
+    }
+  })
+
+  it('dispositionColor resolves each posture key to its POSTURE_COPY color', () => {
+    for (const row of POSTURE_COPY) {
+      expect(dispositionColor(row.disposition)).toBe(row.color)
+    }
+  })
+
+  it('tierGroupLabel(2, postureKey) builds "Tier 2 — shortLabel" for each posture row', () => {
+    for (const row of POSTURE_COPY) {
+      expect(tierGroupLabel(2, row.disposition)).toBe(`Tier 2 — ${row.shortLabel}`)
+    }
   })
 })
 

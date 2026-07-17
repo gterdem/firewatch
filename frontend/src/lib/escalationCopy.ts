@@ -341,3 +341,62 @@ export function dispositionColor(disposition: string): string {
   if (postureRow != null) return postureRow.color
   return TIER_COPY_BY_DISPOSITION[disposition as DispositionKey]?.color ?? 'var(--fw-t2)'
 }
+
+// ---------------------------------------------------------------------------
+// Attempts headline copy (issue #55, ADR-0070) — the single place the
+// "N hostile attempts from M actors — S succeeded · K need review" sentence
+// is assembled, so TriageBanner/AttemptsHeadline own zero copy of their own
+// (issue #6 discipline, extended to this new headline).
+//
+// Every number here MUST be rendered verbatim from GET /banner/summary
+// (firewatch_api.banner_assembler) — this module only pluralizes words
+// around already-computed engine integers. It NEVER counts, sums, or
+// re-derives "succeeded"/"need review" itself (issue #55 hard constraint —
+// the banner must never count differently than the escalation engine).
+// ---------------------------------------------------------------------------
+
+/** The subset of `BannerAttemptSummary` the headline sentence needs. */
+export interface AttemptsHeadlineCounts {
+  attempt_count: number
+  actor_count: number
+  succeeded_count: number
+  queue_size: number
+}
+
+/**
+ * Build the attempts headline sentence, e.g.:
+ *   "412 hostile attempts from 87 actors — 0 succeeded · 2 need review"
+ *
+ * Pure string formatting over server-provided integers — no client-side
+ * derivation of any count (ADR-0070 D3 / issue #55).
+ */
+export function attemptsHeadlineText(counts: AttemptsHeadlineCounts): string {
+  const { attempt_count, actor_count, succeeded_count, queue_size } = counts
+  const attemptWord = attempt_count === 1 ? 'attempt' : 'attempts'
+  const actorWord = actor_count === 1 ? 'actor' : 'actors'
+  const needWord = queue_size === 1 ? 'needs' : 'need'
+  return (
+    `${attempt_count} hostile ${attemptWord} from ${actor_count} ${actorWord}` +
+    ` — ${succeeded_count} succeeded · ${queue_size} ${needWord} review`
+  )
+}
+
+/**
+ * Plain-text pressure-row description — "N attempts over M min" (or the
+ * singular "1 attempt" when only one qualifying event exists for this actor).
+ *
+ * Strategist condition (issue #55, ADR-0070/ADR-0069 conditions, 2026-07-16):
+ * the pressure strip's minimal "show me the math" slice is plain integers —
+ * attempt_count + span_minutes — text, never hover-only (WCAG). The fuller
+ * "peak pressure X of Y" (peak decayed intensity vs. the HIGH ALERT
+ * threshold) is NOT in `GET /banner/summary` today (the endpoint exposes
+ * only attempt_count/span_minutes per row, ADR-0035 — engine integers, never
+ * the raw decayed-intensity float) — this function renders what IS
+ * available and never recomputes or estimates the missing peak/threshold
+ * pair client-side.
+ */
+export function pressureRowText(attemptCount: number, spanMinutes: number): string {
+  if (attemptCount === 1) return '1 attempt'
+  if (spanMinutes > 0) return `${attemptCount} attempts over ${spanMinutes} min`
+  return `${attemptCount} attempts`
+}

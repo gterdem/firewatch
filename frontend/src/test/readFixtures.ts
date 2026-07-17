@@ -23,6 +23,7 @@ import type {
   SyncResult,
   IpEventTimelineResponse,
   AutoSyncState,
+  BannerAttemptSummary,
 } from '../api/types'
 
 /** GET /stats fixture — typical operational state. */
@@ -89,6 +90,60 @@ export const HEALTH_AI_DISABLED: HealthResponse = {
   ollama_model: null,
   db_ok: true,
   ai: 'disabled',
+}
+
+/**
+ * GET /banner/summary fixtures (issue #55).
+ *
+ * All IP addresses use RFC 5737 documentation ranges. Every integer here is
+ * the shape a consumer test asserts is rendered VERBATIM — tests must never
+ * recompute these numbers, only assert the component renders exactly what
+ * the fixture says (mirrors the "banner never counts differently than the
+ * engine" hard constraint these fixtures exist to pin).
+ */
+
+/** Calm case — no attempts in the window; the #43 ObservedRecordLine fallback should render. */
+export const BANNER_SUMMARY_EMPTY: BannerAttemptSummary = {
+  attempt_count: 0,
+  actor_count: 0,
+  succeeded_count: 0,
+  queue_size: 0,
+  top_pressure: [],
+  generated_at: '2026-06-04T10:00:00Z',
+}
+
+/** Typical case — attempts exist, none succeeded, some queued for review. */
+export const BANNER_SUMMARY_ACTIVE: BannerAttemptSummary = {
+  attempt_count: 412,
+  actor_count: 87,
+  succeeded_count: 0,
+  queue_size: 2,
+  top_pressure: [
+    { source_ip: '192.0.2.10', attempt_count: 42, span_minutes: 18 },
+    { source_ip: '192.0.2.11', attempt_count: 30, span_minutes: 12 },
+    { source_ip: '192.0.2.12', attempt_count: 20, span_minutes: 9 },
+    { source_ip: '192.0.2.13', attempt_count: 15, span_minutes: 6 },
+    { source_ip: '192.0.2.14', attempt_count: 10, span_minutes: 4 },
+  ],
+  generated_at: '2026-06-04T10:00:00Z',
+}
+
+/**
+ * The breach-visible case (ADR-0070 D3 tier-attribution correction, issue #55
+ * must-NOT criterion): a host-auth actor's `brute_force_then_login` compromise
+ * is Tier 2, caught ONLY by the critical-severity arm of the success-set
+ * union — succeeded_count > 0 here pins that the frontend renders this
+ * NON-zero, never re-deriving "0 succeeded" from tier alone.
+ */
+export const BANNER_SUMMARY_SUCCEEDED: BannerAttemptSummary = {
+  attempt_count: 58,
+  actor_count: 6,
+  succeeded_count: 1,
+  queue_size: 3,
+  top_pressure: [
+    { source_ip: '198.51.100.20', attempt_count: 22, span_minutes: 40 },
+  ],
+  generated_at: '2026-06-04T10:00:00Z',
 }
 
 /** GET /threats fixture — two IPs, one with AI active, one degraded. */

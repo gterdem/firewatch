@@ -20,6 +20,7 @@
  *   GET /logs/categories  → CategoryBreakdown
  *   GET /threats          → ThreatActors + AiSidebar + TriageBanner + RecommendationCards + ThreatActorSummary
  *   GET /health           → KpiStrip AiEnginePill + ThreatActorSummary (authoritative; fix #180)
+ *   GET /banner/summary   → TriageBanner attempts headline + pressure strip (issue #55)
  *   GET /logs/categories  → BlockedLogsPanel category tabs (via useBlockedCategories)
  *   GET /logs/paginated   → BlockedLogsPanel rows (action=blocked, via useBlockedLogs)
  *
@@ -59,6 +60,10 @@
  *   - #43 (ADR-0067 D5(2)): observed-stratum actors (tier=null) rolled up into
  *     deriveObservedRecord and passed to TriageBanner as one aggregate line —
  *     never rendered as individual chips, never silently dropped.
+ *   - #55 (ADR-0070 D1/D3): GET /banner/summary is fetched non-blocking and
+ *     passed to TriageBanner as attemptSummary; WHEN attempt_count > 0, the
+ *     attempts headline + pressure strip supersede the #43 line in the same
+ *     slot; WHEN null/zero, the #43 line renders unchanged.
  *
  * ADR-0015: AI is additive-only. /threats failure must not break the dashboard.
  * ADR-0029 D3: raw data rendered as text nodes only.
@@ -69,9 +74,9 @@
 import { memo, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useEntityActions } from '../components/entity/EntityPanelContext'
 import { useRefreshSignal } from '../app/refresh/RefreshContext'
-import { fetchStats, fetchTimeline, fetchCategories, fetchThreats, fetchHealth, getRuntimeConfig, ApiError } from '../api/client'
+import { fetchStats, fetchTimeline, fetchCategories, fetchThreats, fetchHealth, fetchBannerSummary, getRuntimeConfig, ApiError } from '../api/client'
 import { fetchAttackDispositions } from '../api/analytics'
-import type { StatsResponse, TimelineBucket, CategoryCount, AiStatus, ThreatScore, HealthResponse, AttackDispositionRow } from '../api/types'
+import type { StatsResponse, TimelineBucket, CategoryCount, AiStatus, ThreatScore, HealthResponse, AttackDispositionRow, BannerAttemptSummary } from '../api/types'
 import { makeOnAction, isDismissed, reconcileAcknowledged } from '../lib/triageActions'
 import type { OnAction } from '../lib/triageActions'
 import { deriveTriageActors, deriveObservedRecord } from '../lib/triageBand'
@@ -151,6 +156,13 @@ export default function DashboardRoute() {
    * threat-derived aiStatus per ADR-0015).
    */
   const [health, setHealth] = useState<HealthResponse | null>(null)
+  /**
+   * GET /banner/summary (issue #55) — the attempts headline + pressure-strip
+   * source of truth. Starts null (fetch in flight); stays null on failure
+   * (non-fatal — ADR-0015 graceful degradation). TriageBanner falls back to
+   * the #43 ObservedRecordLine unchanged while this is null.
+   */
+  const [attemptSummary, setAttemptSummary] = useState<BannerAttemptSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [logsSearch, setLogsSearch] = useState('')
@@ -329,6 +341,25 @@ export default function DashboardRoute() {
     }
   }, [dataVersion])
 
+  // Fetch GET /banner/summary (issue #55) — non-blocking, mirrors the health
+  // fetch pattern above. Failure is non-fatal (ADR-0015): TriageBanner falls
+  // back to the #43 ObservedRecordLine unchanged while attemptSummary is null.
+  useEffect(() => {
+    let cancelled = false
+
+    fetchBannerSummary()
+      .then((summary) => {
+        if (!cancelled) setAttemptSummary(summary)
+      })
+      .catch(() => {
+        // Non-blocking: keep attemptSummary null — the #43 fallback line renders.
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [dataVersion])
+
   // Fetch triage threshold from /config/runtime (ADR-0059 D1 / issue #650).
   // Non-blocking: banner falls back to safe default "HIGH" on failure, which matches
   // today's hard-coded behaviour exactly — no regression risk.
@@ -470,7 +501,12 @@ export default function DashboardRoute() {
       }}
     >
       {/* Triage banner — leads with "N actors need BLOCK decision" (SIEM, ADR-0033) */}
-      <TriageBanner pendingActors={pendingActors} onAction={onAction} observedRecord={observedRecord} />
+      <TriageBanner
+        pendingActors={pendingActors}
+        onAction={onAction}
+        observedRecord={observedRecord}
+        attemptSummary={attemptSummary}
+      />
 
       {/* KPI strip — v2 thin row (demoted from large 5-up grid) */}
       {/* health is authoritative for AI chip; aiStatus is the fallback (fix #180) */}

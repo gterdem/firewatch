@@ -38,6 +38,7 @@ import type {
   FeedbackRow,
   FeedbackSummary,
   EscalationPolicyResponse,
+  BannerAttemptSummary,
 } from './types'
 
 /**
@@ -277,6 +278,25 @@ export async function fetchThreats(): Promise<ThreatScore[]> {
   })
   if (!res.ok) throw await parseError(res)
   return res.json() as Promise<ThreatScore[]>
+}
+
+/**
+ * Attempt/actor/succeeded/queue counts + bounded top-N pressure strip for the
+ * triage banner's attempts headline (issue #55).
+ * GET /banner/summary
+ *
+ * Every integer is computed server-side from the shared attempts module and
+ * the existing decide()/detect() verdicts — the banner must never count
+ * differently than the engine. Callers MUST render these fields verbatim
+ * (never recompute attempt/actor/succeeded/queue counts client-side).
+ */
+export async function fetchBannerSummary(): Promise<BannerAttemptSummary> {
+  const res = await fetch(`${BASE_URL}/banner/summary`, {
+    method: 'GET',
+    headers: buildHeaders(),
+  })
+  if (!res.ok) throw await parseError(res)
+  return res.json() as Promise<BannerAttemptSummary>
 }
 
 /**

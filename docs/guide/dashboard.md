@@ -27,7 +27,7 @@ Panels appear on the page in this order, top to bottom:
 
 | # | Panel name | One-line purpose |
 |---|------------|-----------------|
-| 1 | **Triage Banner** | Leads the page; tells you how many threat actors need a block decision right now (or shows "All clear" when the queue is empty, with a legend explaining the escalation model). Actors in the **Observed** stratum (no escalation claim) never appear as chips here — they roll up into one aggregate line, "N detections on the record from M sources → Network Logs," shown below the chips (or below "All clear" when the queue is empty), so nothing is silently dropped. |
+| 1 | **Triage Banner** | Leads the page; tells you how many threat actors need a block decision right now (or shows "All clear" when the queue is empty, with a legend explaining the escalation model). Below the chips (or below "All clear"), one attempts headline reports the passive-source record: "N hostile attempts from M actors — S succeeded · K need review," plus a bounded top-5 pressure strip naming the highest-pressure actors — see [§3 below](#attempts-headline-and-pressure-strip) for the exact semantics. When there are no attempts to report, the older "N detections on the record from M sources → Network Logs" line renders instead. |
 | 2 | **KPI Strip** | A thin row of four numbers — Total events, Blocked, Unique IPs (Internet Protocol addresses), and Block rate — each with a sparkline trend; the AI (Artificial Intelligence) engine status chip is pinned to the right. |
 | 3 | **Threat Summary** | A single prose block spotlighting the top-scored actor: their IP, attack types, block rate, risk score, confidence, and (when the AI engine is active) bullet-point AI insights. |
 | 4 | **Attack Categories** | A short bar chart of the attack types your adversaries attempted, ranked by how many distinct sources tried each type. |
@@ -83,6 +83,34 @@ from M sources → Network Logs" — whenever one or more observed actors exist,
 is showing chips or the all-clear state. This is why a watch-only install (Suricata, syslog,
 ClamAV — no source that can block anything) can now reach the calm "All clear" screen on a normal
 day: the background noise these sources generate is on the record, not in your queue.
+
+### Attempts headline and pressure strip
+
+Below the Triage Banner's chips (or below "All clear"), FireWatch reports the passive-source
+record in one honest sentence — for example:
+
+> **412 hostile attempts from 87 actors — 0 succeeded · 2 need review**
+
+Every number in that sentence comes straight from the escalation engine — the banner never
+counts anything differently than the engine that scores your actors:
+
+| Term | Exact meaning |
+|------|---------------|
+| **N hostile attempts** | Count of qualifying attempt events (failed logins, rejected/alerted connections, matched attack signatures — the ADR-0070 "attempt predicate") across all actors in the trailing 24-hour state window. |
+| **M actors** | Distinct actors ("attackers") that contributed at least one qualifying attempt in that window. |
+| **S succeeded** | Actors with a **Tier-1 verdict** (an allowed-through request plus a detection) **OR** a **critical-severity qualifying detection** — never Tier 1 alone. This union matters: a host-based source (syslog, `linux_auth`) never emits an "allowed" event, so a real SSH brute-force compromise on such a source is a Tier-2 verdict, not Tier 1 — binding "succeeded" to Tier 1 alone would read "0 succeeded" while that compromise is actively firing. FireWatch closes that gap by also counting any actor whose qualifying detection is declared `critical` severity (today: `brute_force_then_login`). |
+| **K need review** | The Triage queue size — actors carrying a Tier-1 or Tier-2 escalation verdict (the same actors eligible to appear as banner chips). |
+
+**The pressure strip** — up to 5 rows below the headline, each showing one highest-pressure
+actor's IP (click to open its detail), its qualifying attempt count, and the span of minutes
+between its first and last attempt in the window (e.g. "42 attempts over 18 min"). No block/
+investigate/dismiss action is attached to a row — it is a bounded top-N reference list, not a
+worklist. When more actors exist than the strip shows, a "+N more actors → Network Logs" link
+takes you to the full record.
+
+This headline supersedes the older "N detections on the record from M sources → Network Logs"
+line (§3 above, from the pre-attempt-vocabulary release) in the same slot whenever one or more
+attempts exist in the window; when none do, that older line still renders unchanged.
 
 ### Disposition labels
 

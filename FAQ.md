@@ -75,6 +75,30 @@ syslog, ClamAV — nothing that can block): the sensors' routine background nois
 not in your queue. See [ADR-0067](docs/adr/0067-assertion-gated-triage-entry-observed-stratum.md)
 D5 and [docs/escalation-and-triage-model.md §4](docs/escalation-and-triage-model.md#4-the-triage-banner).
 
+## What does "412 hostile attempts from 87 actors — 0 succeeded · 2 need review" mean?
+
+That is the **attempts headline** — it appears below the Triage Banner's chips (or below "All
+clear") whenever one or more qualifying attempts exist in the trailing 24-hour window, and it
+supersedes the older "N detections on the record" line in that same slot. Every number is an
+engine integer, computed by the same escalation pipeline that scores your actors — the banner
+never counts anything differently than the engine ([ADR-0070](docs/adr/0070-hostile-attempt-pressure-and-campaign-detection.md) D1/D3):
+
+- **hostile attempts / actors** — the count of qualifying attempt events (failed logins,
+  rejected/alerted connections, matched attack signatures) and the distinct actors that made them.
+- **succeeded** — actors with a Tier-1 verdict **OR** a critical-severity qualifying detection,
+  never Tier 1 alone. This is the important correction: a host-based source (syslog,
+  `linux_auth`) never emits an "allowed" event, so a real SSH brute-force compromise on such a
+  source is Tier 2, not Tier 1 — a Tier-1-only definition would read "0 succeeded" while that
+  compromise is actively firing. The critical-severity arm closes that gap.
+- **need review** — the Triage queue size (K), the same count of Tier-1/Tier-2 actors eligible
+  to appear as banner chips.
+
+Below the sentence, a bounded **pressure strip** (at most 5 rows) names the highest-pressure
+actors — IP, attempt count, and time span — with no block/investigate/dismiss action attached;
+it is a reference list, not a worklist. A "+N more actors → Network Logs" link covers the rest.
+See [docs/guide/dashboard.md §3](docs/guide/dashboard.md#attempts-headline-and-pressure-strip)
+for the full field-by-field breakdown.
+
 ## What is score and how is it calculated?
 
 Score is a deterministic, rule-based risk number from 0–100 (`scoring.py`). Each matching signal

@@ -87,6 +87,15 @@ regexes = [
   '''12345678-1234-1234-1234-123456789abc''',
   '''12345678-ABCD-EF01-2345-67890ABCDEF0''',
   '''aAbBcCdD-1234-5678-90ef-abcdef012345''',
+  # Python code identifier, NOT a secret. The generic-api-key rule's
+  # keyword-proximity heuristic fires on the function name
+  # `qualified_tier2_disposition` when it sits immediately after `InstanceKey,`
+  # in an import line (the trailing "Key," + a long following token trips the
+  # entropy/keyword check). It is a public escalation-label resolver name
+  # (firewatch_core.escalation.posture), appears in imports and call sites, and
+  # carries no credential. Scoped to the exact identifier so any real key on a
+  # different line is unaffected.
+  '''qualified_tier2_disposition''',
 ]
 paths = [
     '''(^|/)__pycache__/''',

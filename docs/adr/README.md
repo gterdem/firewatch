@@ -11,7 +11,7 @@ number. One decision per file. Keep them small.
 **Phase sequencing** (which ADRs land in which release phase) lives in
 [`../ROADMAP.md`](../ROADMAP.md). The ADRs here are the *decisions*; the ROADMAP is the *order*.
 
-**Next ADR number:** 0072
+**Next ADR number:** 0073
 
 | ADR | Title | Status | File |
 |-----|-------|--------|------|
@@ -86,3 +86,4 @@ number. One decision per file. Keep them small.
 | 0069 | Canonical Severity Semantics — Sigma-Anchored Behavioral Definitions for `SecurityEvent.severity` + the Per-Source Mapping Discipline | Accepted 2026-07-16 (coupled with ADR-0070) | [0069-canonical-severity-semantics-sigma-anchored.md](0069-canonical-severity-semantics-sigma-anchored.md) |
 | 0070 | Hostile-Attempt Intensity — Pressure, Attack-in-Progress, and Campaign Detection (Revision 1) | Accepted 2026-07-16 (Revision 1 supersedes the first draft; coupled with ADR-0069 — D8's landing order stands; corrects ADR-0067 D5(1)) | [0070-hostile-attempt-pressure-and-campaign-detection.md](0070-hostile-attempt-pressure-and-campaign-detection.md) |
 | 0071 | The Auth-Outcome Contract Vocabulary — `SecurityEvent.outcome`, Outcome-Keyed Correlation, Category Demoted from Routing | Accepted 2026-07-16 (Revision 1 — re-verified against merged main; anti-registry reason (1) retracted, direction unchanged; D5 → issue #76) | [0071-auth-outcome-contract-vocabulary.md](0071-auth-outcome-contract-vocabulary.md) |
+| 0072 | Server-Side Triage Decisions — Schema, Suppression-at-Read, and the Two-Verb Lifecycles | Accepted 2026-07-17 (implements ADR-0070 D6; supersedes the localStorage triage lifecycle promises — see D5/D7; issues #47/#45/#56) | [0072-server-side-triage-decisions.md](0072-server-side-triage-decisions.md) |
